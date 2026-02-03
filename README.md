@@ -39,5 +39,5 @@ O deploy nao envia o `.env`. Crie manualmente no servidor **dentro de `public_ht
 - `supabase/`: schema do banco
 
 ## Aviso
-Nunca commitar `.env`.
+Nunca commitar `.env`. 
 
