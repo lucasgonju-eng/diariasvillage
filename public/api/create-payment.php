@@ -1,0 +1,104 @@
+<?php
+require_once __DIR__ . '/../../src/Bootstrap.php';
+
+use App\AsaasClient;
+use App\Helpers;
+use App\HttpClient;
+use App\Mailer;
+use App\SupabaseClient;
+
+Helpers::requirePost();
+$user = Helpers::requireAuth();
+$payload = json_decode(file_get_contents('php://input'), true);
+
+$date = $payload['date'] ?? '';
+$billingType = $payload['billing_type'] ?? 'PIX';
+
+if ($date === '') {
+    Helpers::json(['ok' => false, 'error' => 'Selecione a data.'], 422);
+}
+
+$today = date('Y-m-d');
+if ($date !== $today) {
+    Helpers::json(['ok' => false, 'error' => 'A diaria so pode ser para hoje.'], 422);
+}
+
+$hour = (int) date('H');
+if ($hour < 10) {
+    $dailyType = 'planejada';
+    $amount = 77.00;
+} else {
+    $dailyType = 'emergencial';
+    $amount = 97.00;
+}
+
+if (!in_array($billingType, ['PIX', 'DEBIT_CARD'], true)) {
+    Helpers::json(['ok' => false, 'error' => 'Forma de pagamento invalida.'], 422);
+}
+
+$client = new SupabaseClient(new HttpClient());
+$guardian = $client->select('guardians', 'select=*&id=eq.' . $user['id']);
+if (!$guardian['ok'] || empty($guardian['data'])) {
+    Helpers::json(['ok' => false, 'error' => 'Usuario nao encontrado.'], 404);
+}
+
+$guardianData = $guardian['data'][0];
+$asaas = new AsaasClient(new HttpClient());
+
+if (empty($guardianData['asaas_customer_id'])) {
+    $customerPayload = [
+        'name' => $guardianData['parent_name'] ?: 'Responsavel ' . $guardianData['email'],
+        'email' => $guardianData['email'],
+    ];
+
+    if (!empty($guardianData['parent_document'])) {
+        $customerPayload['cpfCnpj'] = $guardianData['parent_document'];
+    }
+
+    $customer = $asaas->createCustomer($customerPayload);
+
+    if (!$customer['ok']) {
+        Helpers::json(['ok' => false, 'error' => 'Falha ao criar cliente na Asaas.'], 500);
+    }
+
+    $guardianData['asaas_customer_id'] = $customer['data']['id'] ?? null;
+    $client->update('guardians', 'id=eq.' . $guardianData['id'], [
+        'asaas_customer_id' => $guardianData['asaas_customer_id'],
+    ]);
+}
+
+$payment = $asaas->createPayment([
+    'customer' => $guardianData['asaas_customer_id'],
+    'billingType' => $billingType,
+    'value' => $amount,
+    'dueDate' => $date,
+    'description' => 'Diaria ' . $dailyType . ' - Einstein Village',
+]);
+
+if (!$payment['ok']) {
+    Helpers::json(['ok' => false, 'error' => 'Falha ao criar pagamento.'], 500);
+}
+
+$paymentData = $payment['data'];
+$client->insert('payments', [[
+    'guardian_id' => $guardianData['id'],
+    'student_id' => $guardianData['student_id'],
+    'payment_date' => $date,
+    'daily_type' => $dailyType,
+    'amount' => $amount,
+    'status' => 'pending',
+    'billing_type' => $billingType,
+    'asaas_payment_id' => $paymentData['id'] ?? null,
+]]);
+
+$invoiceUrl = $paymentData['invoiceUrl'] ?? $paymentData['bankSlipUrl'] ?? '#';
+
+$mailer = new Mailer();
+$mailer->send(
+    $guardianData['email'],
+    'Pagamento criado - Diarias Village',
+    '<p>Seu pagamento foi criado. Acesse o link abaixo para finalizar:</p>'
+    . '<p><a href="' . $invoiceUrl . '">Pagar diaria</a></p>'
+);
+
+Helpers::json(['ok' => true, 'invoice_url' => $invoiceUrl]);

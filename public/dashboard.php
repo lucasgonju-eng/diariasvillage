@@ -1,0 +1,52 @@
+<?php
+require_once __DIR__ . '/../src/Bootstrap.php';
+
+use App\Helpers;
+
+$user = Helpers::requireAuthWeb();
+$today = date('Y-m-d');
+?>
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard</title>
+  <link rel="stylesheet" href="/assets/css/style.css" />
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="logo">Diarias Village</div>
+      <nav class="nav">
+        <a class="button secondary" href="/profile.php">Perfil</a>
+        <a class="button secondary" href="/logout.php">Sair</a>
+      </nav>
+    </header>
+
+    <div class="card">
+      <h2>Bem-vindo!</h2>
+      <p class="subtitle">Escolha a diaria do dia.</p>
+
+      <form id="payment-form">
+        <div class="grid-2">
+          <div class="form-group">
+            <label>Data</label>
+            <input type="date" id="payment-date" value="<?php echo $today; ?>" required />
+          </div>
+          <div class="form-group">
+            <label>Forma de pagamento</label>
+            <select id="billing-type">
+              <option value="PIX">PIX</option>
+              <option value="DEBIT_CARD">Debito</option>
+            </select>
+          </div>
+        </div>
+        <button class="button" type="submit">Gerar pagamento</button>
+        <div id="payment-message"></div>
+      </form>
+    </div>
+  </div>
+  <script src="/assets/js/dashboard.js"></script>
+</body>
+</html>

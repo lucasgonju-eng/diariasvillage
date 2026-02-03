@@ -1,0 +1,5 @@
+.env
+/vendor/
+/storage/
+/.phpunit.result.cache
+Village Diarias Site.txt
