@@ -23,8 +23,8 @@ jobs:
 
       - name: Preparar estrutura de deploy
         run: |
-          mkdir -p deploy/public_html
-          cp -r public/* deploy/public_html/
+          mkdir -p deploy
+          cp -r public/* deploy/
           cp -r src deploy/
           cp -r vendor deploy/
           cp .env.example deploy/

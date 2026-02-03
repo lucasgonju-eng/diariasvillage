@@ -19,11 +19,11 @@ Em **Settings → Secrets and variables → Actions**, adicione:
 
 ### 2. Document root no Hostinger
 
-Defina o **document root** como a pasta `public_html` dentro do dominio (e o que o deploy criar).
+Defina o **document root** como a pasta `public_html` do dominio.
 
 ### 3. Arquivo .env no servidor
 
-O deploy nao envia o `.env`. Crie manualmente no servidor (na mesma pasta que `src` e `vendor`) copiando do `.env.example` e preenchendo as chaves.
+O deploy nao envia o `.env`. Crie manualmente no servidor **dentro de `public_html`**, ao lado de `src` e `vendor`, copiando do `.env.example` e preenchendo as chaves.
 
 ---
 
