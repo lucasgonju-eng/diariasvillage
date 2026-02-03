@@ -40,3 +40,4 @@ O deploy nao envia o `.env`. Crie manualmente no servidor (na mesma pasta que `s
 
 ## Aviso
 Nunca commitar `.env`.
+
