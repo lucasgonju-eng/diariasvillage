@@ -1,6 +1,6 @@
 # Diarias Village
 
-SaaS em PHP para compra de diarias do Einstein Village.
+SaaS em PHP para compra de diárias do Einstein Village (6º ao 8º ano).
 
 ## Deploy automatico (GitHub → Hostinger)
 
