@@ -36,7 +36,7 @@ body {
 .logo {
   font-weight: 700;
   font-size: 20px;
-  color: var(--blue);
+  color: var(--orange);
 }
 
 .hero {
@@ -80,7 +80,7 @@ body {
   font-weight: 600;
   cursor: pointer;
   color: white;
-  background: linear-gradient(120deg, var(--orange), var(--blue));
+  background: linear-gradient(120deg, var(--orange), var(--orange-dark));
   text-decoration: none;
 }
 
@@ -132,8 +132,8 @@ input, select {
   align-items: center;
   padding: 4px 10px;
   border-radius: 999px;
-  background: #e0e7ff;
-  color: var(--blue-dark);
+  background: #ffedd5;
+  color: var(--orange-dark);
   font-weight: 600;
   font-size: 12px;
 }
