@@ -1,0 +1,41 @@
+name: Deploy para Hostinger
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: curl, json, mbstring, zip
+          coverage: none
+
+      - name: Instalar dependências
+        run: composer install --no-dev --optimize-autoloader --ignore-platform-req=ext-gd
+
+      - name: Preparar estrutura de deploy
+        run: |
+          mkdir -p deploy/public_html
+          cp -r public/* deploy/public_html/
+          cp -r src deploy/
+          cp -r vendor deploy/
+          cp .env.example deploy/
+
+      - name: Deploy via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./deploy/
+          server-dir: ${{ secrets.FTP_SERVER_DIR || '/' }}
+          exclude: |
+            **/.git*
