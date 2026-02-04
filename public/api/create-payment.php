@@ -19,6 +19,11 @@ $payload = json_decode(file_get_contents('php://input'), true);
 $date = $payload['date'] ?? '';
 $billingType = $payload['billing_type'] ?? 'PIX';
 $documentRaw = trim($payload['document'] ?? '');
+if ($documentRaw === '') {
+    $logPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'error_log_custom.txt';
+    $keys = is_array($payload) ? implode(',', array_keys($payload)) : 'payload_invalido';
+    file_put_contents($logPath, 'create-payment sem documento (payload keys: ' . $keys . ')' . PHP_EOL, FILE_APPEND);
+}
 
 if ($date === '') {
     Helpers::json(['ok' => false, 'error' => 'Selecione a data.'], 422);
@@ -61,6 +66,7 @@ if (!$guardian['ok'] || empty($guardian['data'])) {
 $guardianData = $guardian['data'][0];
 $asaas = new AsaasClient(new HttpClient());
 
+$documentRaw = $documentRaw !== '' ? $documentRaw : (string) ($guardianData['parent_document'] ?? '');
 if ($documentRaw === '') {
     Helpers::json([
         'ok' => false,
