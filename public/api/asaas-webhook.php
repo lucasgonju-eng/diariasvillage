@@ -41,17 +41,37 @@ $client->update('payments', 'id=eq.' . $paymentRow['id'], [
     'access_code' => $accessCode,
 ]);
 
+$studentResult = $client->select('students', 'select=name,enrollment&' . 'id=eq.' . $paymentRow['student_id']);
+$student = $studentResult['data'][0] ?? null;
+
 $guardianResult = $client->select('guardians', 'select=*&id=eq.' . $paymentRow['guardian_id']);
 $guardian = $guardianResult['data'][0] ?? null;
 
 if ($guardian) {
+    $studentName = $student['name'] ?? 'Aluno';
+    $enrollment = $student['enrollment'] ?? '-';
+    $amount = number_format((float) $paymentRow['amount'], 2, ',', '.');
+    $paymentDate = date('d/m/Y', strtotime($paymentRow['payment_date']));
+    $dailyLabel = $paymentRow['daily_type'] === 'emergencial' ? 'Emergencial' : 'Planejada';
+
+    $html = '<p>Pagamento confirmado!</p>'
+        . '<p><strong>Aluno:</strong> ' . htmlspecialchars($studentName, ENT_QUOTES, 'UTF-8') . '</p>'
+        . '<p><strong>Matricula:</strong> ' . htmlspecialchars($enrollment, ENT_QUOTES, 'UTF-8') . '</p>'
+        . '<p><strong>Diaria:</strong> ' . $dailyLabel . ' - ' . $paymentDate . '</p>'
+        . '<p><strong>Valor:</strong> R$ ' . $amount . '</p>'
+        . '<p><strong>Codigo de acesso:</strong> ' . $accessCode . '</p>'
+        . '<p>Bem-vindo ao Day-Use do Einstein Village! '
+        . htmlspecialchars($studentName, ENT_QUOTES, 'UTF-8') . ' (matricula '
+        . htmlspecialchars($enrollment, ENT_QUOTES, 'UTF-8')
+        . ') pode se dirigir ao Einstein Village e ser recebido por nossa equipe.</p>'
+        . '<p>Ja conhece as atividades de hoje? Em breve enviaremos o PDF com a programacao.</p>'
+        . '<p>Obrigado por escolher o Einstein Village.</p>';
+
     $mailer = new Mailer();
     $mailer->send(
         $guardian['email'],
         'Pagamento confirmado - Diarias Village',
-        '<p>Pagamento confirmado!</p>'
-        . '<p>Codigo de acesso ao Village: <strong>' . $accessCode . '</strong></p>'
-        . '<p>Comprovante: consulte seu painel na Asaas.</p>'
+        $html
     );
 
     $secretaria = App\Env::get('EMAIL_SECRETARIA', '');
@@ -61,8 +81,7 @@ if ($guardian) {
         $mailer->send(
             $secretaria,
             'Pagamento confirmado - liberar estudante',
-            '<p>Pagamento aprovado para a diaria do estudante.</p>'
-            . '<p>Codigo: <strong>' . $accessCode . '</strong></p>',
+            $html,
             $copia ? [$copia] : []
         );
     }

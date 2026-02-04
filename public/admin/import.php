@@ -34,6 +34,10 @@ $success = ($_GET['success'] ?? '') === '1';
   <div class="container">
     <header class="header">
       <div class="logo">Diarias Village</div>
+      <nav class="nav">
+        <a class="button secondary" href="/admin/dashboard.php">Entradas</a>
+        <a class="button secondary" href="/logout.php">Sair</a>
+      </nav>
     </header>
 
     <div class="card">

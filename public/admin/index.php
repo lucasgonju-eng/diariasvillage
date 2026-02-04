@@ -9,7 +9,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = trim($_POST['password'] ?? '');
     if ($password !== '' && $password === Env::get('ADMIN_SECRET', '')) {
         $_SESSION['admin_authenticated'] = true;
-        header('Location: /admin/import.php');
+        header('Location: /admin/dashboard.php');
         exit;
     }
     $error = 'Senha invalida.';
@@ -31,17 +31,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <div class="card">
       <h2>Painel administrativo</h2>
-      <p class="subtitle">Digite a senha para continuar.</p>
-      <form method="post">
-        <div class="form-group">
-          <label>Senha</label>
-          <input type="password" name="password" required />
+      <?php if (isset($_SESSION['admin_authenticated']) && $_SESSION['admin_authenticated'] === true): ?>
+        <p class="subtitle">Escolha uma opcao abaixo.</p>
+        <div class="nav">
+          <a class="button" href="/admin/dashboard.php">Entradas confirmadas</a>
+          <a class="button secondary" href="/admin/import.php">Importar alunos</a>
         </div>
-        <button class="button" type="submit">Entrar</button>
-        <?php if ($error): ?>
-          <div class="error"><?php echo htmlspecialchars($error, ENT_QUOTES, 'UTF-8'); ?></div>
-        <?php endif; ?>
-      </form>
+      <?php else: ?>
+        <p class="subtitle">Digite a senha para continuar.</p>
+        <form method="post">
+          <div class="form-group">
+            <label>Senha</label>
+            <input type="password" name="password" required />
+          </div>
+          <button class="button" type="submit">Entrar</button>
+          <?php if ($error): ?>
+            <div class="error"><?php echo htmlspecialchars($error, ENT_QUOTES, 'UTF-8'); ?></div>
+          <?php endif; ?>
+        </form>
+      <?php endif; ?>
     </div>
   </div>
 </body>
