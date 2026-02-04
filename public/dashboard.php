@@ -5,6 +5,8 @@ use App\Helpers;
 
 $user = Helpers::requireAuthWeb();
 $today = date('Y-m-d');
+$hour = (int) date('H');
+$minDate = $hour >= 16 ? date('Y-m-d', strtotime('+1 day')) : $today;
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -32,6 +34,7 @@ $today = date('Y-m-d');
         Diaria Emergencial: apos as 10h do day-use (R$ 97,00).
       </div>
       <p class="subtitle">
+        Para datas futuras, a diaria e planejada automaticamente. Apos 16h, a compra para o dia atual e encerrada.
         Finalizando o pagamento, voce recebe por e-mail o numero de confirmacao do day-use.
       </p>
 
@@ -39,7 +42,8 @@ $today = date('Y-m-d');
         <div class="grid-2">
           <div class="form-group">
             <label>Data</label>
-            <input type="date" id="payment-date" value="<?php echo $today; ?>" required />
+            <input type="date" id="payment-date" value="<?php echo $minDate; ?>" min="<?php echo $minDate; ?>" required />
+            <div class="small">Apos 16h, somente datas futuras.</div>
           </div>
           <div class="form-group">
             <label>Forma de pagamento</label>

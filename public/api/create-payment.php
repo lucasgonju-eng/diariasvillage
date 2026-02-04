@@ -19,17 +19,26 @@ if ($date === '') {
 }
 
 $today = date('Y-m-d');
-if ($date !== $today) {
-    Helpers::json(['ok' => false, 'error' => 'A diaria so pode ser para hoje.'], 422);
-}
-
 $hour = (int) date('H');
-if ($hour < 10) {
+
+if ($date === $today) {
+    if ($hour >= 16) {
+        Helpers::json([
+            'ok' => false,
+            'error' => 'Compras para hoje encerradas apos as 16h. Escolha uma data futura.',
+        ], 422);
+    }
+
+    if ($hour < 10) {
+        $dailyType = 'planejada';
+        $amount = 77.00;
+    } else {
+        $dailyType = 'emergencial';
+        $amount = 97.00;
+    }
+} else {
     $dailyType = 'planejada';
     $amount = 77.00;
-} else {
-    $dailyType = 'emergencial';
-    $amount = 97.00;
 }
 
 if (!in_array($billingType, ['PIX', 'DEBIT_CARD'], true)) {
