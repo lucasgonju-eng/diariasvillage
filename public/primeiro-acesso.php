@@ -26,6 +26,7 @@ require_once __DIR__ . '/src/Bootstrap.php';
         <div class="form-group">
           <label>Nome do aluno</label>
           <input id="student-name" list="students-list" placeholder="Digite o nome do aluno" required />
+          <select id="student-select" style="display:none;"></select>
           <datalist id="students-list"></datalist>
           <div class="small">Somente alunos do 6º ao 8º ano.</div>
         </div>
