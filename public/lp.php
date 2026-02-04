@@ -10,19 +10,19 @@ $brand = [
 ];
 
 $prices = [
-  'planned' => ['label' => 'Planejada', 'price' => 'R$ 77,00', 'rule' => 'Ate 10h do proprio dia'],
-  'urgent'  => ['label' => 'Emergencial', 'price' => 'R$ 97,00', 'rule' => 'Apos 10h do proprio dia'],
+  'planned' => ['label' => 'Planejada', 'price' => 'R$ 77,00', 'rule' => 'Para usar hoje: pague ate 10h'],
+  'urgent'  => ['label' => 'Emergencial', 'price' => 'R$ 97,00', 'rule' => 'Para usar hoje: apos 10h'],
 ];
 
 date_default_timezone_set('America/Sao_Paulo');
 $hour = (int) date('G');
 $timeHint = '';
 if ($hour >= 16) {
-  $timeHint = 'Hoje apos 16h, so e possivel comprar para uma data futura.';
+  $timeHint = 'Apos 16h, so e possivel comprar para uma data futura.';
 } elseif ($hour >= 10) {
-  $timeHint = 'Agora, compras para hoje entram como Emergencial.';
+  $timeHint = 'Para hoje, agora a compra entra como Emergencial.';
 } else {
-  $timeHint = 'Se for para hoje, ainda da para Planejada ate 10h.';
+  $timeHint = 'Para hoje, ainda da para Planejada ate 10h.';
 }
 ?>
 <!doctype html>
@@ -34,16 +34,18 @@ if ($hour >= 16) {
   <meta name="description" content="Pague o Day use Village em minutos. Sem fila, sem burocracia. PIX e liberacao automatica.">
   <style>
     :root{
-      --bg:#0B1220;
-      --card:#101A2F;
-      --soft:#13213E;
-      --text:#EAF0FF;
-      --muted:#A9B7D6;
-      --line: rgba(255,255,255,.10);
-      --accent:#7C5CFF;
-      --accent2:#22C55E;
-      --danger:#FB7185;
-      --shadow: 0 18px 50px rgba(0,0,0,.35);
+      --bg: #FFFFFF;
+      --bg2: #FFF7ED;
+      --card: #FFFFFF;
+      --soft: #F5F5F5;
+      --text: #0F172A;
+      --muted: #475569;
+      --line: rgba(2,6,23,.12);
+      --accent: #F97316;
+      --accent2: #EA580C;
+      --good: #16A34A;
+      --danger: #DC2626;
+      --shadow: 0 14px 40px rgba(2,6,23,.08);
       --radius: 18px;
     }
     *{box-sizing:border-box}
@@ -51,11 +53,7 @@ if ($hour >= 16) {
       margin:0;
       font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji", "Segoe UI Emoji";
       color:var(--text);
-      background:
-        radial-gradient(1100px 700px at 15% 0%, rgba(124,92,255,.35), transparent 55%),
-        radial-gradient(900px 600px at 90% 20%, rgba(34,197,94,.22), transparent 55%),
-        radial-gradient(1000px 700px at 50% 100%, rgba(251,113,133,.12), transparent 60%),
-        var(--bg);
+      background: var(--bg);
     }
     a{color:inherit; text-decoration:none}
     .wrap{max-width:1100px; margin:0 auto; padding:22px 18px 50px}
@@ -68,15 +66,15 @@ if ($hour >= 16) {
     }
     .logo{
       width:38px; height:38px; border-radius:12px;
-      background: linear-gradient(135deg, rgba(124,92,255,1), rgba(34,197,94,1));
-      box-shadow: 0 10px 30px rgba(124,92,255,.25);
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      box-shadow: 0 10px 30px rgba(249,115,22,.25);
     }
     .brand h1{font-size:14px; margin:0; letter-spacing:.2px}
     .brand p{font-size:12px; margin:2px 0 0; color:var(--muted)}
     .pill{
       display:inline-flex; align-items:center; gap:8px;
       padding:10px 12px; border:1px solid var(--line);
-      background: rgba(255,255,255,.04);
+      background: var(--bg2);
       border-radius:999px; color:var(--muted);
       font-size:12px;
     }
@@ -92,7 +90,7 @@ if ($hour >= 16) {
 
     .hero{
       border:1px solid var(--line);
-      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      background: var(--card);
       border-radius: var(--radius);
       box-shadow: var(--shadow);
       padding:24px;
@@ -104,14 +102,14 @@ if ($hour >= 16) {
       content:"";
       position:absolute; inset:-40px -40px auto auto;
       width:220px; height:220px; border-radius:50%;
-      background: radial-gradient(circle at 30% 30%, rgba(124,92,255,.55), transparent 65%);
+      background: radial-gradient(circle at 30% 30%, rgba(249,115,22,.35), transparent 65%);
       filter: blur(2px);
     }
     .kicker{
       display:inline-flex; gap:8px; align-items:center;
       padding:8px 10px; border-radius:999px;
       border:1px solid var(--line);
-      background: rgba(255,255,255,.04);
+      background: var(--bg2);
       color:var(--muted);
       font-size:12px;
     }
@@ -121,7 +119,7 @@ if ($hour >= 16) {
       font-size:34px; line-height:1.08;
       letter-spacing:-.6px;
     }
-    .hero h2 span{color: rgba(234,240,255,.9)}
+    .hero h2 span{color: var(--text)}
     .hero .sub{
       margin:0 0 18px; color:var(--muted); font-size:15px; line-height:1.5;
       max-width: 54ch;
@@ -143,11 +141,12 @@ if ($hour >= 16) {
     }
     .btn:active{transform: translateY(1px)}
     .btnPrimary{
-      background: linear-gradient(135deg, rgba(124,92,255,1), rgba(124,92,255,.85));
-      box-shadow: 0 16px 40px rgba(124,92,255,.25);
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #FFFFFF;
+      box-shadow: 0 16px 40px rgba(249,115,22,.25);
     }
     .btnGhost{
-      background: rgba(255,255,255,.04);
+      background: var(--soft);
       color: var(--text);
     }
     .trust{
@@ -157,14 +156,13 @@ if ($hour >= 16) {
     .trust .chip{
       padding:8px 10px; border-radius:999px;
       border:1px solid var(--line);
-      background: rgba(255,255,255,.03);
+      background: var(--bg2);
       display:inline-flex; gap:8px; align-items:center;
     }
 
     .side{
       border:1px solid var(--line);
-      background: rgba(16,26,47,.75);
-      backdrop-filter: blur(6px);
+      background: var(--card);
       border-radius: var(--radius);
       padding:18px;
       box-shadow: var(--shadow);
@@ -177,14 +175,14 @@ if ($hour >= 16) {
       display:flex; gap:12px; align-items:flex-start;
       padding:12px; border-radius: 14px;
       border:1px solid var(--line);
-      background: rgba(255,255,255,.03);
+      background: var(--soft);
     }
     .num{
       width:30px; height:30px; border-radius:10px;
       display:flex; align-items:center; justify-content:center;
       font-weight:800;
-      background: rgba(124,92,255,.18);
-      border: 1px solid rgba(124,92,255,.35);
+      background: rgba(249,115,22,.18);
+      border: 1px solid rgba(249,115,22,.35);
       color: var(--text);
       flex: 0 0 auto;
     }
@@ -208,7 +206,7 @@ if ($hour >= 16) {
     .priceCard{
       border-radius: 16px;
       border:1px solid var(--line);
-      background: rgba(255,255,255,.03);
+      background: var(--soft);
       padding:14px;
     }
     .priceCard .label{
@@ -218,7 +216,7 @@ if ($hour >= 16) {
     .badge{
       padding:6px 10px; border-radius:999px;
       border:1px solid var(--line);
-      background: rgba(255,255,255,.03);
+      background: var(--bg2);
       font-size:11px;
     }
     .money{
@@ -226,10 +224,10 @@ if ($hour >= 16) {
       letter-spacing:-.3px;
     }
     .rule{margin:0; color:var(--muted); font-size:12px; line-height:1.45}
-    .good{border-color: rgba(34,197,94,.30)}
-    .warn{border-color: rgba(251,113,133,.30)}
-    .good .badge{border-color: rgba(34,197,94,.35)}
-    .warn .badge{border-color: rgba(251,113,133,.35)}
+    .good{border-color: rgba(22,163,74,.30)}
+    .warn{border-color: rgba(249,115,22,.30)}
+    .good .badge{border-color: rgba(22,163,74,.35)}
+    .warn .badge{border-color: rgba(249,115,22,.35)}
 
     .footer{
       margin-top:18px;
@@ -246,12 +244,21 @@ if ($hour >= 16) {
     }
     .modal{
       max-width: 720px; margin: 6vh auto 0;
-      background: rgba(16,26,47,.98);
+      background: var(--card);
       border:1px solid var(--line);
       border-radius: 18px;
       padding: 16px;
       box-shadow: var(--shadow);
     }
+    .banner{
+      display:flex; align-items:center; gap:10px;
+      padding:10px 12px; border-radius:12px;
+      background: var(--bg2);
+      border:1px solid rgba(249,115,22,.25);
+      color: var(--muted); font-size:12px;
+      margin-bottom: 12px;
+    }
+    .banner span{font-size:14px}
     .modal h4{margin:6px 0 10px}
     .modal ul{margin:0; padding-left: 18px; color: var(--muted); font-size:13px; line-height:1.55}
     .modal .closeRow{display:flex; justify-content:flex-end; margin-top: 12px}
@@ -277,6 +284,7 @@ if ($hour >= 16) {
 
     <main class="grid">
       <section class="hero">
+        <div class="banner"><span aria-hidden="true">🚧</span>Estamos aprimorando a plataforma. Obrigado por apoiar — tudo aqui e feito para sua comodidade.</div>
         <div class="kicker"><span aria-hidden="true">🏫</span> Plataforma oficial do <b>Day use Village</b></div>
 
         <h2>Resolve em minutos.<br><span>Sem fila. Sem estresse.</span></h2>
@@ -331,7 +339,7 @@ if ($hour >= 16) {
           <div class="priceCard good">
             <div class="label">
               <span><?php echo htmlspecialchars($prices['planned']['label'], ENT_QUOTES, 'UTF-8'); ?></span>
-              <span class="badge">ate 10h</span>
+              <span class="badge">para hoje</span>
             </div>
             <div class="money"><?php echo htmlspecialchars($prices['planned']['price'], ENT_QUOTES, 'UTF-8'); ?></div>
             <p class="rule"><?php echo htmlspecialchars($prices['planned']['rule'], ENT_QUOTES, 'UTF-8'); ?></p>
@@ -340,7 +348,7 @@ if ($hour >= 16) {
           <div class="priceCard warn">
             <div class="label">
               <span><?php echo htmlspecialchars($prices['urgent']['label'], ENT_QUOTES, 'UTF-8'); ?></span>
-              <span class="badge">apos 10h</span>
+              <span class="badge">para hoje</span>
             </div>
             <div class="money"><?php echo htmlspecialchars($prices['urgent']['price'], ENT_QUOTES, 'UTF-8'); ?></div>
             <p class="rule"><?php echo htmlspecialchars($prices['urgent']['rule'], ENT_QUOTES, 'UTF-8'); ?></p>
@@ -364,8 +372,8 @@ if ($hour >= 16) {
     <div class="modal">
       <h4>Regras rapidas</h4>
       <ul>
-        <li><b>Planejada:</b> compra ate <b>10h</b> do proprio dia — <b>R$ 77,00</b>.</li>
-        <li><b>Emergencial:</b> apos <b>10h</b> — <b>R$ 97,00</b>.</li>
+        <li><b>Planejada:</b> para usar hoje, pague ate <b>10h</b> — <b>R$ 77,00</b>.</li>
+        <li><b>Emergencial:</b> para usar hoje, apos <b>10h</b> — <b>R$ 97,00</b>.</li>
         <li><b>Apos 16h:</b> nao e possivel comprar para o dia atual.</li>
         <li>Pagamento disponivel via <b>PIX</b>.</li>
         <li>Depois do pagamento, responsavel e secretaria recebem confirmacao por e-mail.</li>
