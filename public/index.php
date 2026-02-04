@@ -44,6 +44,7 @@ $baseUrl = rtrim(Env::get('APP_URL', ''), '/');
           <div class="notice">Somente estudantes do Colegio Einstein (6º ao 8º ano).</div>
         </div>
       </div>
+      <div class="construction"><span>🏗️</span>Estamos em construcao, mas estamos a todo vapor para a sua comodidade!</div>
     </section>
     <footer class="small" style="padding-bottom: 32px;">
       <a href="/admin/" class="small">Acesso administrativo</a>

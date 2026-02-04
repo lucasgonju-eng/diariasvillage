@@ -164,3 +164,19 @@ input, select {
   border-radius: 12px;
   font-size: 13px;
 }
+
+.construction {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #fff7ed;
+  color: var(--orange-dark);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+}
+
+.construction span {
+  font-size: 18px;
+}

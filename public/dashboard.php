@@ -37,6 +37,7 @@ $minDate = $hour >= 16 ? date('Y-m-d', strtotime('+1 day')) : $today;
         Para datas futuras, a diaria e planejada automaticamente. Apos 16h, a compra para o dia atual e encerrada.
         Finalizando o pagamento, voce recebe por e-mail o numero de confirmacao do day-use.
       </p>
+      <div class="construction"><span>🏗️</span>Estamos em construcao, mas estamos a todo vapor para a sua comodidade!</div>
 
       <form id="payment-form">
         <div class="grid-2">
