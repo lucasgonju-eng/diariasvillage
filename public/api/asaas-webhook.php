@@ -6,10 +6,28 @@ use App\HttpClient;
 use App\Mailer;
 use App\SupabaseClient;
 
-$token = $_SERVER['HTTP_ASAAS_ACCESS_TOKEN'] ?? $_SERVER['HTTP_X_WEBHOOK_TOKEN'] ?? '';
+$token = $_SERVER['HTTP_ASAAS_ACCESS_TOKEN']
+    ?? $_SERVER['HTTP_ACCESS_TOKEN']
+    ?? $_SERVER['HTTP_X_WEBHOOK_TOKEN']
+    ?? $_SERVER['HTTP_AUTHORIZATION']
+    ?? '';
 $expected = App\Env::get('ASAAS_WEBHOOK_TOKEN', '');
 
+$token = trim($token);
+$expected = trim($expected);
+if (stripos($token, 'bearer ') === 0) {
+    $token = trim(substr($token, 7));
+}
+
 if ($expected && $token !== $expected) {
+    $logPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'error_log_custom.txt';
+    $safeExpected = $expected !== '' ? ('***' . substr($expected, -4)) : '(vazio)';
+    $safeToken = $token !== '' ? ('***' . substr($token, -4)) : '(vazio)';
+    file_put_contents(
+        $logPath,
+        'Webhook token mismatch. Esperado ' . $safeExpected . ' recebido ' . $safeToken . PHP_EOL,
+        FILE_APPEND
+    );
     Helpers::json(['ok' => false, 'error' => 'Token invalido.'], 401);
 }
 
