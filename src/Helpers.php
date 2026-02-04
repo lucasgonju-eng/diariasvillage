@@ -15,7 +15,14 @@ class Helpers
     public static function requirePost(): void
     {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            self::json(['ok' => false, 'error' => 'Metodo invalido.'], 405);
+            $method = $_SERVER['REQUEST_METHOD'] ?? 'UNKNOWN';
+            $contentType = $_SERVER['CONTENT_TYPE'] ?? $_SERVER['HTTP_CONTENT_TYPE'] ?? '';
+            self::json([
+                'ok' => false,
+                'error' => 'Metodo invalido.',
+                'method' => $method,
+                'content_type' => $contentType,
+            ], 405);
         }
     }
 
