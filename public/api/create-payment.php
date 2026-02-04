@@ -59,7 +59,7 @@ $asaas = new AsaasClient(new HttpClient());
 if ($documentRaw === '') {
     Helpers::json([
         'ok' => false,
-        'error' => 'Informe o CPF/CNPJ do responsavel para gerar o pagamento.',
+        'error' => 'Informe um CPF ou CNPJ valido para gerar o pagamento.',
     ], 422);
 }
 
