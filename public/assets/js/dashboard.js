@@ -9,6 +9,7 @@ if (paymentForm) {
     const payload = {
       date: document.querySelector('#payment-date').value,
       billing_type: document.querySelector('#billing-type').value,
+      document: document.querySelector('#billing-document').value.trim(),
     };
 
     const res = await fetch('/api/create-payment.php', {

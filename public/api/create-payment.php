@@ -13,6 +13,7 @@ $payload = json_decode(file_get_contents('php://input'), true);
 
 $date = $payload['date'] ?? '';
 $billingType = $payload['billing_type'] ?? 'PIX';
+$documentRaw = trim($payload['document'] ?? '');
 
 if ($date === '') {
     Helpers::json(['ok' => false, 'error' => 'Selecione a data.'], 422);
@@ -55,12 +56,14 @@ if (!$guardian['ok'] || empty($guardian['data'])) {
 $guardianData = $guardian['data'][0];
 $asaas = new AsaasClient(new HttpClient());
 
-if (empty($guardianData['parent_document'])) {
+if ($documentRaw === '') {
     Helpers::json([
         'ok' => false,
-        'error' => 'Antes de gerar o pagamento, informe o CPF/CNPJ do responsavel no perfil.',
+        'error' => 'Informe o CPF/CNPJ do responsavel para gerar o pagamento.',
     ], 422);
 }
+
+$document = preg_replace('/\D+/', '', $documentRaw);
 
 if (empty($guardianData['asaas_customer_id'])) {
     $customerPayload = [
@@ -68,8 +71,8 @@ if (empty($guardianData['asaas_customer_id'])) {
         'email' => $guardianData['email'],
     ];
 
-    if (!empty($guardianData['parent_document'])) {
-        $customerPayload['cpfCnpj'] = $guardianData['parent_document'];
+    if ($document !== '') {
+        $customerPayload['cpfCnpj'] = $document;
     }
 
     $customer = $asaas->createCustomer($customerPayload);
@@ -84,10 +87,14 @@ if (empty($guardianData['asaas_customer_id'])) {
     $guardianData['asaas_customer_id'] = $customer['data']['id'] ?? null;
     $client->update('guardians', 'id=eq.' . $guardianData['id'], [
         'asaas_customer_id' => $guardianData['asaas_customer_id'],
+        'parent_document' => $document,
     ]);
 } else {
     $asaas->updateCustomer($guardianData['asaas_customer_id'], [
-        'cpfCnpj' => $guardianData['parent_document'],
+        'cpfCnpj' => $document,
+    ]);
+    $client->update('guardians', 'id=eq.' . $guardianData['id'], [
+        'parent_document' => $document,
     ]);
 }
 

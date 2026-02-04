@@ -53,6 +53,11 @@ $minDate = $hour >= 16 ? date('Y-m-d', strtotime('+1 day')) : $today;
             </select>
           </div>
         </div>
+        <div class="form-group">
+          <label>CPF/CNPJ do responsavel</label>
+          <input type="text" id="billing-document" placeholder="Digite o CPF ou CNPJ" required />
+          <div class="small">Necessario para confirmar o pagamento no Asaas.</div>
+        </div>
         <button class="button" type="submit">Gerar pagamento</button>
         <div id="payment-message"></div>
       </form>
