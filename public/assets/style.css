@@ -1,0 +1,260 @@
+:root{
+  --bg:#0B1020;
+  --primary:#0A1B4D;
+  --primary-2:#0F2A75;
+  --text:#0B1020;
+  --muted:#556070;
+  --surface:#FFFFFF;
+  --line:#E6E9EF;
+  --accent:#D6B25E;
+  --radius:18px;
+  --shadow:0 14px 40px rgba(11,16,32,.14);
+  --shadow-soft:0 10px 26px rgba(11,16,32,.10);
+  --max:1120px;
+  --font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, Helvetica, sans-serif;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:var(--font);
+  background:#F6F7FA;
+  color:var(--text);
+}
+
+a{text-decoration:none;color:inherit}
+
+.container{
+  max-width:var(--max);
+  margin:0 auto;
+  padding:28px 20px;
+}
+
+/* ===== HEADER / HERO ===== */
+.topbar{
+  position:relative;
+  background:linear-gradient(180deg,var(--primary),var(--bg));
+  color:#fff;
+  overflow:hidden;
+}
+
+.topbar::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:rgba(10,27,77,.85);
+}
+
+.topbar > *{position:relative;z-index:1}
+
+.header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
+
+.brand{
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+
+.brand img{height:40px}
+
+.brand strong{
+  font-size:13px;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+}
+
+.brand span{
+  font-size:12px;
+  opacity:.85;
+}
+
+.nav a{
+  padding:10px 14px;
+  border-radius:12px;
+}
+
+.nav a:hover{
+  background:rgba(255,255,255,.12);
+}
+
+/* ===== HERO ===== */
+.hero{
+  padding:20px 0 40px;
+}
+
+.hero-grid{
+  display:grid;
+  grid-template-columns:1.3fr .7fr;
+  gap:28px;
+}
+
+.kicker{
+  display:inline-block;
+  padding:8px 14px;
+  border-radius:999px;
+  background:rgba(214,178,94,.15);
+  border:1px solid rgba(214,178,94,.35);
+  font-size:12px;
+}
+
+h1{
+  font-size:52px;
+  line-height:1.05;
+  margin:16px 0;
+}
+
+.lead{
+  max-width:60ch;
+  font-size:16px;
+  line-height:1.7;
+  opacity:.9;
+}
+
+.actions{
+  display:flex;
+  gap:12px;
+  margin-top:18px;
+  flex-wrap:wrap;
+}
+
+.btn{
+  padding:12px 18px;
+  border-radius:14px;
+  font-weight:700;
+  border:1px solid transparent;
+  cursor:pointer;
+}
+
+.btn-primary{
+  background:var(--accent);
+  color:#1a1406;
+}
+
+.btn-ghost{
+  background:transparent;
+  border-color:rgba(255,255,255,.3);
+  color:#fff;
+}
+
+.btn:hover{filter:brightness(.95)}
+
+/* ===== CARD ===== */
+.card{
+  background:#fff;
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+  border:1px solid var(--line);
+}
+
+.panel{
+  padding:22px;
+}
+
+.panel h3{
+  margin-top:0;
+}
+
+.badges{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-top:14px;
+}
+
+.badge{
+  padding:10px 14px;
+  border-radius:999px;
+  border:1px solid var(--line);
+  font-size:13px;
+  background:#fff;
+  box-shadow:var(--shadow-soft);
+}
+
+/* ===== SECTIONS ===== */
+.section{
+  padding:40px 0;
+}
+
+.section h2{
+  font-size:26px;
+  margin-bottom:8px;
+}
+
+.section p{
+  color:var(--muted);
+  line-height:1.75;
+}
+
+.grid-3{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:16px;
+  margin-top:18px;
+}
+
+.info{
+  padding:20px;
+}
+
+.steps{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:14px;
+  margin-top:18px;
+}
+
+.step{
+  background:#fff;
+  border-radius:16px;
+  padding:18px;
+  border:1px solid var(--line);
+  box-shadow:var(--shadow-soft);
+}
+
+.step .n{
+  width:34px;
+  height:34px;
+  border-radius:10px;
+  background:rgba(10,27,77,.1);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:800;
+  color:var(--primary);
+}
+
+/* ===== CTA ===== */
+.cta-band{
+  background:linear-gradient(180deg,var(--primary),var(--bg));
+  border-radius:22px;
+  padding:30px;
+  color:#fff;
+}
+
+.cta-band h2{
+  margin-top:0;
+  font-size:30px;
+}
+
+/* ===== FOOTER ===== */
+.footer{
+  background:var(--bg);
+  color:rgba(255,255,255,.75);
+}
+
+.footer small{
+  display:block;
+  line-height:1.6;
+}
+
+/* ===== RESPONSIVO ===== */
+@media(max-width:900px){
+  .hero-grid{grid-template-columns:1fr}
+  h1{font-size:40px}
+  .grid-3,.steps{grid-template-columns:1fr}
+  .nav{display:none}
+}
