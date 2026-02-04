@@ -34,7 +34,7 @@ if (!$paymentResult['ok'] || empty($paymentResult['data'])) {
 
 $paymentRow = $paymentResult['data'][0];
 
-$accessCode = $paymentRow['access_code'] ?: Helpers::randomCode(8);
+$accessCode = $paymentRow['access_code'] ?: Helpers::randomNumericCode(6);
 $client->update('payments', 'id=eq.' . $paymentRow['id'], [
     'status' => 'paid',
     'paid_at' => date('c'),

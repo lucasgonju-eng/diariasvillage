@@ -31,7 +31,7 @@ if ($date === $today) {
 
     if ($hour < 10) {
         $dailyType = 'planejada';
-        $amount = 77.00;
+        $amount = 1.00;
     } else {
         $dailyType = 'emergencial';
         $amount = 97.00;

@@ -52,4 +52,13 @@ class Helpers
         }
         return $code;
     }
+
+    public static function randomNumericCode(int $length = 6): string
+    {
+        $code = '';
+        for ($i = 0; $i < $length; $i++) {
+            $code .= (string) random_int(0, 9);
+        }
+        return $code;
+    }
 }
