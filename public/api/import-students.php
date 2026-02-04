@@ -52,9 +52,21 @@ $gradeIndex = array_search('serie', $header, true);
 if ($gradeIndex === false) {
     $gradeIndex = array_search('grade', $header, true);
 }
+$classIndex = array_search('serie / turma', $header, true);
+if ($classIndex === false) {
+    $classIndex = array_search('série / turma', $header, true);
+}
+$enrollmentIndex = array_search('matricula', $header, true);
+if ($enrollmentIndex === false) {
+    $enrollmentIndex = array_search('matrícula', $header, true);
+}
+$birthIndex = array_search('nascimento', $header, true);
+if ($birthIndex === false) {
+    $birthIndex = array_search('data de nascimento', $header, true);
+}
 
-if ($nameIndex === false || $gradeIndex === false) {
-    echo 'Cabecalho invalido. Use colunas nome e serie.';
+if ($nameIndex === false || ($gradeIndex === false && $classIndex === false)) {
+    echo 'Cabecalho invalido. Use colunas nome e serie ou serie / turma.';
     exit;
 }
 
@@ -64,13 +76,36 @@ $payload = [];
 for ($i = 1; $i < count($rows); $i++) {
     $row = $rows[$i];
     $name = trim($row[$nameIndex] ?? '');
-    $grade = (int) ($row[$gradeIndex] ?? 0);
+    $gradeRaw = $gradeIndex !== false ? ($row[$gradeIndex] ?? '') : ($row[$classIndex] ?? '');
+    $grade = (int) preg_replace('/[^0-9]/', '', (string) $gradeRaw);
+    $className = $classIndex !== false ? trim((string) ($row[$classIndex] ?? '')) : null;
+    $enrollment = $enrollmentIndex !== false ? trim((string) ($row[$enrollmentIndex] ?? '')) : null;
+    $birth = $birthIndex !== false ? trim((string) ($row[$birthIndex] ?? '')) : null;
+    $birthDate = null;
+    if ($birth !== '') {
+        $parts = preg_split('/[\\/-]/', $birth);
+        if (count($parts) === 3) {
+            $day = str_pad($parts[0], 2, '0', STR_PAD_LEFT);
+            $month = str_pad($parts[1], 2, '0', STR_PAD_LEFT);
+            $year = $parts[2];
+            if (strlen($year) === 4) {
+                $birthDate = $year . '-' . $month . '-' . $day;
+            }
+        }
+    }
 
     if ($name === '' || $grade < 6 || $grade > 8) {
         continue;
     }
 
-    $payload[] = ['name' => $name, 'grade' => $grade, 'active' => true];
+    $payload[] = [
+        'name' => $name,
+        'enrollment' => $enrollment,
+        'grade' => $grade,
+        'class_name' => $className,
+        'birth_date' => $birthDate,
+        'active' => true,
+    ];
 
     if (count($payload) >= 200) {
         $client->insert('students', $payload);

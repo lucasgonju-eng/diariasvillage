@@ -33,7 +33,7 @@ if ($key !== Env::get('ADMIN_SECRET', '')) {
 
     <div class="card">
       <h2>Importar alunos</h2>
-      <p class="subtitle">Envie CSV, XLS ou XLSX com colunas: nome, serie (6-8).</p>
+      <p class="subtitle">Envie CSV, XLS ou XLSX com colunas: nome, matricula, serie / turma, nascimento.</p>
 
       <form action="/api/import-students.php?key=<?php echo htmlspecialchars($key, ENT_QUOTES, 'UTF-8'); ?>" method="post" enctype="multipart/form-data">
         <div class="form-group">
