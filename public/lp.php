@@ -34,26 +34,35 @@ if ($hour >= 16) {
   <meta name="description" content="Pague o Day use Village em minutos. Sem fila, sem burocracia. PIX e liberacao automatica.">
   <style>
     :root{
-      --bg: #FFFFFF;
-      --bg2: #FFF7ED;
-      --card: #FFFFFF;
-      --soft: #F5F5F5;
-      --text: #0F172A;
-      --muted: #475569;
-      --line: rgba(2,6,23,.12);
-      --accent: #F97316;
-      --accent2: #EA580C;
-      --good: #16A34A;
-      --danger: #DC2626;
-      --shadow: 0 14px 40px rgba(2,6,23,.08);
+      --bg:#0B0B0F;
+      --bg2:#111827;
+      --card:#FFF7ED;
+      --card2:#FFFFFF;
+      --soft:#0F172A;
+      --text:#0F172A;
+      --textOnDark:#F8FAFC;
+      --muted:#475569;
+      --mutedOnDark: rgba(248,250,252,.75);
+      --line: rgba(255,255,255,.10);
+      --lineCard: rgba(2,6,23,.10);
+      --accent:#F97316;
+      --accent2:#EA580C;
+      --good:#16A34A;
+      --danger:#DC2626;
+      --shadow: 0 18px 55px rgba(0,0,0,.35);
+      --shadowSoft: 0 14px 40px rgba(2,6,23,.10);
       --radius: 18px;
     }
     *{box-sizing:border-box}
     body{
       margin:0;
       font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-      color:var(--text);
-      background: var(--bg);
+      color:var(--textOnDark);
+      background:
+        radial-gradient(1100px 700px at 15% 0%, rgba(249,115,22,.22), transparent 55%),
+        radial-gradient(900px 600px at 90% 20%, rgba(234,88,12,.18), transparent 55%),
+        radial-gradient(1000px 700px at 50% 100%, rgba(255,247,237,.06), transparent 60%),
+        linear-gradient(180deg, #0B0B0F 0%, #0F172A 100%);
     }
     a{color:inherit; text-decoration:none}
     .wrap{max-width:1100px; margin:0 auto; padding:22px 18px 50px}
@@ -70,12 +79,12 @@ if ($hour >= 16) {
       box-shadow: 0 10px 30px rgba(249,115,22,.25);
     }
     .brand h1{font-size:14px; margin:0; letter-spacing:.2px}
-    .brand p{font-size:12px; margin:2px 0 0; color:var(--muted)}
+    .brand p{font-size:12px; margin:2px 0 0; color:var(--mutedOnDark)}
     .pill{
       display:inline-flex; align-items:center; gap:8px;
       padding:10px 12px; border:1px solid var(--line);
-      background: var(--bg2);
-      border-radius:999px; color:var(--muted);
+      background: rgba(255,255,255,.04);
+      border-radius:999px; color:var(--mutedOnDark);
       font-size:12px;
     }
 
@@ -89,14 +98,16 @@ if ($hour >= 16) {
     }
 
     .hero{
-      border:1px solid var(--line);
+      border:1px solid var(--lineCard);
       background: var(--card);
+      color: var(--text);
       border-radius: var(--radius);
-      box-shadow: var(--shadow);
+      box-shadow: var(--shadowSoft);
       padding:24px;
       position:relative;
       overflow:hidden;
       min-height: 320px;
+      animation: fadeUp .55s ease both;
     }
     .hero:before{
       content:"";
@@ -104,12 +115,13 @@ if ($hour >= 16) {
       width:220px; height:220px; border-radius:50%;
       background: radial-gradient(circle at 30% 30%, rgba(249,115,22,.35), transparent 65%);
       filter: blur(2px);
+      animation: floatGlow 6s ease-in-out infinite;
     }
     .kicker{
       display:inline-flex; gap:8px; align-items:center;
       padding:8px 10px; border-radius:999px;
-      border:1px solid var(--line);
-      background: var(--bg2);
+      border:1px solid var(--lineCard);
+      background: var(--card2);
       color:var(--muted);
       font-size:12px;
     }
@@ -132,12 +144,14 @@ if ($hour >= 16) {
       display:inline-flex; align-items:center; justify-content:center;
       padding:14px 16px;
       border-radius: 14px;
-      border:1px solid rgba(255,255,255,.14);
+      border:1px solid rgba(15,23,42,.12);
       font-weight:700;
       letter-spacing:.2px;
       cursor:pointer;
-      transition: transform .08s ease, filter .12s ease;
+      transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
       user-select:none;
+      position: relative;
+      overflow: hidden;
     }
     .btn:active{transform: translateY(1px)}
     .btnPrimary{
@@ -145,8 +159,21 @@ if ($hour >= 16) {
       color: #FFFFFF;
       box-shadow: 0 16px 40px rgba(249,115,22,.25);
     }
+    .btnPrimary:before{
+      content:"";
+      position:absolute;
+      top:0; left:-60%;
+      width:40%; height:100%;
+      background: linear-gradient(120deg, transparent, rgba(255,255,255,.45), transparent);
+      transform: skewX(-20deg);
+      opacity: 0;
+    }
+    .btnPrimary:hover:before{
+      animation: sheen .9s ease;
+      opacity: 1;
+    }
     .btnGhost{
-      background: var(--soft);
+      background: var(--card2);
       color: var(--text);
     }
     .trust{
@@ -155,17 +182,22 @@ if ($hour >= 16) {
     }
     .trust .chip{
       padding:8px 10px; border-radius:999px;
-      border:1px solid var(--line);
-      background: var(--bg2);
+      border:1px solid var(--lineCard);
+      background: var(--card2);
       display:inline-flex; gap:8px; align-items:center;
+      transition: transform .18s ease, box-shadow .18s ease;
     }
+    .trust .chip:hover{transform: translateY(-1px)}
 
     .side{
-      border:1px solid var(--line);
+      border:1px solid var(--lineCard);
       background: var(--card);
+      color: var(--text);
       border-radius: var(--radius);
       padding:18px;
-      box-shadow: var(--shadow);
+      box-shadow: var(--shadowSoft);
+      animation: fadeUp .65s ease both;
+      animation-delay: .05s;
     }
 
     .steps{
@@ -174,9 +206,11 @@ if ($hour >= 16) {
     .step{
       display:flex; gap:12px; align-items:flex-start;
       padding:12px; border-radius: 14px;
-      border:1px solid var(--line);
-      background: var(--soft);
+      border:1px solid var(--lineCard);
+      background: var(--card2);
+      transition: transform .18s ease, box-shadow .18s ease;
     }
+    .step:hover{transform: translateY(-1px)}
     .num{
       width:30px; height:30px; border-radius:10px;
       display:flex; align-items:center; justify-content:center;
@@ -205,19 +239,22 @@ if ($hour >= 16) {
     }
     .priceCard{
       border-radius: 16px;
-      border:1px solid var(--line);
-      background: var(--soft);
+      border:1px solid var(--lineCard);
+      background: var(--card2);
       padding:14px;
+      transition: transform .18s ease, box-shadow .18s ease;
     }
+    .priceCard:hover{transform: translateY(-2px)}
     .priceCard .label{
       display:flex; align-items:center; justify-content:space-between;
       gap:10px; font-size:12px; color:var(--muted);
     }
     .badge{
       padding:6px 10px; border-radius:999px;
-      border:1px solid var(--line);
-      background: var(--bg2);
+      border:1px solid var(--lineCard);
+      background: var(--card);
       font-size:11px;
+      color: var(--text);
     }
     .money{
       font-size:22px; font-weight:900; margin:8px 0 6px;
@@ -233,10 +270,10 @@ if ($hour >= 16) {
       margin-top:18px;
       display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;
       color: var(--muted); font-size:12px;
-      border-top:1px solid var(--line);
+      border-top:1px solid var(--lineCard);
       padding-top: 14px;
     }
-    .tinyLink{opacity:.9; text-decoration:underline; text-decoration-color: rgba(255,255,255,.22)}
+    .tinyLink{opacity:.9; text-decoration:underline; text-decoration-color: rgba(15,23,42,.22)}
     .modalBg{
       position:fixed; inset:0; display:none;
       background: rgba(0,0,0,.55);
@@ -244,21 +281,40 @@ if ($hour >= 16) {
     }
     .modal{
       max-width: 720px; margin: 6vh auto 0;
-      background: var(--card);
-      border:1px solid var(--line);
+      background: var(--card2);
+      color: var(--text);
+      border:1px solid var(--lineCard);
       border-radius: 18px;
       padding: 16px;
-      box-shadow: var(--shadow);
+      box-shadow: var(--shadowSoft);
+      animation: fadeUp .4s ease both;
     }
     .banner{
       display:flex; align-items:center; gap:10px;
       padding:10px 12px; border-radius:12px;
-      background: var(--bg2);
-      border:1px solid rgba(249,115,22,.25);
-      color: var(--muted); font-size:12px;
+      background: rgba(249,115,22,.12);
+      border:1px solid rgba(249,115,22,.35);
+      color: var(--text);
+      font-size:12px;
       margin-bottom: 12px;
     }
     .banner span{font-size:14px}
+    @keyframes fadeUp{
+      from{opacity:0; transform: translateY(12px)}
+      to{opacity:1; transform: translateY(0)}
+    }
+    @keyframes floatGlow{
+      0%, 100%{transform: translateY(0)}
+      50%{transform: translateY(6px)}
+    }
+    @keyframes sheen{
+      0%{transform: translateX(-120%) skewX(-20deg)}
+      100%{transform: translateX(240%) skewX(-20deg)}
+    }
+
+    @media (prefers-reduced-motion: reduce){
+      *{animation:none !important; transition:none !important}
+    }
     .modal h4{margin:6px 0 10px}
     .modal ul{margin:0; padding-left: 18px; color: var(--muted); font-size:13px; line-height:1.55}
     .modal .closeRow{display:flex; justify-content:flex-end; margin-top: 12px}
