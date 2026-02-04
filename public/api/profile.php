@@ -9,10 +9,13 @@ Helpers::requirePost();
 $user = Helpers::requireAuth();
 $payload = json_decode(file_get_contents('php://input'), true);
 
+$documentRaw = trim($payload['parent_document'] ?? '');
+$document = $documentRaw !== '' ? preg_replace('/\D+/', '', $documentRaw) : '';
+
 $update = [
     'parent_name' => trim($payload['parent_name'] ?? ''),
     'parent_phone' => trim($payload['parent_phone'] ?? ''),
-    'parent_document' => trim($payload['parent_document'] ?? ''),
+    'parent_document' => $document,
 ];
 
 $password = $payload['password'] ?? '';

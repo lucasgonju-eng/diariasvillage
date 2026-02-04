@@ -75,6 +75,10 @@ if (empty($guardianData['asaas_customer_id'])) {
     $client->update('guardians', 'id=eq.' . $guardianData['id'], [
         'asaas_customer_id' => $guardianData['asaas_customer_id'],
     ]);
+} else {
+    $asaas->updateCustomer($guardianData['asaas_customer_id'], [
+        'cpfCnpj' => $guardianData['parent_document'],
+    ]);
 }
 
 $payment = $asaas->createPayment([

@@ -28,6 +28,11 @@ class AsaasClient
         return $this->http->request('POST', $this->baseUrl . '/payments', $this->headers(), $payload);
     }
 
+    public function updateCustomer(string $customerId, array $payload): array
+    {
+        return $this->http->request('POST', $this->baseUrl . '/customers/' . $customerId, $this->headers(), $payload);
+    }
+
     private function headers(): array
     {
         return [
