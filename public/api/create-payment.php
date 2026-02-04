@@ -7,6 +7,15 @@ use App\HttpClient;
 use App\Mailer;
 use App\SupabaseClient;
 
+$logPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'error_log_custom.txt';
+$contentType = $_SERVER['CONTENT_TYPE'] ?? $_SERVER['HTTP_CONTENT_TYPE'] ?? '';
+$method = $_SERVER['REQUEST_METHOD'] ?? 'UNKNOWN';
+file_put_contents(
+    $logPath,
+    'create-payment method=' . $method . ' content-type=' . $contentType . PHP_EOL,
+    FILE_APPEND
+);
+
 Helpers::requirePost();
 $user = Helpers::requireAuth();
 $payload = json_decode(file_get_contents('php://input'), true);
