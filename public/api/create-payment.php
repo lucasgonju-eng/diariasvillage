@@ -58,6 +58,7 @@ if (empty($guardianData['asaas_customer_id'])) {
     $customer = $asaas->createCustomer($customerPayload);
 
     if (!$customer['ok']) {
+        error_log('Asaas createCustomer error: ' . json_encode($customer));
         Helpers::json(['ok' => false, 'error' => 'Falha ao criar cliente na Asaas.'], 500);
     }
 
