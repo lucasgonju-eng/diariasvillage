@@ -30,15 +30,18 @@ class HttpClient
                 'status' => 0,
                 'error' => $error,
                 'data' => null,
+                'raw' => null,
             ];
         }
 
         $data = json_decode($response, true);
+        $raw = $data === null ? $response : null;
         return [
             'ok' => $status >= 200 && $status < 300,
             'status' => $status,
-            'error' => $data['message'] ?? null,
+            'error' => is_array($data) ? ($data['message'] ?? null) : null,
             'data' => $data,
+            'raw' => $raw,
         ];
     }
 
