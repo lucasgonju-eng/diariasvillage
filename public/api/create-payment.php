@@ -58,6 +58,8 @@ if (empty($guardianData['asaas_customer_id'])) {
     $customer = $asaas->createCustomer($customerPayload);
 
     if (!$customer['ok']) {
+        $logPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'error_log_custom.txt';
+        file_put_contents($logPath, 'Asaas createCustomer error: ' . json_encode($customer) . PHP_EOL, FILE_APPEND);
         error_log('Asaas createCustomer error: ' . json_encode($customer));
         Helpers::json(['ok' => false, 'error' => 'Falha ao criar cliente na Asaas.'], 500);
     }
@@ -77,6 +79,8 @@ $payment = $asaas->createPayment([
 ]);
 
 if (!$payment['ok']) {
+    $logPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'error_log_custom.txt';
+    file_put_contents($logPath, 'Asaas createPayment error: ' . json_encode($payment) . PHP_EOL, FILE_APPEND);
     error_log('Asaas createPayment error: ' . json_encode($payment));
     Helpers::json(['ok' => false, 'error' => 'Falha ao criar pagamento.'], 500);
 }
