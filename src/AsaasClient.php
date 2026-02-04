@@ -32,6 +32,7 @@ class AsaasClient
     {
         return [
             'access_token' => $this->apiKey,
+            'User-Agent' => 'DiariasVillage/1.0',
             'Content-Type' => 'application/json',
         ];
     }
