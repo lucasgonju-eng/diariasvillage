@@ -20,7 +20,7 @@ if ($date === '') {
 
 $today = date('Y-m-d');
 $hour = (int) date('H');
-$plannedAmount = 5.00;
+$plannedAmount = 77.00;
 
 if ($date === $today) {
     if ($hour >= 16) {
