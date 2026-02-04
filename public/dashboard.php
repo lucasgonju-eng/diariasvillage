@@ -49,7 +49,6 @@ $minDate = $hour >= 16 ? date('Y-m-d', strtotime('+1 day')) : $today;
             <label>Forma de pagamento</label>
             <select id="billing-type">
               <option value="PIX">PIX</option>
-              <option value="DEBIT_CARD">Debito</option>
             </select>
           </div>
         </div>
