@@ -11,6 +11,16 @@ $token = $_SERVER['HTTP_ASAAS_ACCESS_TOKEN']
     ?? $_SERVER['HTTP_X_WEBHOOK_TOKEN']
     ?? $_SERVER['HTTP_AUTHORIZATION']
     ?? '';
+
+if ($token === '' && function_exists('getallheaders')) {
+    $headers = getallheaders();
+    foreach ($headers as $key => $value) {
+        if (strcasecmp($key, 'asaas-access-token') === 0 || strcasecmp($key, 'access_token') === 0) {
+            $token = $value;
+            break;
+        }
+    }
+}
 $expected = App\Env::get('ASAAS_WEBHOOK_TOKEN', '');
 
 $token = trim($token);
