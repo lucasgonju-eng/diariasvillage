@@ -8,7 +8,9 @@ use App\SupabaseClient;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
 $key = $_GET['key'] ?? '';
-if ($key !== Env::get('ADMIN_SECRET', '')) {
+$sessionOk = isset($_SESSION['admin_authenticated']) && $_SESSION['admin_authenticated'] === true;
+$keyOk = $key === Env::get('ADMIN_SECRET', '');
+if (!$sessionOk && !$keyOk) {
     http_response_code(403);
     echo 'Acesso negado.';
     exit;
@@ -117,5 +119,9 @@ if (!empty($payload)) {
     $client->insert('students', $payload);
 }
 
-header('Location: /admin/import.php?key=' . urlencode($key));
+if ($keyOk) {
+    header('Location: /admin/import.php?key=' . urlencode($key) . '&success=1');
+} else {
+    header('Location: /admin/import.php?success=1');
+}
 exit;

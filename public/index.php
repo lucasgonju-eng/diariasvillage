@@ -45,6 +45,9 @@ $baseUrl = rtrim(Env::get('APP_URL', ''), '/');
         </div>
       </div>
     </section>
+    <footer class="small" style="padding-bottom: 32px;">
+      <a href="/admin/" class="small">Acesso administrativo</a>
+    </footer>
   </div>
 </body>
 </html>
