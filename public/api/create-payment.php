@@ -77,6 +77,7 @@ $payment = $asaas->createPayment([
 ]);
 
 if (!$payment['ok']) {
+    error_log('Asaas createPayment error: ' . json_encode($payment));
     Helpers::json(['ok' => false, 'error' => 'Falha ao criar pagamento.'], 500);
 }
 
