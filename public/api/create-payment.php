@@ -45,6 +45,13 @@ if (!$guardian['ok'] || empty($guardian['data'])) {
 $guardianData = $guardian['data'][0];
 $asaas = new AsaasClient(new HttpClient());
 
+if (empty($guardianData['parent_document'])) {
+    Helpers::json([
+        'ok' => false,
+        'error' => 'Antes de gerar o pagamento, informe o CPF/CNPJ do responsavel no perfil.',
+    ], 422);
+}
+
 if (empty($guardianData['asaas_customer_id'])) {
     $customerPayload = [
         'name' => $guardianData['parent_name'] ?: 'Responsavel ' . $guardianData['email'],

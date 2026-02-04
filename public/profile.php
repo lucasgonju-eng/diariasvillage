@@ -36,7 +36,7 @@ $user = Helpers::requireAuthWeb();
           <input id="parent-phone" value="<?php echo htmlspecialchars($user['parent_phone'] ?? '', ENT_QUOTES, 'UTF-8'); ?>" />
         </div>
         <div class="form-group">
-          <label>Documento</label>
+          <label>CPF/CNPJ</label>
           <input id="parent-document" value="<?php echo htmlspecialchars($user['parent_document'] ?? '', ENT_QUOTES, 'UTF-8'); ?>" />
         </div>
 
