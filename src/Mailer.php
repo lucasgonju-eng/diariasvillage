@@ -41,6 +41,7 @@ class Mailer
             $mail->send();
             return ['ok' => true];
         } catch (MailException $e) {
+            error_log('Mailer error: ' . $e->getMessage());
             return ['ok' => false, 'error' => $e->getMessage()];
         }
     }
