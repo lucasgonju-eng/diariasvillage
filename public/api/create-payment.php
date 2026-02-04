@@ -20,6 +20,7 @@ if ($date === '') {
 
 $today = date('Y-m-d');
 $hour = (int) date('H');
+$plannedAmount = 1.00;
 
 if ($date === $today) {
     if ($hour >= 16) {
@@ -31,14 +32,14 @@ if ($date === $today) {
 
     if ($hour < 10) {
         $dailyType = 'planejada';
-        $amount = 1.00;
+        $amount = $plannedAmount;
     } else {
         $dailyType = 'emergencial';
         $amount = 97.00;
     }
 } else {
     $dailyType = 'planejada';
-    $amount = 77.00;
+    $amount = $plannedAmount;
 }
 
 if (!in_array($billingType, ['PIX', 'DEBIT_CARD'], true)) {
