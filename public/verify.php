@@ -42,6 +42,7 @@ if (!$result['ok'] || empty($result['data'])) {
       <h2><?php echo htmlspecialchars($status, ENT_QUOTES, 'UTF-8'); ?></h2>
       <a class="button" href="/login.php">Ir para login</a>
     </div>
+    <div class="footer">Desenvolvido por Lucas Goncalves Junior - 2026</div>
   </div>
 </body>
 </html>

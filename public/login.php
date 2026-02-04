@@ -35,6 +35,7 @@ require_once __DIR__ . '/src/Bootstrap.php';
         <div id="login-message"></div>
       </form>
     </div>
+    <div class="footer">Desenvolvido por Lucas Goncalves Junior - 2026</div>
   </div>
   <script src="/assets/js/login.js"></script>
 </body>

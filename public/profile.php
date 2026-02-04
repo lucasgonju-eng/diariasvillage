@@ -55,6 +55,7 @@ $user = Helpers::requireAuthWeb();
         <div id="profile-message"></div>
       </form>
     </div>
+    <div class="footer">Desenvolvido por Lucas Goncalves Junior - 2026</div>
   </div>
   <script src="/assets/js/profile.js"></script>
 </body>

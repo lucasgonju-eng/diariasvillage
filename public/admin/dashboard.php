@@ -84,6 +84,7 @@ $payments = $paymentsResult['data'] ?? [];
         </table>
       </div>
     </div>
+    <div class="footer">Desenvolvido por Lucas Goncalves Junior - 2026</div>
   </div>
 </body>
 </html>

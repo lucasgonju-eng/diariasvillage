@@ -154,3 +154,13 @@ input, select {
   font-weight: 600;
   margin-top: 8px;
 }
+
+.footer {
+  margin-top: 32px;
+  padding: 14px 16px;
+  text-align: center;
+  color: var(--orange-dark);
+  background: #fff7ed;
+  border-radius: 12px;
+  font-size: 13px;
+}

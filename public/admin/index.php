@@ -51,6 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </form>
       <?php endif; ?>
     </div>
+    <div class="footer">Desenvolvido por Lucas Goncalves Junior - 2026</div>
   </div>
 </body>
 </html>

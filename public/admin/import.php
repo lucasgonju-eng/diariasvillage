@@ -54,6 +54,7 @@ $success = ($_GET['success'] ?? '') === '1';
         <button class="button" type="submit">Importar</button>
       </form>
     </div>
+    <div class="footer">Desenvolvido por Lucas Goncalves Junior - 2026</div>
   </div>
 </body>
 </html>

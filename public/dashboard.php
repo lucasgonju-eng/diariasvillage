@@ -61,6 +61,7 @@ $minDate = $hour >= 16 ? date('Y-m-d', strtotime('+1 day')) : $today;
         <div id="payment-message"></div>
       </form>
     </div>
+    <div class="footer">Desenvolvido por Lucas Goncalves Junior - 2026</div>
   </div>
   <script src="/assets/js/dashboard.js"></script>
 </body>
