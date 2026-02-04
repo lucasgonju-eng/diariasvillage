@@ -4,6 +4,13 @@ require_once __DIR__ . '/../src/Bootstrap.php';
 use App\Env;
 
 $key = $_GET['key'] ?? '';
+$debug = ($_GET['debug'] ?? '') === '1';
+
+if ($debug && $key === Env::get('ADMIN_SECRET', '')) {
+    ini_set('display_errors', '1');
+    ini_set('display_startup_errors', '1');
+    error_reporting(E_ALL);
+}
 if ($key !== Env::get('ADMIN_SECRET', '')) {
     http_response_code(403);
     echo 'Acesso negado.';
