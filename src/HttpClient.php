@@ -7,12 +7,24 @@ class HttpClient
     public function request(string $method, string $url, array $headers = [], ?array $json = null): array
     {
         $ch = curl_init();
+        $userAgent = null;
+        foreach ($headers as $key => $value) {
+            if (strcasecmp($key, 'User-Agent') === 0) {
+                $userAgent = $value;
+                unset($headers[$key]);
+                break;
+            }
+        }
+
         $options = [
             CURLOPT_URL => $url,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_CUSTOMREQUEST => $method,
             CURLOPT_HTTPHEADER => $this->formatHeaders($headers),
         ];
+        if ($userAgent !== null) {
+            $options[CURLOPT_USERAGENT] = $userAgent;
+        }
 
         if ($json !== null) {
             $options[CURLOPT_POSTFIELDS] = json_encode($json);
