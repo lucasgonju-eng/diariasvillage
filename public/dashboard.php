@@ -26,7 +26,14 @@ $today = date('Y-m-d');
 
     <div class="card">
       <h2>Bem-vindo!</h2>
-      <p class="subtitle">Escolha a diaria do dia.</p>
+      <p class="subtitle">Escolha a diaria do dia com praticidade.</p>
+      <div class="notice">
+        Diaria Planejada: antes das 10h do day-use (R$ 77,00).<br />
+        Diaria Emergencial: apos as 10h do day-use (R$ 97,00).
+      </div>
+      <p class="subtitle">
+        Finalizando o pagamento, voce recebe por e-mail o numero de confirmacao do day-use.
+      </p>
 
       <form id="payment-form">
         <div class="grid-2">
