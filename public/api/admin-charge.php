@@ -61,11 +61,11 @@ $template = <<<'HTML'
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Ordem criada • Diárias Village</title>
+  <title>Regularização da diária utilizada • Diárias Village</title>
 </head>
 <body style="margin:0;padding:0;background:#EEF2F7;">
   <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
-    Ordem de pagamento criada. Finalize agora via PIX para liberar automaticamente.
+    Regularização da diária utilizada. Finalize agora via PIX.
   </div>
 
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#EEF2F7;padding:24px 12px;">
@@ -107,7 +107,7 @@ $template = <<<'HTML'
                 font-size:12px;
                 color:#EAF0FF;
               ">
-                Ordem de pagamento criada
+                Regularização de diária
               </div>
             </td>
           </tr>
@@ -116,32 +116,43 @@ $template = <<<'HTML'
             <td style="padding:28px 28px 10px 28px;">
               <div style="font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0B1020;">
                 <div style="font-size:26px;font-weight:800;line-height:1.15;">
-                  Quase lá — falta só o PIX 😊
+                  Olá! 😊
                 </div>
 
                 <div style="margin-top:10px;font-size:15px;line-height:1.65;color:#1B2333;">
-                  Sua ordem de pagamento foi criada com sucesso. Para concluir, é só finalizar o pagamento via <b>PIX</b> no botão abaixo.
+                  Esperamos que tenha dado tudo certo no dia a dia de <b>{{nome_aluno}}</b> no Village.
+                </div>
+
+                <div style="margin-top:10px;font-size:15px;line-height:1.65;color:#1B2333;">
+                  Estamos entrando em contato para regularizar a diária utilizada recentemente. Conforme alinhado pela nossa equipe, identificamos que
+                  <b>{{nome_aluno}}</b> frequentou o Day use Village, mas o pagamento ainda não foi concluído.
+                </div>
+
+                <div style="margin-top:10px;font-size:15px;line-height:1.65;color:#1B2333;">
+                  Para facilitar, já deixamos a ordem de pagamento criada. É só finalizar via <b>PIX</b> no botão abaixo — o processo é rápido e seguro.
                 </div>
 
                 <div style="margin-top:20px;background:#F6F8FC;border:1px solid #E6E9F2;border-radius:14px;padding:18px;">
                   <div style="font-size:16px;font-weight:800;margin-bottom:10px;color:#0B1020;">
-                    Resumo desta diária
+                    Resumo da diária utilizada
                   </div>
 
                   <div style="font-size:14px;line-height:1.7;color:#1B2333;">
                     Aluno: <b>{{nome_aluno}}</b><br>
-                    Data do day-use: <b>{{data_diaria}}</b><br>
-                    Tipo: <b>{{tipo_diaria}}</b><br>
-                    Valor: <b>R$ {{valor}}</b>
+                    Data do day use: <b>{{data_diaria}}</b><br>
+                    Tipo do day use: <b>{{tipo_diaria}}</b><br>
+                    Valor total: <b>R$ {{valor}}</b>
                   </div>
                 </div>
 
                 <div style="margin-top:18px;font-size:15px;line-height:1.7;color:#1B2333;">
-                  Assim que o pagamento for confirmado, o acesso é <b>liberado automaticamente</b> e a <b>secretaria é avisada</b>.
+                  Assim que o pagamento for confirmado, a situação fica automaticamente regularizada e a secretaria é avisada — sem necessidade de novos contatos.
                 </div>
 
-                <div style="margin-top:12px;font-size:13px;line-height:1.6;color:#556070;">
-                  Dica: o pagamento planejado tem desconto e sai por <b>R$ 77,00</b> quando feito antes das 10h.
+                <div style="margin-top:16px;font-size:13px;line-height:1.6;color:#556070;">
+                  <b>💡 Dica importante:</b><br>
+                  Para evitar valores emergenciais, recomendamos sempre o pagamento planejado, que tem desconto e sai por <b>R$ 77,00</b>
+                  quando feito antecipadamente (até às 10h do dia). Isso garante mais tranquilidade no dia a dia e evita cobranças posteriores.
                 </div>
 
                 <div style="margin-top:16px;">
@@ -174,6 +185,15 @@ $template = <<<'HTML'
                     Se o botão não funcionar, copie e cole este link no navegador:<br>
                     <span style="color:#0A1B4D;">{{link_pagamento}}</span>
                   </div>
+                </div>
+                <div style="margin-top:18px;font-size:14px;line-height:1.7;color:#1B2333;">
+                  Ficamos à disposição para qualquer dúvida.
+                </div>
+
+                <div style="margin-top:10px;font-size:14px;line-height:1.7;color:#1B2333;">
+                  Atenciosamente,<br>
+                  Equipe Village<br>
+                  <span style="font-size:12px;color:#556070;">Sistema oficial de pagamento do Day use Village</span>
                 </div>
               </div>
             </td>
@@ -319,7 +339,7 @@ foreach ($charges as $charge) {
 
     $mailResult = $mailer->send(
         $guardianEmail,
-        'Ordem criada - Diarias Village',
+        'Regularização da diária utilizada • Diárias Village',
         $html
     );
 
