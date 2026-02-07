@@ -16,7 +16,7 @@ function setActiveTab(name) {
   tabs.forEach((btn) => {
     const isActive = btn.dataset.tab === name;
     btn.classList.toggle('btn-primary', isActive);
-    btn.classList.toggle('btn-ghost', !isActive);
+    btn.classList.toggle('admin-tab', !isActive);
   });
 }
 
