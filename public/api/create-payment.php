@@ -150,15 +150,48 @@ $payment = $asaas->createPayment([
 ]);
 
 if (!$payment['ok']) {
+    $errorMessage = $extractAsaasError($payment);
+
+    if (stripos($errorMessage, 'cliente removido') !== false) {
+        $customerPayload = [
+            'name' => $guardianData['parent_name'] ?: 'Responsavel ' . $guardianData['email'],
+            'email' => $guardianData['email'],
+        ];
+        if ($document !== '') {
+            $customerPayload['cpfCnpj'] = $document;
+        }
+
+        $customer = $asaas->createCustomer($customerPayload);
+        if ($customer['ok']) {
+            $guardianData['asaas_customer_id'] = $customer['data']['id'] ?? null;
+            $client->update('guardians', 'id=eq.' . $guardianData['id'], [
+                'asaas_customer_id' => $guardianData['asaas_customer_id'],
+                'parent_document' => $document,
+            ]);
+
+            $payment = $asaas->createPayment([
+                'customer' => $guardianData['asaas_customer_id'],
+                'billingType' => $billingType,
+                'value' => $amount,
+                'dueDate' => $date,
+                'description' => 'Diaria ' . $dailyType . ' - Einstein Village',
+            ]);
+            if ($payment['ok']) {
+                goto payment_success;
+            }
+        }
+    }
+
     $logPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'error_log_custom.txt';
     file_put_contents($logPath, 'Asaas createPayment error: ' . json_encode($payment) . PHP_EOL, FILE_APPEND);
     error_log('Asaas createPayment error: ' . json_encode($payment));
     Helpers::json([
         'ok' => false,
-        'error' => $extractAsaasError($payment),
+        'error' => $errorMessage,
     ], 500);
 }
 
+payment_success:
 $paymentData = $payment['data'];
 $client->insert('payments', [[
     'guardian_id' => $guardianData['id'],
