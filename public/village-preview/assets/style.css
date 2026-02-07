@@ -219,6 +219,28 @@ input:focus, select:focus{
 }
 .construction span{font-size:16px}
 
+.info-cards{
+  margin-top:18px;
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  gap:14px;
+}
+.info-card{
+  background:#fff;
+  border-radius:var(--radius);
+  border:1px solid var(--line);
+  padding:18px;
+  box-shadow:var(--shadow-soft);
+}
+.info-card h3{margin:0 0 6px;font-size:18px;color:#1a2133}
+.info-card p{margin:0;color:var(--muted);font-size:14px;line-height:1.5}
+.info-note{
+  margin-top:16px;
+  color:var(--muted);
+  font-size:14px;
+  line-height:1.6;
+}
+
 /* WAVE */
 .wave{
   z-index:1;
@@ -324,6 +346,7 @@ input:focus, select:focus{
   .hero-grid{grid-template-columns:1fr;gap:16px}
   .hero{padding-bottom:96px}
   .hero-card{max-width:620px}
+  .info-cards{grid-template-columns:1fr}
 }
 @media (max-width: 480px){
   h1{font-size:38px}
