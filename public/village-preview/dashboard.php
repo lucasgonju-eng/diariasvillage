@@ -27,7 +27,7 @@ $minDate = $hour >= 16 ? date('Y-m-d', strtotime('+1 day')) : $today;
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/style.css?v=4?v=finalv3">
+  <link rel="stylesheet" href="assets/style.css?v=5">
 </head>
 <body>
   <header class="hero" id="top">
@@ -60,7 +60,7 @@ $minDate = $hour >= 16 ? date('Y-m-d', strtotime('+1 day')) : $today;
           </div>
         </div>
 
-        <aside class="hero-card" aria-label="Formulario de pagamento">
+        <aside class="hero-card" aria-label="Formulário de pagamento">
           <h3>Gerar pagamento</h3>
           <p class="muted">Preencha os dados abaixo.</p>
 

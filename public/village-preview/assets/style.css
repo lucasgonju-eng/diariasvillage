@@ -154,12 +154,21 @@ h1{
 .hero-card .muted{margin:0 0 12px;color:var(--muted);font-size:13px}
 
 /* FORM */
-.form-group{margin-bottom:14px}
+.form-group{
+  margin-bottom:14px;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
 label{
   display:block;
   font-weight:600;
-  margin-bottom:6px;
   color:#1a2133;
+}
+.hero-card label,
+.hero-card input,
+.hero-card select{
+  width:100%;
 }
 input, select{
   width:100%;
