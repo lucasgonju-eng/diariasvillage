@@ -54,6 +54,23 @@ $success = ($_GET['success'] ?? '') === '1';
         <button class="button" type="submit">Importar</button>
       </form>
     </div>
+
+    <div class="card" style="margin-top:18px;">
+      <h2>Importar responsáveis</h2>
+      <p class="subtitle">Envie PDF ou JSON com colunas: student_name, guardian_name, guardian_email, guardian_phone, guardian_cpf.</p>
+
+      <form action="/api/import-guardians.php?return=html<?php echo $keyOk ? '&key=' . htmlspecialchars($key, ENT_QUOTES, 'UTF-8') : ''; ?>" method="post" enctype="multipart/form-data">
+        <div class="form-group">
+          <label for="guardians-file">Arquivo (PDF ou JSON)</label>
+          <input id="guardians-file" type="file" name="file" accept=".pdf,.json" />
+        </div>
+        <div class="form-group">
+          <label for="guardians-json">Ou cole o JSON abaixo</label>
+          <textarea id="guardians-json" name="json" rows="6" placeholder='[{"student_name":"ALUNO","guardian_name":"RESPONSAVEL","guardian_email":"email@exemplo.com","guardian_phone":"6299999999","guardian_cpf":"12345678900"}]'></textarea>
+        </div>
+        <button class="button" type="submit">Importar responsáveis</button>
+      </form>
+    </div>
     <div class="footer">Desenvolvido por Lucas Goncalves Junior - 2026</div>
   </div>
 </body>
