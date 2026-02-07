@@ -10,6 +10,7 @@ const sendChargesButton = document.querySelector('#send-charges');
 const chargeMessage = document.querySelector('#charge-message');
 
 const selectedStudents = new Set();
+const guardianCache = new Map();
 
 function setActiveTab(name) {
   if (!tabEntries || !tabCharges || !tabInadimplentes || !tabRecebidas) return;
@@ -25,7 +26,7 @@ function setActiveTab(name) {
   });
 }
 
-function addChargeItem(studentName) {
+async function addChargeItem(studentName) {
   if (!studentName || selectedStudents.has(studentName)) return;
   selectedStudents.add(studentName);
 
@@ -115,6 +116,39 @@ function addChargeItem(studentName) {
   });
 
   chargeList.appendChild(wrapper);
+
+  if (guardianCache.has(studentName)) {
+    const cached = guardianCache.get(studentName);
+    if (cached) {
+      const nameInput = wrapper.querySelector('[name="guardian_name"]');
+      const emailInput = wrapper.querySelector('[name="guardian_email"]');
+      const phoneInput = wrapper.querySelector('[name="guardian_whatsapp"]');
+      const docInput = wrapper.querySelector('[name="guardian_document"]');
+      if (nameInput && !nameInput.value) nameInput.value = cached.parent_name || '';
+      if (emailInput && !emailInput.value) emailInput.value = cached.email || '';
+      if (phoneInput && !phoneInput.value) phoneInput.value = cached.parent_phone || '';
+      if (docInput && !docInput.value) docInput.value = cached.parent_document || '';
+    }
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/guardian-by-student.php?name=${encodeURIComponent(studentName)}`);
+    const data = await res.json();
+    const guardian = data.ok ? data.guardian : null;
+    guardianCache.set(studentName, guardian);
+    if (!guardian) return;
+    const nameInput = wrapper.querySelector('[name="guardian_name"]');
+    const emailInput = wrapper.querySelector('[name="guardian_email"]');
+    const phoneInput = wrapper.querySelector('[name="guardian_whatsapp"]');
+    const docInput = wrapper.querySelector('[name="guardian_document"]');
+    if (nameInput && !nameInput.value) nameInput.value = guardian.parent_name || '';
+    if (emailInput && !emailInput.value) emailInput.value = guardian.email || '';
+    if (phoneInput && !phoneInput.value) phoneInput.value = guardian.parent_phone || '';
+    if (docInput && !docInput.value) docInput.value = guardian.parent_document || '';
+  } catch (err) {
+    guardianCache.set(studentName, null);
+  }
 }
 
 async function loadStudents() {
