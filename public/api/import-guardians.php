@@ -80,6 +80,11 @@ function extract_email(string $value): string
     return '';
 }
 
+function is_valid_email(string $value): bool
+{
+    return $value !== '' && filter_var($value, FILTER_VALIDATE_EMAIL) !== false;
+}
+
 function extract_phone(string $value): string
 {
     return preg_replace('/\D+/', '', $value) ?? '';
@@ -202,9 +207,9 @@ function parse_guardians_from_text(string $text): array
         if (!$guardians) {
             continue;
         }
-        $withEmail = array_values(array_filter($guardians, static fn($g) => !empty($g['email'])));
+        $withEmail = array_values(array_filter($guardians, static fn($g) => is_valid_email((string) ($g['email'] ?? ''))));
         $chosen = $withEmail[0] ?? $guardians[0];
-        if (empty($chosen['email'])) {
+        if (!is_valid_email((string) ($chosen['email'] ?? ''))) {
             $missingEmail[] = $student;
             $chosen['email'] = placeholder_email($chosen['name'] ?? '', $chosen['cpf'] ?? '', $chosen['phone'] ?? '', $student, $placeholderCounter);
         }
@@ -252,7 +257,7 @@ function normalize_entry(array $entry, array &$placeholderCounter): array
     $phone = preg_replace('/\D+/', '', $entry['guardian_phone'] ?? '') ?? '';
     $cpf = preg_replace('/\D+/', '', $entry['guardian_cpf'] ?? '') ?? '';
 
-    if ($email === '') {
+    if (!is_valid_email($email)) {
         $email = placeholder_email($name, $cpf, $phone, $student, $placeholderCounter);
     }
 
