@@ -247,6 +247,6 @@ $manualPaid = $manualPaidResult['data'] ?? [];
     <div class="footer">Desenvolvido por Lucas Goncalves Junior - 2026</div>
   </div>
 
-  <script src="/assets/js/admin-dashboard.js?v=6"></script>
+  <script src="/assets/js/admin-dashboard.js?v=7"></script>
 </body>
 </html>

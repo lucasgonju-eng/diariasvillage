@@ -11,6 +11,7 @@ const chargeMessage = document.querySelector('#charge-message');
 
 const selectedStudents = new Set();
 const guardianCache = new Map();
+const studentNames = new Set();
 
 function setActiveTab(name) {
   if (!tabEntries || !tabCharges || !tabInadimplentes || !tabRecebidas) return;
@@ -157,11 +158,21 @@ async function loadStudents() {
   const data = await res.json();
   if (!data.ok) return;
   studentList.innerHTML = '';
+  studentNames.clear();
   data.students.forEach((student) => {
     const option = document.createElement('option');
     option.value = student.name;
     studentList.appendChild(option);
+    studentNames.add(student.name);
   });
+}
+
+function tryAddStudentFromInput() {
+  if (!studentInput) return;
+  const value = studentInput.value.trim();
+  if (!value || !studentNames.has(value)) return;
+  addChargeItem(value);
+  studentInput.value = '';
 }
 
 function collectCharges() {
@@ -199,11 +210,13 @@ tabs.forEach((btn) => {
 });
 
 if (studentInput) {
-  studentInput.addEventListener('change', () => {
-    const value = studentInput.value.trim();
-    if (value) {
-      addChargeItem(value);
-      studentInput.value = '';
+  studentInput.addEventListener('change', tryAddStudentFromInput);
+  studentInput.addEventListener('blur', tryAddStudentFromInput);
+  studentInput.addEventListener('input', tryAddStudentFromInput);
+  studentInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      tryAddStudentFromInput();
     }
   });
 }
