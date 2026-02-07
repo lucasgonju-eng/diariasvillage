@@ -177,7 +177,10 @@ foreach ($charges as $charge) {
     $guardianName = trim($charge['guardian_name'] ?? '');
     $guardianEmail = trim($charge['guardian_email'] ?? '');
     $guardianWhatsapp = trim($charge['guardian_whatsapp'] ?? '');
-    $dayUseDates = trim($charge['day_use_dates'] ?? '');
+    $dayUseDates = $charge['day_use_dates'] ?? [];
+    if (!is_array($dayUseDates)) {
+        $dayUseDates = [$dayUseDates];
+    }
 
     if ($studentName === '' || $guardianName === '' || $guardianEmail === '') {
         $results[] = [
@@ -247,7 +250,8 @@ foreach ($charges as $charge) {
     $paymentData = $payment['data'] ?? [];
     $invoiceUrl = $paymentData['invoiceUrl'] ?? $paymentData['bankSlipUrl'] ?? $portalLink;
 
-    $dateLabel = $dayUseDates !== '' ? $dayUseDates : $paymentDate;
+    $dateLabel = array_filter(array_map('trim', $dayUseDates));
+    $dateLabel = $dateLabel ? implode(', ', $dateLabel) : $paymentDate;
 
     $replace = [
         '{{nome_aluno}}' => htmlspecialchars($studentName, ENT_QUOTES, 'UTF-8'),

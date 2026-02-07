@@ -48,14 +48,40 @@ function addChargeItem(studentName) {
       </div>
       <div class="form-group">
         <label>Datas do day-use</label>
-        <input type="text" name="day_use_dates" placeholder="Ex: 10/02/2026, 12/02/2026" />
+        <div class="date-list">
+          <div class="date-row">
+            <input type="text" name="day_use_dates[]" placeholder="dd/mm/aa" inputmode="numeric" />
+            <button class="btn btn-ghost btn-sm" type="button" data-action="add-date">+</button>
+          </div>
+        </div>
       </div>
     </div>
   `;
 
-  wrapper.querySelector('button').addEventListener('click', () => {
+  wrapper.querySelector('.charge-header button').addEventListener('click', () => {
     selectedStudents.delete(studentName);
     wrapper.remove();
+  });
+
+  const dateList = wrapper.querySelector('.date-list');
+  dateList.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.dataset.action === 'add-date') {
+      const row = document.createElement('div');
+      row.className = 'date-row';
+      row.innerHTML = `
+        <input type="text" name="day_use_dates[]" placeholder="dd/mm/aa" inputmode="numeric" />
+        <button class="btn btn-ghost btn-sm" type="button" data-action="remove-date">-</button>
+      `;
+      dateList.appendChild(row);
+      return;
+    }
+
+    if (target.dataset.action === 'remove-date') {
+      const row = target.closest('.date-row');
+      if (row) row.remove();
+    }
   });
 
   chargeList.appendChild(wrapper);
@@ -81,7 +107,9 @@ function collectCharges() {
     guardian_name: item.querySelector('[name="guardian_name"]').value.trim(),
     guardian_email: item.querySelector('[name="guardian_email"]').value.trim(),
     guardian_whatsapp: item.querySelector('[name="guardian_whatsapp"]').value.trim(),
-    day_use_dates: item.querySelector('[name="day_use_dates"]').value.trim(),
+    day_use_dates: [...item.querySelectorAll('[name="day_use_dates[]"]')]
+      .map((input) => input.value.trim())
+      .filter(Boolean),
   }));
 }
 
