@@ -54,7 +54,7 @@ $payments = $paymentsResult['data'] ?? [];
     <div class="admin-card">
       <div class="admin-tabs">
         <button class="btn btn-primary btn-sm" type="button" data-tab="entries">Entradas confirmadas</button>
-        <button class="btn btn-ghost btn-sm" type="button" data-tab="charges">Cobrança</button>
+        <button class="btn btn-primary btn-sm" type="button" data-tab="charges">Cobrança</button>
       </div>
 
       <section id="tab-entries">
