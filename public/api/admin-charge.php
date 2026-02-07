@@ -7,6 +7,35 @@ use App\Helpers;
 use App\HttpClient;
 use App\Mailer;
 
+function extractAsaasError(array $response): string
+{
+    if (!empty($response['error'])) {
+        return (string) $response['error'];
+    }
+
+    $data = $response['data'] ?? null;
+    if (is_array($data)) {
+        if (!empty($data['errors']) && is_array($data['errors'])) {
+            $messages = [];
+            foreach ($data['errors'] as $error) {
+                if (is_array($error)) {
+                    $messages[] = $error['description'] ?? $error['message'] ?? null;
+                }
+            }
+            $messages = array_filter($messages);
+            if ($messages) {
+                return implode(' ', $messages);
+            }
+        }
+
+        if (!empty($data['message'])) {
+            return (string) $data['message'];
+        }
+    }
+
+    return 'Falha ao processar cobrança.';
+}
+
 if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
     Helpers::json(['ok' => false, 'error' => 'Nao autorizado.'], 401);
 }
@@ -24,8 +53,6 @@ $mailer = new Mailer();
 $results = [];
 $today = date('Y-m-d');
 $paymentDate = date('d/m/Y', strtotime($today));
-$amount = 97.00;
-$amountFormatted = number_format($amount, 2, ',', '.');
 $portalLink = Helpers::baseUrl() ?: 'https://village.einsteinhub.co';
 
 $template = <<<'HTML'
@@ -181,12 +208,22 @@ foreach ($charges as $charge) {
     if (!is_array($dayUseDates)) {
         $dayUseDates = [$dayUseDates];
     }
+    $dayUseDates = array_filter(array_map('trim', $dayUseDates));
 
     if ($studentName === '' || $guardianName === '' || $guardianEmail === '') {
         $results[] = [
             'student_name' => $studentName ?: '(sem nome)',
             'ok' => false,
             'error' => 'Nome e e-mail do responsável são obrigatórios.',
+        ];
+        continue;
+    }
+
+    if (!$dayUseDates) {
+        $results[] = [
+            'student_name' => $studentName,
+            'ok' => false,
+            'error' => 'Informe ao menos uma data de day-use.',
         ];
         continue;
     }
@@ -215,7 +252,7 @@ foreach ($charges as $charge) {
         $results[] = [
             'student_name' => $studentName,
             'ok' => false,
-            'error' => 'Falha ao criar cliente na Asaas.',
+            'error' => extractAsaasError($customer),
         ];
         continue;
     }
@@ -230,6 +267,10 @@ foreach ($charges as $charge) {
         continue;
     }
 
+    $daysCount = count($dayUseDates);
+    $amount = 97.00 * $daysCount;
+    $amountFormatted = number_format($amount, 2, ',', '.');
+
     $payment = $asaas->createPayment([
         'customer' => $customerId,
         'billingType' => 'PIX',
@@ -242,7 +283,7 @@ foreach ($charges as $charge) {
         $results[] = [
             'student_name' => $studentName,
             'ok' => false,
-            'error' => 'Falha ao criar pagamento.',
+            'error' => extractAsaasError($payment),
         ];
         continue;
     }
@@ -250,8 +291,7 @@ foreach ($charges as $charge) {
     $paymentData = $payment['data'] ?? [];
     $invoiceUrl = $paymentData['invoiceUrl'] ?? $paymentData['bankSlipUrl'] ?? $portalLink;
 
-    $dateLabel = array_filter(array_map('trim', $dayUseDates));
-    $dateLabel = $dateLabel ? implode(', ', $dateLabel) : $paymentDate;
+    $dateLabel = implode(', ', $dayUseDates);
 
     $replace = [
         '{{nome_aluno}}' => htmlspecialchars($studentName, ENT_QUOTES, 'UTF-8'),
@@ -277,5 +317,7 @@ foreach ($charges as $charge) {
     ];
 }
 
-$allOk = !array_filter($results, static fn($item) => !$item['ok']);
-Helpers::json(['ok' => $allOk, 'results' => $results]);
+$failures = array_values(array_filter($results, static fn($item) => !$item['ok']));
+$allOk = !$failures;
+$error = $failures ? ($failures[0]['error'] ?? 'Falha ao enviar cobranças.') : null;
+Helpers::json(['ok' => $allOk, 'error' => $error, 'results' => $results]);
