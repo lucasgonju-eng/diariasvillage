@@ -6,13 +6,20 @@ use App\Env;
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $username = strtolower(trim($_POST['username'] ?? ''));
     $password = trim($_POST['password'] ?? '');
-    if ($password !== '' && $password === Env::get('ADMIN_SECRET', '')) {
+    $adminSecret = Env::get('ADMIN_SECRET', '');
+
+    $isAdmin = $username === 'admin' && $password !== '' && $password === $adminSecret;
+    $isSecretaria = $username === 'secretaria' && $password === 'Ei32743176';
+
+    if ($isAdmin || $isSecretaria) {
         $_SESSION['admin_authenticated'] = true;
+        $_SESSION['admin_user'] = $username;
         header('Location: /admin/dashboard.php');
         exit;
     }
-    $error = 'Senha invalida.';
+    $error = 'Usuário ou senha inválidos.';
 }
 ?>
 <!DOCTYPE html>
@@ -38,11 +45,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <a class="button secondary" href="/admin/import.php">Importar alunos</a>
         </div>
       <?php else: ?>
-        <p class="subtitle">Digite a senha para continuar.</p>
+        <p class="subtitle">Informe usuário e senha para continuar.</p>
         <form method="post">
           <div class="form-group">
+            <label>Usuário</label>
+            <input type="text" name="username" autocomplete="username" required />
+          </div>
+          <div class="form-group">
             <label>Senha</label>
-            <input type="password" name="password" required />
+            <input type="password" name="password" autocomplete="current-password" required />
           </div>
           <button class="button" type="submit">Entrar</button>
           <?php if ($error): ?>

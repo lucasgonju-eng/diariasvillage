@@ -239,6 +239,7 @@ if ($hour >= 16) {
   <footer class="footer">
     <div class="container">
       Diarias Village • Sistema de pagamento e controle de acesso
+      <a class="tinyLink" href="/admin/dashboard.php" aria-label="Acesso administrativo">Admin</a>
     </div>
   </footer>
 
