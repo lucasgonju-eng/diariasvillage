@@ -13,8 +13,8 @@ $minDate = $hour >= 16 ? date('Y-m-d', strtotime('+1 day')) : $today;
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dashboard - Diarias Village</title>
-  <meta name="description" content="Escolha a diaria do dia com praticidade e gere o pagamento." />
+  <title>Dashboard - Diárias Village</title>
+  <meta name="description" content="Escolha a diária do dia com praticidade e gere o pagamento." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -27,8 +27,8 @@ $minDate = $hour >= 16 ? date('Y-m-d', strtotime('+1 day')) : $today;
         <div class="brand">
           <span class="brand-mark" aria-hidden="true"></span>
           <div class="brand-text">
-            <div class="brand-title">DIARIAS VILLAGE</div>
-            <div class="brand-sub">Painel do responsavel</div>
+            <div class="brand-title">DIÁRIAS VILLAGE</div>
+            <div class="brand-sub">Painel do responsável</div>
           </div>
         </div>
 
@@ -42,16 +42,16 @@ $minDate = $hour >= 16 ? date('Y-m-d', strtotime('+1 day')) : $today;
         <div class="hero-left">
           <div class="pill">Dashboard</div>
           <h1>Bem-vindo!</h1>
-          <p class="lead">Escolha a diaria do dia com praticidade.</p>
+          <p class="lead">Escolha a diária do dia com praticidade.</p>
 
           <div class="microchips" role="list">
             <span class="microchip" role="listitem">Pagamento via PIX</span>
-            <span class="microchip" role="listitem">Liberacao automatica</span>
-            <span class="microchip" role="listitem">Confirmacao por e-mail</span>
+            <span class="microchip" role="listitem">Liberação automática</span>
+            <span class="microchip" role="listitem">Confirmação por e-mail</span>
           </div>
         </div>
 
-        <aside class="hero-card" aria-label="Formulario de pagamento">
+        <aside class="hero-card" aria-label="Formulário de pagamento">
           <h3>Gerar pagamento</h3>
           <p class="muted">Preencha os dados abaixo.</p>
 
@@ -60,7 +60,7 @@ $minDate = $hour >= 16 ? date('Y-m-d', strtotime('+1 day')) : $today;
               <div class="form-group">
                 <label>Data</label>
                 <input type="date" id="payment-date" value="<?php echo $minDate; ?>" min="<?php echo $minDate; ?>" required />
-                <div class="small">Apos 16h, somente datas futuras.</div>
+                <div class="small">Após 16h, somente datas futuras.</div>
               </div>
               <div class="form-group">
                 <label>Forma de pagamento</label>
@@ -70,9 +70,9 @@ $minDate = $hour >= 16 ? date('Y-m-d', strtotime('+1 day')) : $today;
               </div>
             </div>
             <div class="form-group">
-              <label>CPF/CNPJ do responsavel</label>
+              <label>CPF/CNPJ do responsável</label>
               <input type="text" id="billing-document" placeholder="Digite o CPF ou CNPJ" required />
-              <div class="small">Necessario para confirmar o pagamento no Asaas.</div>
+              <div class="small">Necessário para confirmar o pagamento no Asaas.</div>
             </div>
             <button class="btn btn-primary btn-block" type="submit">Gerar pagamento</button>
             <div id="payment-message"></div>
@@ -90,24 +90,24 @@ $minDate = $hour >= 16 ? date('Y-m-d', strtotime('+1 day')) : $today;
     <section class="section section-alt" id="info-diarias">
       <div class="container">
         <div class="section-head">
-          <h2>Informacoes das diarias</h2>
-          <p class="muted">Regras aplicadas automaticamente conforme o horario do pedido.</p>
+          <h2>Informações das diárias</h2>
+          <p class="muted">Regras aplicadas automaticamente conforme o horário do pedido.</p>
         </div>
 
         <div class="info-cards">
           <div class="info-card">
-            <h3>Diaria Planejada</h3>
+            <h3>Diária Planejada</h3>
             <p>Antes das 10h do day-use (R$ 77,00).</p>
           </div>
           <div class="info-card">
-            <h3>Diaria Emergencial</h3>
-            <p>Apos as 10h do day-use (R$ 97,00).</p>
+            <h3>Diária Emergencial</h3>
+            <p>Após as 10h do day-use (R$ 97,00).</p>
           </div>
         </div>
 
         <div class="info-note">
-          Para datas futuras, a diaria e planejada automaticamente. Apos 16h, a compra para o dia atual e encerrada.
-          Finalizando o pagamento, voce recebe por e-mail o numero de confirmacao do day-use.
+          Para datas futuras, a diária é planejada automaticamente. Após 16h, a compra para o dia atual é encerrada.
+          Finalizando o pagamento, você recebe por e-mail o número de confirmação do day-use.
         </div>
       </div>
     </section>
@@ -115,7 +115,7 @@ $minDate = $hour >= 16 ? date('Y-m-d', strtotime('+1 day')) : $today;
 
   <footer class="footer">
     <div class="container">
-      Desenvolvido por Lucas Goncalves Junior - 2026
+      Desenvolvido por Lucas Gonçalves Junior - 2026
     </div>
   </footer>
 
