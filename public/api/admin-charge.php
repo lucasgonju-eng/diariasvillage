@@ -204,6 +204,7 @@ foreach ($charges as $charge) {
     $guardianName = trim($charge['guardian_name'] ?? '');
     $guardianEmail = trim($charge['guardian_email'] ?? '');
     $guardianWhatsapp = trim($charge['guardian_whatsapp'] ?? '');
+    $guardianDocument = trim($charge['guardian_document'] ?? '');
     $dayUseDates = $charge['day_use_dates'] ?? [];
     if (!is_array($dayUseDates)) {
         $dayUseDates = [$dayUseDates];
@@ -237,10 +238,23 @@ foreach ($charges as $charge) {
         continue;
     }
 
+    if ($guardianDocument === '') {
+        $results[] = [
+            'student_name' => $studentName,
+            'ok' => false,
+            'error' => 'CPF ou CNPJ é obrigatório.',
+        ];
+        continue;
+    }
+
     $customerPayload = [
         'name' => $guardianName,
         'email' => $guardianEmail,
     ];
+    $documentDigits = preg_replace('/\D+/', '', $guardianDocument);
+    if ($documentDigits !== '') {
+        $customerPayload['cpfCnpj'] = $documentDigits;
+    }
 
     $whatsappDigits = preg_replace('/\D+/', '', $guardianWhatsapp);
     if ($whatsappDigits !== '') {

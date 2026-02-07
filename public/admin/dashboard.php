@@ -139,6 +139,6 @@ $payments = $paymentsResult['data'] ?? [];
     <div class="footer">Desenvolvido por Lucas Goncalves Junior - 2026</div>
   </div>
 
-  <script src="/assets/js/admin-dashboard.js?v=4"></script>
+  <script src="/assets/js/admin-dashboard.js?v=5"></script>
 </body>
 </html>

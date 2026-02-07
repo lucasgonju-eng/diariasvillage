@@ -47,6 +47,10 @@ function addChargeItem(studentName) {
         <input type="tel" name="guardian_whatsapp" placeholder="(DDD) 99999-9999" />
       </div>
       <div class="form-group">
+        <label>CPF/CNPJ</label>
+        <input type="text" name="guardian_document" placeholder="Digite o CPF ou CNPJ" />
+      </div>
+      <div class="form-group">
         <label>Datas do day-use</label>
         <div class="date-list">
           <div class="date-row">
@@ -129,6 +133,7 @@ function collectCharges() {
     guardian_name: item.querySelector('[name="guardian_name"]').value.trim(),
     guardian_email: item.querySelector('[name="guardian_email"]').value.trim(),
     guardian_whatsapp: item.querySelector('[name="guardian_whatsapp"]').value.trim(),
+    guardian_document: item.querySelector('[name="guardian_document"]').value.trim(),
     day_use_dates: [...item.querySelectorAll('[name="day_use_dates[]"]')]
       .map((input) => input.value.trim())
       .filter(Boolean),
