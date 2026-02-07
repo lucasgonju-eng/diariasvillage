@@ -210,6 +210,7 @@ if (sendChargesButton) {
         } else {
           showChargeMessage('Cobrança feita!');
           resetChargeForm();
+          setTimeout(() => window.location.reload(), 1200);
         }
       }
     } catch (err) {
