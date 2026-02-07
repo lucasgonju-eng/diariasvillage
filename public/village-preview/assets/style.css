@@ -196,7 +196,8 @@ input:focus, select:focus{
   gap:12px;
 }
 #form-message,
-#login-message{
+#login-message,
+#profile-message{
   margin-top:10px;
   font-weight:600;
   font-size:13px;
