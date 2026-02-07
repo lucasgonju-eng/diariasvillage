@@ -17,6 +17,7 @@ function setActiveTab(name) {
     const isActive = btn.dataset.tab === name;
     btn.classList.toggle('btn-primary', isActive);
     btn.classList.toggle('admin-tab', !isActive);
+    btn.style.opacity = isActive ? '1' : '0.95';
   });
 }
 

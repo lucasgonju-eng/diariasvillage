@@ -31,6 +31,7 @@ $payments = $paymentsResult['data'] ?? [];
     .admin-card{background:#fff;border-radius:16px;padding:18px;border:1px solid var(--line);box-shadow:var(--shadow-soft)}
     .admin-tabs{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
     .admin-tab{background:#EFF3FA;border-color:#D5DCE8;color:#1a2133}
+    .admin-card{background:#FDFDFE;border-radius:16px;padding:18px;border:1px solid #E6EAF2;box-shadow:var(--shadow-soft)}
     .admin-table{width:100%;border-collapse:collapse}
     .admin-table th,.admin-table td{padding:10px 8px}
     .admin-table tr{border-top:1px solid #f1f5f9}
