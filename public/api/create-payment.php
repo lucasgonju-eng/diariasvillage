@@ -1,11 +1,40 @@
 <?php
 require_once __DIR__ . '/../src/Bootstrap.php';
+date_default_timezone_set('America/Sao_Paulo');
 
 use App\AsaasClient;
 use App\Helpers;
 use App\HttpClient;
 use App\Mailer;
 use App\SupabaseClient;
+
+$extractAsaasError = static function (array $response): string {
+    if (!empty($response['error'])) {
+        return (string) $response['error'];
+    }
+
+    $data = $response['data'] ?? null;
+    if (is_array($data)) {
+        if (!empty($data['errors']) && is_array($data['errors'])) {
+            $messages = [];
+            foreach ($data['errors'] as $error) {
+                if (is_array($error)) {
+                    $messages[] = $error['description'] ?? $error['message'] ?? null;
+                }
+            }
+            $messages = array_filter($messages);
+            if ($messages) {
+                return implode(' ', $messages);
+            }
+        }
+
+        if (!empty($data['message'])) {
+            return (string) $data['message'];
+        }
+    }
+
+    return 'Falha ao criar pagamento.';
+};
 
 $contentType = $_SERVER['CONTENT_TYPE'] ?? $_SERVER['HTTP_CONTENT_TYPE'] ?? '';
 $method = $_SERVER['REQUEST_METHOD'] ?? 'UNKNOWN';
@@ -92,7 +121,10 @@ if (empty($guardianData['asaas_customer_id'])) {
         $logPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'error_log_custom.txt';
         file_put_contents($logPath, 'Asaas createCustomer error: ' . json_encode($customer) . PHP_EOL, FILE_APPEND);
         error_log('Asaas createCustomer error: ' . json_encode($customer));
-        Helpers::json(['ok' => false, 'error' => 'Falha ao criar cliente na Asaas.'], 500);
+        Helpers::json([
+            'ok' => false,
+            'error' => $extractAsaasError($customer),
+        ], 500);
     }
 
     $guardianData['asaas_customer_id'] = $customer['data']['id'] ?? null;
@@ -121,7 +153,10 @@ if (!$payment['ok']) {
     $logPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'error_log_custom.txt';
     file_put_contents($logPath, 'Asaas createPayment error: ' . json_encode($payment) . PHP_EOL, FILE_APPEND);
     error_log('Asaas createPayment error: ' . json_encode($payment));
-    Helpers::json(['ok' => false, 'error' => 'Falha ao criar pagamento.'], 500);
+    Helpers::json([
+        'ok' => false,
+        'error' => $extractAsaasError($payment),
+    ], 500);
 }
 
 $paymentData = $payment['data'];
