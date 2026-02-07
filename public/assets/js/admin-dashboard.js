@@ -208,7 +208,7 @@ if (sendChargesButton) {
         if (failures.length) {
           showChargeMessage('Algumas cobranças falharam. Verifique os dados.', true);
         } else {
-          showChargeMessage('Cobranças enviadas com sucesso!');
+          showChargeMessage('Cobrança feita!');
           resetChargeForm();
         }
       }
