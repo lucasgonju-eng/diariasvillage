@@ -103,7 +103,7 @@ $template = <<<'HTML'
 
                   <div style="font-size:14px;line-height:1.7;color:#1B2333;">
                     Aluno: <b>{{nome_aluno}}</b><br>
-                    Data da diária: <b>{{data_diaria}}</b><br>
+                    Data do day-use: <b>{{data_diaria}}</b><br>
                     Tipo: <b>{{tipo_diaria}}</b><br>
                     Valor: <b>R$ {{valor}}</b>
                   </div>
@@ -177,6 +177,7 @@ foreach ($charges as $charge) {
     $guardianName = trim($charge['guardian_name'] ?? '');
     $guardianEmail = trim($charge['guardian_email'] ?? '');
     $guardianWhatsapp = trim($charge['guardian_whatsapp'] ?? '');
+    $dayUseDates = trim($charge['day_use_dates'] ?? '');
 
     if ($studentName === '' || $guardianName === '' || $guardianEmail === '') {
         $results[] = [
@@ -246,9 +247,11 @@ foreach ($charges as $charge) {
     $paymentData = $payment['data'] ?? [];
     $invoiceUrl = $paymentData['invoiceUrl'] ?? $paymentData['bankSlipUrl'] ?? $portalLink;
 
+    $dateLabel = $dayUseDates !== '' ? $dayUseDates : $paymentDate;
+
     $replace = [
         '{{nome_aluno}}' => htmlspecialchars($studentName, ENT_QUOTES, 'UTF-8'),
-        '{{data_diaria}}' => $paymentDate,
+        '{{data_diaria}}' => htmlspecialchars($dateLabel, ENT_QUOTES, 'UTF-8'),
         '{{tipo_diaria}}' => 'Emergencial',
         '{{valor}}' => $amountFormatted,
         '{{link_pagamento}}' => htmlspecialchars($invoiceUrl, ENT_QUOTES, 'UTF-8'),

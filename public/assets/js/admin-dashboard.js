@@ -46,6 +46,10 @@ function addChargeItem(studentName) {
         <label>Whatsapp</label>
         <input type="tel" name="guardian_whatsapp" placeholder="(DDD) 99999-9999" />
       </div>
+      <div class="form-group">
+        <label>Datas do day-use</label>
+        <input type="text" name="day_use_dates" placeholder="Ex: 10/02/2026, 12/02/2026" />
+      </div>
     </div>
   `;
 
@@ -77,6 +81,7 @@ function collectCharges() {
     guardian_name: item.querySelector('[name="guardian_name"]').value.trim(),
     guardian_email: item.querySelector('[name="guardian_email"]').value.trim(),
     guardian_whatsapp: item.querySelector('[name="guardian_whatsapp"]').value.trim(),
+    day_use_dates: item.querySelector('[name="day_use_dates"]').value.trim(),
   }));
 }
 
