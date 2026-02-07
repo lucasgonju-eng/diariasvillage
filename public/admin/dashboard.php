@@ -48,6 +48,7 @@ $payments = $paymentsResult['data'] ?? [];
       background:#E8F0FF;
       font-weight:800;
     }
+    .date-actions{display:flex;gap:6px}
     .charge-message{margin-top:12px;font-size:13px}
     .hidden{display:none}
   </style>
@@ -138,6 +139,6 @@ $payments = $paymentsResult['data'] ?? [];
     <div class="footer">Desenvolvido por Lucas Goncalves Junior - 2026</div>
   </div>
 
-  <script src="/assets/js/admin-dashboard.js?v=3"></script>
+  <script src="/assets/js/admin-dashboard.js?v=4"></script>
 </body>
 </html>

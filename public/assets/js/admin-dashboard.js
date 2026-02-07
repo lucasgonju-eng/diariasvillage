@@ -51,7 +51,10 @@ function addChargeItem(studentName) {
         <div class="date-list">
           <div class="date-row">
             <input type="text" name="day_use_dates[]" placeholder="dd/mm/aa" inputmode="numeric" />
-            <button class="btn btn-ghost btn-sm" type="button" data-action="add-date">+</button>
+            <div class="date-actions">
+              <button class="btn btn-ghost btn-sm" type="button" data-action="add-date">+</button>
+              <button class="btn btn-ghost btn-sm" type="button" data-action="remove-date">-</button>
+            </div>
           </div>
         </div>
       </div>
@@ -72,7 +75,10 @@ function addChargeItem(studentName) {
       row.className = 'date-row';
       row.innerHTML = `
         <input type="text" name="day_use_dates[]" placeholder="dd/mm/aa" inputmode="numeric" />
-        <button class="btn btn-ghost btn-sm" type="button" data-action="remove-date">-</button>
+        <div class="date-actions">
+          <button class="btn btn-ghost btn-sm" type="button" data-action="add-date">+</button>
+          <button class="btn btn-ghost btn-sm" type="button" data-action="remove-date">-</button>
+        </div>
       `;
       dateList.appendChild(row);
       return;
@@ -82,6 +88,22 @@ function addChargeItem(studentName) {
       const row = target.closest('.date-row');
       if (row) row.remove();
     }
+  });
+
+  dateList.addEventListener('input', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    if (target.name !== 'day_use_dates[]') return;
+
+    const digits = target.value.replace(/\D/g, '').slice(0, 6);
+    let value = digits;
+    if (digits.length > 2) {
+      value = `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    }
+    if (digits.length > 4) {
+      value = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+    }
+    target.value = value;
   });
 
   chargeList.appendChild(wrapper);
