@@ -89,6 +89,7 @@ if ($hour >= 16) {
 
           <div class="cta">
             <a class="btn btn-primary" href="<?php echo htmlspecialchars($continueUrl, ENT_QUOTES, 'UTF-8'); ?>">Continuar</a>
+            <a class="btn btn-primary" href="/village-preview/login.php">Entrar</a>
             <button class="btn btn-ghost" type="button" onclick="openRules()">Ver regras</button>
           </div>
 
