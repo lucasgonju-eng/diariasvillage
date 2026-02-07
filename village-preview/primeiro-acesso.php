@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/src/Bootstrap.php';
+require_once __DIR__ . '/../src/Bootstrap.php';
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
