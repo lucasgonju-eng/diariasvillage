@@ -66,7 +66,7 @@ foreach ($bootstrapPaths as $bootstrapPath) {
               <label>Senha</label>
               <input type="password" id="login-password" required />
             </div>
-            <button class="btn btn-primary btn-block" type="submit">Entrar</button>
+            <a class="btn btn-primary btn-block" href="/village-preview/dashboard.php">Entrar</a>
             <div id="login-message"></div>
           </form>
         </aside>
