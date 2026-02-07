@@ -16,6 +16,18 @@ $paymentsResult = $client->select(
     'select=*,students(name,enrollment),guardians(parent_name,email)&status=eq.paid&order=paid_at.desc&limit=200'
 );
 $payments = $paymentsResult['data'] ?? [];
+
+$manualPendingResult = $client->select(
+    'payments',
+    'select=*,students(name,enrollment),guardians(parent_name,email,parent_phone)&billing_type=eq.PIX_MANUAL&status=eq.pending&order=created_at.desc&limit=200'
+);
+$manualPending = $manualPendingResult['data'] ?? [];
+
+$manualPaidResult = $client->select(
+    'payments',
+    'select=*,students(name,enrollment),guardians(parent_name,email,parent_phone)&billing_type=eq.PIX_MANUAL&status=eq.paid&order=paid_at.desc&limit=200'
+);
+$manualPaid = $manualPaidResult['data'] ?? [];
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -66,6 +78,8 @@ $payments = $paymentsResult['data'] ?? [];
     <div class="admin-card">
       <div class="admin-tabs">
         <button class="btn btn-primary btn-sm" type="button" data-tab="charges">Cobrança</button>
+        <button class="btn btn-primary btn-sm" type="button" data-tab="inadimplentes">Inadimplentes</button>
+        <button class="btn btn-primary btn-sm" type="button" data-tab="recebidas">Cobranças recebidas</button>
         <button class="btn btn-primary btn-sm" type="button" data-tab="entries">Entradas confirmadas</button>
       </div>
 
@@ -96,8 +110,10 @@ $payments = $paymentsResult['data'] ?? [];
                 <?php foreach ($payments as $payment): ?>
                   <?php
                     $student = $payment['students'] ?? [];
-                    $billing = $payment['billing_type'] === 'PIX' ? 'PIX' : 'Debito';
-                    $dailyLabel = $payment['daily_type'] === 'emergencial' ? 'Emergencial' : 'Planejada';
+                    $billing = in_array($payment['billing_type'], ['PIX', 'PIX_MANUAL'], true) ? 'PIX' : 'Debito';
+                    $dailyRaw = $payment['daily_type'] ?? '';
+                    $dailyBase = explode('|', $dailyRaw, 2)[0] ?? $dailyRaw;
+                    $dailyLabel = $dailyBase === 'emergencial' ? 'Emergencial' : 'Planejada';
                     $amount = number_format((float) $payment['amount'], 2, ',', '.');
                     $dayUse = date('d/m/Y', strtotime($payment['payment_date']));
                     $confirmed = $payment['paid_at'] ? date('d/m/Y H:i', strtotime($payment['paid_at'])) : '-';
@@ -133,6 +149,98 @@ $payments = $paymentsResult['data'] ?? [];
 
         <button class="btn btn-primary" id="send-charges" type="button">Enviar cobranças</button>
         <div id="charge-message" class="charge-message"></div>
+      </section>
+
+      <section id="tab-inadimplentes" class="hidden">
+        <h2>Inadimplentes</h2>
+        <p class="muted">Cobranças pendentes de alunos que frequentaram sem pagamento.</p>
+
+        <div style="overflow-x:auto;">
+          <table class="admin-table">
+            <thead>
+              <tr style="text-align:left;">
+                <th>Aluno</th>
+                <th>Responsável</th>
+                <th>E-mail</th>
+                <th>Datas do day-use</th>
+                <th>Valor</th>
+                <th>Criado em</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php if (empty($manualPending)): ?>
+                <tr>
+                  <td colspan="6">Nenhuma cobrança pendente.</td>
+                </tr>
+              <?php else: ?>
+                <?php foreach ($manualPending as $payment): ?>
+                  <?php
+                    $student = $payment['students'] ?? [];
+                    $guardian = $payment['guardians'] ?? [];
+                    $amount = number_format((float) $payment['amount'], 2, ',', '.');
+                    $created = $payment['created_at'] ? date('d/m/Y H:i', strtotime($payment['created_at'])) : '-';
+                    $dailyParts = explode('|', $payment['daily_type'] ?? '', 2);
+                    $datesLabel = $dailyParts[1] ?? date('d/m/Y', strtotime($payment['payment_date']));
+                  ?>
+                  <tr>
+                    <td><?php echo htmlspecialchars($student['name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars($guardian['parent_name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars($guardian['email'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars($datesLabel, ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td>R$ <?php echo $amount; ?></td>
+                    <td><?php echo $created; ?></td>
+                  </tr>
+                <?php endforeach; ?>
+              <?php endif; ?>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="tab-recebidas" class="hidden">
+        <h2>Cobranças recebidas</h2>
+        <p class="muted">Cobranças pagas e regularizadas.</p>
+
+        <div style="overflow-x:auto;">
+          <table class="admin-table">
+            <thead>
+              <tr style="text-align:left;">
+                <th>Aluno</th>
+                <th>Responsável</th>
+                <th>E-mail</th>
+                <th>Datas do day-use</th>
+                <th>Valor</th>
+                <th>Recebido em</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php if (empty($manualPaid)): ?>
+                <tr>
+                  <td colspan="6">Nenhuma cobrança recebida.</td>
+                </tr>
+              <?php else: ?>
+                <?php foreach ($manualPaid as $payment): ?>
+                  <?php
+                    $student = $payment['students'] ?? [];
+                    $guardian = $payment['guardians'] ?? [];
+                    $amount = number_format((float) $payment['amount'], 2, ',', '.');
+                    $paidAt = $payment['paid_at'] ? date('d/m/Y H:i', strtotime($payment['paid_at'])) : '-';
+                    $dailyParts = explode('|', $payment['daily_type'] ?? '', 2);
+                    $datesLabel = $dailyParts[1] ?? date('d/m/Y', strtotime($payment['payment_date']));
+                  ?>
+                  <tr>
+                    <td><?php echo htmlspecialchars($student['name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars($guardian['parent_name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars($guardian['email'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars($datesLabel, ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td>R$ <?php echo $amount; ?></td>
+                    <td><?php echo $paidAt; ?></td>
+                  </tr>
+                <?php endforeach; ?>
+              <?php endif; ?>
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
 

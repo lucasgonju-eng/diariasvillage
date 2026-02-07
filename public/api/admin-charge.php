@@ -6,6 +6,7 @@ use App\AsaasClient;
 use App\Helpers;
 use App\HttpClient;
 use App\Mailer;
+use App\SupabaseClient;
 
 function extractAsaasError(array $response): string
 {
@@ -36,6 +37,25 @@ function extractAsaasError(array $response): string
     return 'Falha ao processar cobrança.';
 }
 
+function parseDayUseDate(string $date): ?string
+{
+    $parts = explode('/', $date);
+    if (count($parts) !== 3) {
+        return null;
+    }
+    [$day, $month, $year] = $parts;
+    $day = (int) $day;
+    $month = (int) $month;
+    $year = (int) $year;
+    if ($year < 100) {
+        $year += 2000;
+    }
+    if (!checkdate($month, $day, $year)) {
+        return null;
+    }
+    return sprintf('%04d-%02d-%02d', $year, $month, $day);
+}
+
 if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
     Helpers::json(['ok' => false, 'error' => 'Nao autorizado.'], 401);
 }
@@ -50,6 +70,7 @@ if (!is_array($charges) || !$charges) {
 
 $asaas = new AsaasClient(new HttpClient());
 $mailer = new Mailer();
+$client = new SupabaseClient(new HttpClient());
 $results = [];
 $today = date('Y-m-d');
 $paymentDate = date('d/m/Y', strtotime($today));
@@ -301,9 +322,55 @@ foreach ($charges as $charge) {
         continue;
     }
 
+    $studentResult = $client->select('students', 'select=id,name&name=eq.' . urlencode($studentName));
+    $studentRow = $studentResult['data'][0] ?? null;
+    if (!$studentRow) {
+        $results[] = [
+            'student_name' => $studentName,
+            'ok' => false,
+            'error' => 'Aluno não encontrado no cadastro.',
+        ];
+        continue;
+    }
+
+    $guardianResult = $client->select('guardians', 'select=*&email=eq.' . urlencode($guardianEmail));
+    $guardianRow = $guardianResult['data'][0] ?? null;
+    if (!$guardianRow) {
+        $passwordHash = password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT);
+        $insertGuardian = $client->insert('guardians', [[
+            'student_id' => $studentRow['id'],
+            'email' => $guardianEmail,
+            'password_hash' => $passwordHash,
+            'parent_name' => $guardianName,
+            'parent_phone' => $guardianWhatsapp,
+            'parent_document' => $documentDigits,
+            'asaas_customer_id' => $customerId,
+        ]]);
+        $guardianRow = $insertGuardian['data'][0] ?? null;
+    } else {
+        $client->update('guardians', 'id=eq.' . $guardianRow['id'], [
+            'parent_name' => $guardianName,
+            'parent_phone' => $guardianWhatsapp,
+            'parent_document' => $documentDigits,
+            'asaas_customer_id' => $customerId,
+        ]);
+    }
+
+    if (!$guardianRow) {
+        $results[] = [
+            'student_name' => $studentName,
+            'ok' => false,
+            'error' => 'Falha ao preparar responsável.',
+        ];
+        continue;
+    }
+
     $daysCount = count($dayUseDates);
     $amount = 97.00 * $daysCount;
     $amountFormatted = number_format($amount, 2, ',', '.');
+    $dailyType = 'emergencial|' . implode(', ', $dayUseDates);
+    $firstDate = parseDayUseDate($dayUseDates[0] ?? '');
+    $paymentDateValue = $firstDate ?: $today;
 
     $payment = $asaas->createPayment([
         'customer' => $customerId,
@@ -342,6 +409,17 @@ foreach ($charges as $charge) {
         'Regularização da diária utilizada • Diárias Village',
         $html
     );
+
+    $client->insert('payments', [[
+        'guardian_id' => $guardianRow['id'],
+        'student_id' => $studentRow['id'],
+        'payment_date' => $paymentDateValue,
+        'daily_type' => $dailyType,
+        'amount' => $amount,
+        'status' => 'pending',
+        'billing_type' => 'PIX_MANUAL',
+        'asaas_payment_id' => $paymentData['id'] ?? null,
+    ]]);
 
     $results[] = [
         'student_name' => $studentName,

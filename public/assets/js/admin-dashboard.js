@@ -1,6 +1,8 @@
 const tabs = document.querySelectorAll('[data-tab]');
 const tabEntries = document.querySelector('#tab-entries');
 const tabCharges = document.querySelector('#tab-charges');
+const tabInadimplentes = document.querySelector('#tab-inadimplentes');
+const tabRecebidas = document.querySelector('#tab-recebidas');
 const studentInput = document.querySelector('#charge-student');
 const studentList = document.querySelector('#students-list');
 const chargeList = document.querySelector('#charge-list');
@@ -10,9 +12,11 @@ const chargeMessage = document.querySelector('#charge-message');
 const selectedStudents = new Set();
 
 function setActiveTab(name) {
-  if (!tabEntries || !tabCharges) return;
+  if (!tabEntries || !tabCharges || !tabInadimplentes || !tabRecebidas) return;
   tabEntries.classList.toggle('hidden', name !== 'entries');
   tabCharges.classList.toggle('hidden', name !== 'charges');
+  tabInadimplentes.classList.toggle('hidden', name !== 'inadimplentes');
+  tabRecebidas.classList.toggle('hidden', name !== 'recebidas');
   tabs.forEach((btn) => {
     const isActive = btn.dataset.tab === name;
     btn.classList.toggle('btn-primary', isActive);
@@ -206,5 +210,5 @@ if (sendChargesButton) {
   });
 }
 
-setActiveTab('entries');
+setActiveTab('charges');
 loadStudents();
