@@ -82,6 +82,8 @@ if ($guardian) {
     $paymentDate = date('d/m/Y', strtotime($paymentRow['payment_date']));
     $dailyLabel = $paymentRow['daily_type'] === 'emergencial' ? 'Emergencial' : 'Planejada';
     $portalLink = Helpers::baseUrl() ?: 'https://village.einsteinhub.co';
+    $paymentLink = $payment['invoiceUrl'] ?? $payment['bankSlipUrl'] ?? $portalLink;
+    $guardianDocument = $guardian['parent_document'] ?? '';
 
     $template = <<<'HTML'
 <!doctype html>
@@ -164,6 +166,8 @@ if ($guardian) {
                   </div>
                 </div>
 
+                {{extra_dados}}
+
                 <div style="margin-top:18px;font-size:15px;line-height:1.7;color:#1B2333;">
                   Você não precisa fazer mais nada.<br>
                   <b>A secretaria já foi avisada automaticamente.</b>
@@ -231,8 +235,12 @@ HTML;
         '{{tipo_diaria}}' => $dailyLabel,
         '{{valor}}' => $amount,
         '{{link_portal}}' => htmlspecialchars($portalLink, ENT_QUOTES, 'UTF-8'),
+        '{{link_pagamento}}' => htmlspecialchars($paymentLink, ENT_QUOTES, 'UTF-8'),
+        '{{cpf_responsavel}}' => htmlspecialchars($guardianDocument, ENT_QUOTES, 'UTF-8'),
+        '{{email_responsavel}}' => htmlspecialchars($guardian['email'] ?? '', ENT_QUOTES, 'UTF-8'),
+        '{{codigo_acesso}}' => htmlspecialchars($accessCode, ENT_QUOTES, 'UTF-8'),
     ];
-    $html = strtr($template, $replace);
+    $html = strtr($template, $replace + ['{{extra_dados}}' => '']);
 
     $mailer = new Mailer();
     $mailer->send(
@@ -245,10 +253,23 @@ HTML;
     $copia = App\Env::get('EMAIL_COPIA', '');
 
     if ($secretaria) {
+        $extraBlock = '
+                <div style="margin-top:16px;background:#F6F8FC;border:1px solid #E6E9F2;border-radius:14px;padding:16px;">
+                  <div style="font-size:14px;font-weight:800;margin-bottom:8px;color:#0B1020;">
+                    Dados do responsável
+                  </div>
+                  <div style="font-size:13px;line-height:1.6;color:#1B2333;">
+                    CPF/CNPJ: <b>{{cpf_responsavel}}</b><br>
+                    E-mail: <b>{{email_responsavel}}</b><br>
+                    Código de acesso: <b>{{codigo_acesso}}</b><br>
+                    Link do pagamento: <b>{{link_pagamento}}</b>
+                  </div>
+                </div>';
+        $htmlSecretaria = strtr($template, $replace + ['{{extra_dados}}' => $extraBlock]);
         $mailer->send(
             $secretaria,
             'Pagamento confirmado - liberar estudante',
-            $html,
+            $htmlSecretaria,
             $copia ? [$copia] : []
         );
     }
