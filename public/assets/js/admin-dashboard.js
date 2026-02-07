@@ -150,6 +150,16 @@ function showChargeMessage(text, isError = false) {
   chargeMessage.className = `charge-message ${isError ? 'error' : 'success'}`;
 }
 
+function resetChargeForm() {
+  if (chargeList) {
+    chargeList.innerHTML = '';
+  }
+  selectedStudents.clear();
+  if (studentInput) {
+    studentInput.value = '';
+  }
+}
+
 tabs.forEach((btn) => {
   btn.addEventListener('click', () => setActiveTab(btn.dataset.tab));
 });
@@ -199,6 +209,7 @@ if (sendChargesButton) {
           showChargeMessage('Algumas cobranças falharam. Verifique os dados.', true);
         } else {
           showChargeMessage('Cobranças enviadas com sucesso!');
+          resetChargeForm();
         }
       }
     } catch (err) {
