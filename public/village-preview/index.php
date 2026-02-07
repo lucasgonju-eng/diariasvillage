@@ -88,7 +88,7 @@ if ($hour >= 16) {
           </p>
 
           <div class="cta">
-            <a class="btn btn-primary" href="<?php echo htmlspecialchars($continueUrl, ENT_QUOTES, 'UTF-8'); ?>">Continuar</a>
+            <a class="btn btn-primary" href="<?php echo htmlspecialchars($continueUrl, ENT_QUOTES, 'UTF-8'); ?>">Primeiro acesso</a>
             <a class="btn btn-primary" href="/village-preview/login.php">Entrar</a>
             <button class="btn btn-ghost" type="button" onclick="openRules()">Ver regras</button>
           </div>
@@ -161,7 +161,7 @@ if ($hour >= 16) {
             </div>
           </div>
 
-          <a class="btn btn-primary btn-block" href="<?php echo htmlspecialchars($continueUrl, ENT_QUOTES, 'UTF-8'); ?>">Continuar para pagamento</a>
+          <a class="btn btn-primary btn-block" href="<?php echo htmlspecialchars($continueUrl, ENT_QUOTES, 'UTF-8'); ?>">Primeiro acesso</a>
 
           <div class="info">
             <strong>Importante:</strong> nao e necessario escolher tipo de diaria. O sistema aplica automaticamente a regra correta conforme a hora do pagamento.
@@ -211,7 +211,7 @@ if ($hour >= 16) {
             <div class="final-title">Resolver agora</div>
             <div class="muted">Pagamento rapido. Acesso regularizado.</div>
           </div>
-          <a class="btn btn-primary" href="<?php echo htmlspecialchars($continueUrl, ENT_QUOTES, 'UTF-8'); ?>">Continuar</a>
+          <a class="btn btn-primary" href="<?php echo htmlspecialchars($continueUrl, ENT_QUOTES, 'UTF-8'); ?>">Primeiro acesso</a>
         </div>
       </div>
     </section>
