@@ -42,6 +42,12 @@ $payments = $paymentsResult['data'] ?? [];
     .date-list{display:grid;gap:8px}
     .date-row{display:flex;gap:8px;align-items:center}
     .date-row input{flex:1}
+    .date-row .btn{
+      color:#0A1B4D;
+      border-color:#BFD0EE;
+      background:#E8F0FF;
+      font-weight:800;
+    }
     .charge-message{margin-top:12px;font-size:13px}
     .hidden{display:none}
   </style>
