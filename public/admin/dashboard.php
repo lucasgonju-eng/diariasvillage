@@ -39,7 +39,7 @@ $studentsResult = $client->select('students', 'select=id,name,enrollment,created
 $students = $studentsResult['data'] ?? [];
 $duplicateGroups = [];
 $duplicateEnrollmentGroups = [];
-$possibleDuplicateGroups = [];
+$cpfDuplicateGroups = [];
 if ($students) {
     $normalizeName = static function (string $name): string {
         $name = mb_strtoupper($name, 'UTF-8');
@@ -84,33 +84,26 @@ if ($students) {
             $duplicateEnrollmentGroups[] = $group;
         }
     }
+}
 
-    $stopWords = ['DE', 'DA', 'DO', 'DAS', 'DOS', 'E'];
-    $baseGroups = [];
-    foreach ($students as $student) {
-        $name = $student['name'] ?? '';
-        $clean = trim(preg_replace('/\s+/', ' ', strtoupper($name))) ?: '';
-        if ($clean === '') {
+$guardiansResult = $client->select(
+    'guardians',
+    'select=student_id,parent_document,students(id,name,enrollment)&parent_document=not.is.null&order=created_at.desc&limit=10000'
+);
+$guardians = $guardiansResult['data'] ?? [];
+if ($guardians) {
+    $cpfGroups = [];
+    foreach ($guardians as $guardian) {
+        $cpf = trim((string) ($guardian['parent_document'] ?? ''));
+        if ($cpf === '') {
             continue;
         }
-        $parts = array_values(array_filter(explode(' ', $clean), static function ($part) use ($stopWords) {
-            return $part !== '' && !in_array($part, $stopWords, true);
-        }));
-        if (count($parts) < 2) {
-            continue;
-        }
-        $baseKey = $parts[0] . '_' . $parts[count($parts) - 1];
-        $baseGroups[$baseKey][] = $student;
+        $cpfGroups[$cpf][] = $guardian;
     }
-    foreach ($baseGroups as $group) {
-        if (count($group) > 1) {
-            $distinctNames = array_unique(array_map(static fn($s) => $s['name'] ?? '', $group));
-            if (count($distinctNames) > 1) {
-                usort($group, static function ($a, $b) {
-                    return strtotime($a['created_at'] ?? '') <=> strtotime($b['created_at'] ?? '');
-                });
-                $possibleDuplicateGroups[] = $group;
-            }
+    foreach ($cpfGroups as $cpf => $group) {
+        $studentIds = array_unique(array_filter(array_map(static fn($g) => $g['student_id'] ?? '', $group)));
+        if (count($studentIds) > 1) {
+            $cpfDuplicateGroups[] = $group;
         }
     }
 }
@@ -368,7 +361,7 @@ if ($students) {
 
       <section id="tab-duplicados" class="hidden">
         <h2>Alunos duplicados</h2>
-        <p class="muted">Mescla automática por nome ou matrícula (mantém o registro mais antigo). Abaixo listamos também possíveis duplicados por nome parcial.</p>
+        <p class="muted">Mescla automática por nome ou matrícula (mantém o registro mais antigo). Abaixo listamos possíveis duplicados por CPF do responsável.</p>
 
         <div style="overflow-x:auto;">
           <table class="admin-table">
@@ -441,25 +434,28 @@ if ($students) {
           </table>
         </div>
 
-        <?php if (!empty($possibleDuplicateGroups)): ?>
+        <?php if (!empty($cpfDuplicateGroups)): ?>
           <div style="margin-top:18px;overflow-x:auto;">
             <table class="admin-table">
               <thead>
                 <tr style="text-align:left;">
-                  <th>Possível duplicado (nome parcial)</th>
+                  <th>Possível duplicado (CPF do responsável)</th>
+                  <th>CPF</th>
                   <th>IDs</th>
                   <th>Matrículas</th>
                 </tr>
               </thead>
               <tbody>
-                <?php foreach ($possibleDuplicateGroups as $group): ?>
+                <?php foreach ($cpfDuplicateGroups as $group): ?>
                   <?php
-                    $names = array_map(static fn($s) => $s['name'] ?? '-', $group);
-                    $ids = array_map(static fn($s) => $s['id'], $group);
-                    $enrollments = array_map(static fn($s) => $s['enrollment'] ?? '-', $group);
+                    $cpf = $group[0]['parent_document'] ?? '-';
+                    $names = array_map(static fn($g) => ($g['students']['name'] ?? '-'), $group);
+                    $ids = array_map(static fn($g) => ($g['students']['id'] ?? '-'), $group);
+                    $enrollments = array_map(static fn($g) => ($g['students']['enrollment'] ?? '-'), $group);
                   ?>
                   <tr>
                     <td><?php echo htmlspecialchars(implode(' | ', $names), ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars($cpf, ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo htmlspecialchars(implode(', ', $ids), ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo htmlspecialchars(implode(', ', $enrollments), ENT_QUOTES, 'UTF-8'); ?></td>
                   </tr>
@@ -475,6 +471,6 @@ if ($students) {
     <div class="footer">Desenvolvido por Lucas Goncalves Junior - 2026</div>
   </div>
 
-  <script src="/assets/js/admin-dashboard.js?v=10"></script>
+  <script src="/assets/js/admin-dashboard.js?v=11"></script>
 </body>
 </html>
