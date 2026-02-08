@@ -28,6 +28,12 @@ $manualPaidResult = $client->select(
     'select=*,students(name,enrollment),guardians(parent_name,email,parent_phone)&billing_type=eq.PIX_MANUAL&status=eq.paid&order=paid_at.desc&limit=200'
 );
 $manualPaid = $manualPaidResult['data'] ?? [];
+
+$missingWhatsappResult = $client->select(
+    'guardians',
+    'select=parent_name,email,parent_phone,parent_document,students(name,enrollment)&or=(parent_phone.is.null,parent_phone.eq.)&order=created_at.desc&limit=500'
+);
+$missingWhatsapp = $missingWhatsappResult['data'] ?? [];
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -80,6 +86,7 @@ $manualPaid = $manualPaidResult['data'] ?? [];
         <button class="btn btn-primary btn-sm" type="button" data-tab="charges">Cobrança</button>
         <button class="btn btn-primary btn-sm" type="button" data-tab="inadimplentes">Inadimplentes</button>
         <button class="btn btn-primary btn-sm" type="button" data-tab="recebidas">Cobranças recebidas</button>
+        <button class="btn btn-primary btn-sm" type="button" data-tab="sem-whatsapp">Sem WhatsApp</button>
         <button class="btn btn-primary btn-sm" type="button" data-tab="entries">Entradas confirmadas</button>
       </div>
 
@@ -242,11 +249,46 @@ $manualPaid = $manualPaidResult['data'] ?? [];
           </table>
         </div>
       </section>
+
+      <section id="tab-sem-whatsapp" class="hidden">
+        <h2>Responsáveis sem WhatsApp</h2>
+        <p class="muted">Lista de responsáveis sem celular cadastrado.</p>
+
+        <div style="overflow-x:auto;">
+          <table class="admin-table">
+            <thead>
+              <tr style="text-align:left;">
+                <th>Aluno</th>
+                <th>Responsável</th>
+                <th>E-mail</th>
+                <th>CPF/CNPJ</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php if (empty($missingWhatsapp)): ?>
+                <tr>
+                  <td colspan="4">Nenhum responsável pendente.</td>
+                </tr>
+              <?php else: ?>
+                <?php foreach ($missingWhatsapp as $guardian): ?>
+                  <?php $student = $guardian['students'] ?? []; ?>
+                  <tr>
+                    <td><?php echo htmlspecialchars($student['name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars($guardian['parent_name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars($guardian['email'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars($guardian['parent_document'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
+                  </tr>
+                <?php endforeach; ?>
+              <?php endif; ?>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
 
     <div class="footer">Desenvolvido por Lucas Goncalves Junior - 2026</div>
   </div>
 
-  <script src="/assets/js/admin-dashboard.js?v=7"></script>
+  <script src="/assets/js/admin-dashboard.js?v=8"></script>
 </body>
 </html>
