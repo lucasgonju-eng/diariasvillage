@@ -109,6 +109,40 @@ function find_value(array $block, string $labelKey): string
     return '';
 }
 
+function find_email_in_block(array $block): string
+{
+    foreach ($block as $line) {
+        $email = extract_email($line);
+        if ($email !== '') {
+            return $email;
+        }
+    }
+    return '';
+}
+
+function find_cpf_cnpj_in_block(array $block): string
+{
+    foreach ($block as $line) {
+        if (preg_match('/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/', $line, $match)) {
+            return preg_replace('/\D+/', '', $match[0]) ?? '';
+        }
+        if (preg_match('/\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/', $line, $match)) {
+            return preg_replace('/\D+/', '', $match[0]) ?? '';
+        }
+    }
+    return '';
+}
+
+function find_phone_in_block(array $block): string
+{
+    foreach ($block as $line) {
+        if (preg_match('/\(\d{2}\)\s*\d{4,5}-?\d{4}/', $line, $match)) {
+            return preg_replace('/\D+/', '', $match[0]) ?? '';
+        }
+    }
+    return '';
+}
+
 function placeholder_email(string $name, string $cpf, string $phone, string $student, array &$counter): string
 {
     $base = $cpf !== '' ? $cpf : ($phone !== '' ? $phone : substr(md5($name . '-' . $student), 0, 10));
@@ -182,8 +216,19 @@ function parse_guardians_from_text(string $text): array
 
             $block = array_slice($lines, $blockStart, $blockEnd - $blockStart);
             $emailValue = extract_email(find_value($block, 'EMAIL'));
+            if ($emailValue === '') {
+                $emailValue = find_email_in_block($block);
+            }
+
             $cpfValue = preg_replace('/\D+/', '', find_value($block, 'CPFCNPJ')) ?? '';
+            if ($cpfValue === '') {
+                $cpfValue = find_cpf_cnpj_in_block($block);
+            }
+
             $phoneValue = extract_phone(find_value($block, 'TELEFONES'));
+            if ($phoneValue === '' || strlen($phoneValue) < 10) {
+                $phoneValue = find_phone_in_block($block);
+            }
 
             $guardiansByStudent[$currentStudent][] = [
                 'name' => $guardianName,
