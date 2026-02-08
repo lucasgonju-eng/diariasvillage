@@ -4,6 +4,7 @@ const tabCharges = document.querySelector('#tab-charges');
 const tabInadimplentes = document.querySelector('#tab-inadimplentes');
 const tabRecebidas = document.querySelector('#tab-recebidas');
 const tabSemWhatsapp = document.querySelector('#tab-sem-whatsapp');
+const tabDuplicados = document.querySelector('#tab-duplicados');
 const studentInput = document.querySelector('#charge-student');
 const studentList = document.querySelector('#students-list');
 const chargeList = document.querySelector('#charge-list');
@@ -15,12 +16,15 @@ const guardianCache = new Map();
 const studentNames = new Set();
 
 function setActiveTab(name) {
-  if (!tabEntries || !tabCharges || !tabInadimplentes || !tabRecebidas || !tabSemWhatsapp) return;
+  if (!tabEntries || !tabCharges || !tabInadimplentes || !tabRecebidas || !tabSemWhatsapp || !tabDuplicados) {
+    return;
+  }
   tabEntries.classList.toggle('hidden', name !== 'entries');
   tabCharges.classList.toggle('hidden', name !== 'charges');
   tabInadimplentes.classList.toggle('hidden', name !== 'inadimplentes');
   tabRecebidas.classList.toggle('hidden', name !== 'recebidas');
   tabSemWhatsapp.classList.toggle('hidden', name !== 'sem-whatsapp');
+  tabDuplicados.classList.toggle('hidden', name !== 'duplicados');
   tabs.forEach((btn) => {
     const isActive = btn.dataset.tab === name;
     btn.classList.toggle('btn-primary', isActive);
@@ -270,6 +274,55 @@ if (sendChargesButton) {
     }
   });
 }
+
+const mergeMessage = document.querySelector('#merge-message');
+const mergeButtons = document.querySelectorAll('.js-merge-duplicates');
+mergeButtons.forEach((button) => {
+  button.addEventListener('click', async () => {
+    if (!(button instanceof HTMLElement)) return;
+    const primaryId = button.dataset.primary;
+    const duplicatesRaw = button.dataset.duplicates || '[]';
+    let duplicates = [];
+    try {
+      duplicates = JSON.parse(duplicatesRaw);
+    } catch {
+      duplicates = [];
+    }
+    if (!primaryId || !duplicates.length) return;
+
+    button.setAttribute('disabled', 'disabled');
+    if (mergeMessage) {
+      mergeMessage.textContent = 'Mesclando duplicados...';
+      mergeMessage.className = 'charge-message';
+    }
+
+    try {
+      const res = await fetch('/api/admin-merge-duplicates.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ primary_id: primaryId, duplicate_ids: duplicates }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        if (mergeMessage) {
+          mergeMessage.textContent = data.error || 'Falha ao mesclar duplicados.';
+          mergeMessage.className = 'charge-message error';
+        }
+      } else if (mergeMessage) {
+        mergeMessage.textContent = 'Duplicados mesclados com sucesso.';
+        mergeMessage.className = 'charge-message success';
+        setTimeout(() => window.location.reload(), 800);
+      }
+    } catch {
+      if (mergeMessage) {
+        mergeMessage.textContent = 'Falha ao mesclar duplicados.';
+        mergeMessage.className = 'charge-message error';
+      }
+    } finally {
+      button.removeAttribute('disabled');
+    }
+  });
+});
 
 setActiveTab('charges');
 loadStudents();

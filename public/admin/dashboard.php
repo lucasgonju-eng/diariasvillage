@@ -34,6 +34,38 @@ $missingWhatsappResult = $client->select(
     'select=parent_name,email,parent_phone,parent_document,students(name,enrollment)&or=(parent_phone.is.null,parent_phone.eq.)&order=created_at.desc&limit=500'
 );
 $missingWhatsapp = $missingWhatsappResult['data'] ?? [];
+
+$studentsResult = $client->select('students', 'select=id,name,enrollment,created_at,active');
+$students = $studentsResult['data'] ?? [];
+$duplicateGroups = [];
+if ($students) {
+    $normalizeName = static function (string $name): string {
+        $name = mb_strtoupper($name, 'UTF-8');
+        $translit = iconv('UTF-8', 'ASCII//TRANSLIT', $name);
+        if ($translit !== false) {
+            $name = $translit;
+        }
+        $name = preg_replace('/[^A-Z0-9]+/', '', $name) ?? '';
+        return trim($name);
+    };
+
+    $groups = [];
+    foreach ($students as $student) {
+        $key = $normalizeName($student['name'] ?? '');
+        if ($key === '') {
+            continue;
+        }
+        $groups[$key][] = $student;
+    }
+    foreach ($groups as $group) {
+        if (count($group) > 1) {
+            usort($group, static function ($a, $b) {
+                return strtotime($a['created_at'] ?? '') <=> strtotime($b['created_at'] ?? '');
+            });
+            $duplicateGroups[] = $group;
+        }
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -87,6 +119,7 @@ $missingWhatsapp = $missingWhatsappResult['data'] ?? [];
         <button class="btn btn-primary btn-sm" type="button" data-tab="inadimplentes">Inadimplentes</button>
         <button class="btn btn-primary btn-sm" type="button" data-tab="recebidas">Cobranças recebidas</button>
         <button class="btn btn-primary btn-sm" type="button" data-tab="sem-whatsapp">Sem WhatsApp</button>
+        <button class="btn btn-primary btn-sm" type="button" data-tab="duplicados">Duplicados</button>
         <button class="btn btn-primary btn-sm" type="button" data-tab="entries">Entradas confirmadas</button>
       </div>
 
@@ -284,11 +317,62 @@ $missingWhatsapp = $missingWhatsappResult['data'] ?? [];
           </table>
         </div>
       </section>
+
+      <section id="tab-duplicados" class="hidden">
+        <h2>Alunos duplicados</h2>
+        <p class="muted">Mescla automática por nome (mantém o registro mais antigo).</p>
+
+        <div style="overflow-x:auto;">
+          <table class="admin-table">
+            <thead>
+              <tr style="text-align:left;">
+                <th>Aluno</th>
+                <th>IDs</th>
+                <th>Matrículas</th>
+                <th>Ativo</th>
+                <th>Ação</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php if (empty($duplicateGroups)): ?>
+                <tr>
+                  <td colspan="5">Nenhum duplicado encontrado.</td>
+                </tr>
+              <?php else: ?>
+                <?php foreach ($duplicateGroups as $group): ?>
+                  <?php
+                    $primary = $group[0];
+                    $duplicateIds = array_map(static fn($s) => $s['id'], array_slice($group, 1));
+                    $ids = array_map(static fn($s) => $s['id'], $group);
+                    $enrollments = array_map(static fn($s) => $s['enrollment'] ?? '-', $group);
+                    $actives = array_map(static fn($s) => ($s['active'] ? 'Sim' : 'Não'), $group);
+                  ?>
+                  <tr>
+                    <td><?php echo htmlspecialchars($primary['name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars(implode(', ', $ids), ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars(implode(', ', $enrollments), ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars(implode(', ', $actives), ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td>
+                      <button class="btn btn-primary btn-sm js-merge-duplicates"
+                        type="button"
+                        data-primary="<?php echo htmlspecialchars($primary['id'], ENT_QUOTES, 'UTF-8'); ?>"
+                        data-duplicates="<?php echo htmlspecialchars(json_encode($duplicateIds), ENT_QUOTES, 'UTF-8'); ?>">
+                        Mesclar duplicados
+                      </button>
+                    </td>
+                  </tr>
+                <?php endforeach; ?>
+              <?php endif; ?>
+            </tbody>
+          </table>
+        </div>
+        <div class="charge-message" id="merge-message"></div>
+      </section>
     </div>
 
     <div class="footer">Desenvolvido por Lucas Goncalves Junior - 2026</div>
   </div>
 
-  <script src="/assets/js/admin-dashboard.js?v=8"></script>
+  <script src="/assets/js/admin-dashboard.js?v=9"></script>
 </body>
 </html>
