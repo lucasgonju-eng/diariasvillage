@@ -39,6 +39,7 @@ $studentsResult = $client->select('students', 'select=id,name,enrollment,created
 $students = $studentsResult['data'] ?? [];
 $duplicateGroups = [];
 $duplicateEnrollmentGroups = [];
+$possibleDuplicateGroups = [];
 if ($students) {
     $normalizeName = static function (string $name): string {
         $name = mb_strtoupper($name, 'UTF-8');
@@ -81,6 +82,35 @@ if ($students) {
                 return strtotime($a['created_at'] ?? '') <=> strtotime($b['created_at'] ?? '');
             });
             $duplicateEnrollmentGroups[] = $group;
+        }
+    }
+
+    $stopWords = ['DE', 'DA', 'DO', 'DAS', 'DOS', 'E'];
+    $baseGroups = [];
+    foreach ($students as $student) {
+        $name = $student['name'] ?? '';
+        $clean = trim(preg_replace('/\s+/', ' ', strtoupper($name))) ?: '';
+        if ($clean === '') {
+            continue;
+        }
+        $parts = array_values(array_filter(explode(' ', $clean), static function ($part) use ($stopWords) {
+            return $part !== '' && !in_array($part, $stopWords, true);
+        }));
+        if (count($parts) < 2) {
+            continue;
+        }
+        $baseKey = $parts[0] . '_' . $parts[count($parts) - 1];
+        $baseGroups[$baseKey][] = $student;
+    }
+    foreach ($baseGroups as $group) {
+        if (count($group) > 1) {
+            $distinctNames = array_unique(array_map(static fn($s) => $s['name'] ?? '', $group));
+            if (count($distinctNames) > 1) {
+                usort($group, static function ($a, $b) {
+                    return strtotime($a['created_at'] ?? '') <=> strtotime($b['created_at'] ?? '');
+                });
+                $possibleDuplicateGroups[] = $group;
+            }
         }
     }
 }
@@ -338,7 +368,7 @@ if ($students) {
 
       <section id="tab-duplicados" class="hidden">
         <h2>Alunos duplicados</h2>
-        <p class="muted">Mescla automática por nome ou matrícula (mantém o registro mais antigo).</p>
+        <p class="muted">Mescla automática por nome ou matrícula (mantém o registro mais antigo). Abaixo listamos também possíveis duplicados por nome parcial.</p>
 
         <div style="overflow-x:auto;">
           <table class="admin-table">
@@ -410,6 +440,34 @@ if ($students) {
             </tbody>
           </table>
         </div>
+
+        <?php if (!empty($possibleDuplicateGroups)): ?>
+          <div style="margin-top:18px;overflow-x:auto;">
+            <table class="admin-table">
+              <thead>
+                <tr style="text-align:left;">
+                  <th>Possível duplicado (nome parcial)</th>
+                  <th>IDs</th>
+                  <th>Matrículas</th>
+                </tr>
+              </thead>
+              <tbody>
+                <?php foreach ($possibleDuplicateGroups as $group): ?>
+                  <?php
+                    $names = array_map(static fn($s) => $s['name'] ?? '-', $group);
+                    $ids = array_map(static fn($s) => $s['id'], $group);
+                    $enrollments = array_map(static fn($s) => $s['enrollment'] ?? '-', $group);
+                  ?>
+                  <tr>
+                    <td><?php echo htmlspecialchars(implode(' | ', $names), ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars(implode(', ', $ids), ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars(implode(', ', $enrollments), ENT_QUOTES, 'UTF-8'); ?></td>
+                  </tr>
+                <?php endforeach; ?>
+              </tbody>
+            </table>
+          </div>
+        <?php endif; ?>
         <div class="charge-message" id="merge-message"></div>
       </section>
     </div>
