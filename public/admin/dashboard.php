@@ -35,9 +35,10 @@ $missingWhatsappResult = $client->select(
 );
 $missingWhatsapp = $missingWhatsappResult['data'] ?? [];
 
-$studentsResult = $client->select('students', 'select=id,name,enrollment,created_at,active');
+$studentsResult = $client->select('students', 'select=id,name,enrollment,created_at,active&limit=10000');
 $students = $studentsResult['data'] ?? [];
 $duplicateGroups = [];
+$duplicateEnrollmentGroups = [];
 if ($students) {
     $normalizeName = static function (string $name): string {
         $name = mb_strtoupper($name, 'UTF-8');
@@ -63,6 +64,23 @@ if ($students) {
                 return strtotime($a['created_at'] ?? '') <=> strtotime($b['created_at'] ?? '');
             });
             $duplicateGroups[] = $group;
+        }
+    }
+
+    $enrollmentGroups = [];
+    foreach ($students as $student) {
+        $enrollment = trim((string) ($student['enrollment'] ?? ''));
+        if ($enrollment === '' || $enrollment === '-') {
+            continue;
+        }
+        $enrollmentGroups[$enrollment][] = $student;
+    }
+    foreach ($enrollmentGroups as $group) {
+        if (count($group) > 1) {
+            usort($group, static function ($a, $b) {
+                return strtotime($a['created_at'] ?? '') <=> strtotime($b['created_at'] ?? '');
+            });
+            $duplicateEnrollmentGroups[] = $group;
         }
     }
 }
@@ -320,12 +338,13 @@ if ($students) {
 
       <section id="tab-duplicados" class="hidden">
         <h2>Alunos duplicados</h2>
-        <p class="muted">Mescla automática por nome (mantém o registro mais antigo).</p>
+        <p class="muted">Mescla automática por nome ou matrícula (mantém o registro mais antigo).</p>
 
         <div style="overflow-x:auto;">
           <table class="admin-table">
             <thead>
               <tr style="text-align:left;">
+                <th>Critério</th>
                 <th>Aluno</th>
                 <th>IDs</th>
                 <th>Matrículas</th>
@@ -334,9 +353,9 @@ if ($students) {
               </tr>
             </thead>
             <tbody>
-              <?php if (empty($duplicateGroups)): ?>
+              <?php if (empty($duplicateGroups) && empty($duplicateEnrollmentGroups)): ?>
                 <tr>
-                  <td colspan="5">Nenhum duplicado encontrado.</td>
+                  <td colspan="6">Nenhum duplicado encontrado.</td>
                 </tr>
               <?php else: ?>
                 <?php foreach ($duplicateGroups as $group): ?>
@@ -348,6 +367,31 @@ if ($students) {
                     $actives = array_map(static fn($s) => ($s['active'] ? 'Sim' : 'Não'), $group);
                   ?>
                   <tr>
+                    <td>Nome</td>
+                    <td><?php echo htmlspecialchars($primary['name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars(implode(', ', $ids), ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars(implode(', ', $enrollments), ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars(implode(', ', $actives), ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td>
+                      <button class="btn btn-primary btn-sm js-merge-duplicates"
+                        type="button"
+                        data-primary="<?php echo htmlspecialchars($primary['id'], ENT_QUOTES, 'UTF-8'); ?>"
+                        data-duplicates="<?php echo htmlspecialchars(json_encode($duplicateIds), ENT_QUOTES, 'UTF-8'); ?>">
+                        Mesclar duplicados
+                      </button>
+                    </td>
+                  </tr>
+                <?php endforeach; ?>
+                <?php foreach ($duplicateEnrollmentGroups as $group): ?>
+                  <?php
+                    $primary = $group[0];
+                    $duplicateIds = array_map(static fn($s) => $s['id'], array_slice($group, 1));
+                    $ids = array_map(static fn($s) => $s['id'], $group);
+                    $enrollments = array_map(static fn($s) => $s['enrollment'] ?? '-', $group);
+                    $actives = array_map(static fn($s) => ($s['active'] ? 'Sim' : 'Não'), $group);
+                  ?>
+                  <tr>
+                    <td>Matrícula</td>
                     <td><?php echo htmlspecialchars($primary['name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo htmlspecialchars(implode(', ', $ids), ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo htmlspecialchars(implode(', ', $enrollments), ENT_QUOTES, 'UTF-8'); ?></td>
@@ -373,6 +417,6 @@ if ($students) {
     <div class="footer">Desenvolvido por Lucas Goncalves Junior - 2026</div>
   </div>
 
-  <script src="/assets/js/admin-dashboard.js?v=9"></script>
+  <script src="/assets/js/admin-dashboard.js?v=10"></script>
 </body>
 </html>
