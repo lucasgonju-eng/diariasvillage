@@ -53,7 +53,7 @@ if (!$paymentData) {
 }
 
 $status = $paymentData['status'] ?? '';
-$paidStatuses = ['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH'];
+$paidStatuses = ['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH', 'PAID'];
 if (in_array($status, $paidStatuses, true)) {
     $paidAt = date('c');
     $update = $client->update('pendencia_de_cadastro', 'id=eq.' . urlencode($pendenciaId), [

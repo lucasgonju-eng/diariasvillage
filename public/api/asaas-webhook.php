@@ -88,7 +88,13 @@ if (!$paymentResult['ok'] || empty($paymentResult['data'])) {
         }
         Helpers::json(['ok' => true]);
     }
-    Helpers::json(['ok' => false, 'error' => 'Pagamento não encontrado.'], 404);
+    $logPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'error_log_custom.txt';
+    file_put_contents(
+        $logPath,
+        'Webhook: pagamento não encontrado. ID ' . ($payment['id'] ?? '-') . PHP_EOL,
+        FILE_APPEND
+    );
+    Helpers::json(['ok' => true, 'skipped' => true]);
 }
 
 $paymentRow = $paymentResult['data'][0];

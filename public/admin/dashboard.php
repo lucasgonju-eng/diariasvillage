@@ -145,6 +145,13 @@ if ($guardians) {
       background:#E8F0FF;
       font-weight:800;
     }
+    .btn-danger{
+      color:#B91C1C;
+      border-color:#FCA5A5;
+      background:#FEE2E2;
+      font-weight:800;
+    }
+    .btn-danger:hover{filter:brightness(.97)}
     .date-actions{display:flex;gap:6px}
     .charge-message{margin-top:12px;font-size:13px}
     .hidden{display:none}
@@ -407,7 +414,7 @@ if ($guardians) {
                         -
                       <?php else: ?>
                         <button
-                          class="btn btn-ghost btn-sm js-check-pendencia"
+                          class="btn btn-danger btn-sm js-check-pendencia"
                           type="button"
                           data-id="<?php echo htmlspecialchars($pendencia['id'], ENT_QUOTES, 'UTF-8'); ?>"
                         >
