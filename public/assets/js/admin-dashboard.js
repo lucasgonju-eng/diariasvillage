@@ -316,7 +316,11 @@ pendenciaButtons.forEach((button) => {
       } else {
         const row = button.closest('tr');
         const paidCell = row ? row.querySelector('[data-col="paid-at"]') : null;
+        const statusCell = row ? row.querySelector('[data-col="asaas-status"]') : null;
         const actionCell = row ? row.querySelector('[data-col="action"]') : null;
+        if (statusCell) {
+          statusCell.textContent = data.status || '-';
+        }
         if (data.paid_at && paidCell) {
           const date = new Date(data.paid_at);
           paidCell.textContent = isNaN(date.getTime())
@@ -330,7 +334,10 @@ pendenciaButtons.forEach((button) => {
             pendenciaMessage.className = 'charge-message success';
           }
         } else if (pendenciaMessage) {
-          pendenciaMessage.textContent = 'Pagamento ainda não identificado pelo Asaas.';
+          pendenciaMessage.textContent =
+            data.status === 'NOT_FOUND'
+              ? 'Pagamento não encontrado no Asaas.'
+              : 'Pagamento ainda não identificado pelo Asaas.';
           pendenciaMessage.className = 'charge-message';
         }
       }

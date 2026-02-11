@@ -49,7 +49,7 @@ if (!$paymentData && $invoiceUrl !== '') {
 }
 
 if (!$paymentData) {
-    Helpers::json(['ok' => false, 'error' => 'Pagamento não encontrado no Asaas.'], 404);
+    Helpers::json(['ok' => true, 'paid_at' => null, 'status' => 'NOT_FOUND']);
 }
 
 $status = $paymentData['status'] ?? '';

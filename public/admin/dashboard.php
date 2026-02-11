@@ -387,6 +387,7 @@ if ($guardians) {
                 <th>CPF</th>
                 <th>E-mail</th>
                 <th>Registrado em</th>
+                <th>Status Asaas</th>
                 <th>Pago em</th>
                 <th>Ações</th>
               </tr>
@@ -394,7 +395,7 @@ if ($guardians) {
             <tbody>
               <?php if (empty($pendencias)): ?>
                 <tr>
-                  <td colspan="7">Nenhuma pendência registrada.</td>
+                  <td colspan="8">Nenhuma pendência registrada.</td>
                 </tr>
               <?php else: ?>
                 <?php foreach ($pendencias as $pendencia): ?>
@@ -408,6 +409,7 @@ if ($guardians) {
                     <td><?php echo htmlspecialchars($pendencia['guardian_cpf'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo htmlspecialchars($pendencia['guardian_email'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo $created; ?></td>
+                    <td data-col="asaas-status">-</td>
                     <td data-col="paid-at"><?php echo $paidAt; ?></td>
                     <td data-col="action">
                       <?php if (!empty($pendencia['paid_at'])): ?>
@@ -542,6 +544,6 @@ if ($guardians) {
     <div class="footer">Desenvolvido por Lucas Gonçalves Junior - 2026</div>
   </div>
 
-  <script src="/assets/js/admin-dashboard.js?v=13"></script>
+  <script src="/assets/js/admin-dashboard.js?v=14"></script>
 </body>
 </html>
