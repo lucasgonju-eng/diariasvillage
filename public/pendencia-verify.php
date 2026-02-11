@@ -189,4 +189,62 @@ HTML;
     );
 }
 
-echo 'E-mail confirmado. Enviamos as próximas instruções.';
+?>
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>E-mail confirmado • Diárias Village</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#0B1020;--primary:#0A1B4D;--primary-2:#0F2A75;--text:#0B1020;--muted:#556070;--surface:#FFFFFF;--line:#E6E9EF;--accent:#D6B25E;--radius:18px;--shadow:0 14px 40px rgba(11,16,32,.14);--max:1120px;--font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, Helvetica, sans-serif;}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:var(--font);background:#F6F7FA;color:var(--text)}
+    .container{max-width:var(--max);margin:0 auto;padding:28px 20px}
+    .card{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);border:1px solid var(--line);padding:24px}
+    .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+    .brand{display:flex;align-items:center;gap:10px}
+    .brand-mark{width:34px;height:34px;border-radius:12px;background:#D6B25E;display:inline-block}
+    .brand-title{font-weight:800;letter-spacing:.06em;font-size:12px}
+    .brand-sub{font-size:12px;opacity:.75}
+    .pill{display:inline-block;padding:8px 12px;border-radius:999px;border:1px solid var(--line);font-size:12px;background:#F6F8FC}
+    h1{font-size:28px;margin:12px 0}
+    p{color:var(--muted);line-height:1.7}
+    .btn{display:inline-block;padding:12px 16px;border-radius:14px;font-weight:800;text-decoration:none;background:var(--accent);color:#1a1406}
+    .footer{margin-top:20px;font-size:12px;color:var(--muted)}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <div>
+            <div class="brand-title">DIARIAS VILLAGE</div>
+            <div class="brand-sub">Confirmação de e-mail</div>
+          </div>
+        </div>
+        <span class="pill">E-mail confirmado</span>
+      </div>
+
+      <h1>Pronto! Seu e-mail foi confirmado.</h1>
+      <p>
+        Enviamos um segundo e-mail com o link de pagamento da diária planejada.
+        Por favor, volte para a sua caixa de entrada e finalize o pagamento.
+      </p>
+      <p>
+        Se não encontrar, verifique a pasta de spam ou lixo eletrônico.
+      </p>
+      <a class="btn" href="mailto:<?php echo htmlspecialchars($guardianEmail ?? '', ENT_QUOTES, 'UTF-8'); ?>">Abrir meu e-mail</a>
+
+      <div class="footer">
+        Diárias Village • Sistema oficial de pagamento e controle de acesso
+      </div>
+    </div>
+  </div>
+</body>
+</html>
