@@ -40,6 +40,8 @@ $pendenciasResult = $client->select(
     'select=id,student_name,guardian_name,guardian_cpf,guardian_email,created_at,paid_at&order=created_at.desc&limit=500'
 );
 $pendencias = $pendenciasResult['data'] ?? [];
+$pendenciasPagas = array_filter($pendencias, fn($p) => !empty($p['paid_at']));
+$valorPendencia = 77.00;
 
 $studentsResult = $client->select('students', 'select=id,name,enrollment,created_at,active&limit=10000');
 $students = $studentsResult['data'] ?? [];
@@ -206,7 +208,7 @@ if ($guardians) {
               </tr>
             </thead>
             <tbody>
-              <?php if (empty($payments)): ?>
+              <?php if (empty($payments) && empty($pendenciasPagas)): ?>
                 <tr>
                   <td colspan="8">Nenhuma entrada confirmada ainda.</td>
                 </tr>
@@ -231,6 +233,22 @@ if ($guardians) {
                     <td><?php echo $confirmed; ?></td>
                     <td>R$ <?php echo $amount; ?></td>
                     <td><?php echo htmlspecialchars($payment['access_code'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
+                  </tr>
+                <?php endforeach; ?>
+                <?php foreach ($pendenciasPagas as $p): ?>
+                  <?php
+                    $confirmed = $p['paid_at'] ? date('d/m/Y H:i', strtotime($p['paid_at'])) : '-';
+                    $amount = number_format((float) $valorPendencia, 2, ',', '.');
+                  ?>
+                  <tr>
+                    <td><?php echo htmlspecialchars($p['student_name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td>-</td>
+                    <td>PIX</td>
+                    <td>Pendência cadastro</td>
+                    <td>-</td>
+                    <td><?php echo $confirmed; ?></td>
+                    <td>R$ <?php echo $amount; ?></td>
+                    <td>-</td>
                   </tr>
                 <?php endforeach; ?>
               <?php endif; ?>
@@ -318,7 +336,7 @@ if ($guardians) {
               </tr>
             </thead>
             <tbody>
-              <?php if (empty($manualPaid)): ?>
+              <?php if (empty($manualPaid) && empty($pendenciasPagas)): ?>
                 <tr>
                   <td colspan="6">Nenhuma cobrança recebida.</td>
                 </tr>
@@ -337,6 +355,20 @@ if ($guardians) {
                     <td><?php echo htmlspecialchars($guardian['parent_name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo htmlspecialchars($guardian['email'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo htmlspecialchars($datesLabel, ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td>R$ <?php echo $amount; ?></td>
+                    <td><?php echo $paidAt; ?></td>
+                  </tr>
+                <?php endforeach; ?>
+                <?php foreach ($pendenciasPagas as $p): ?>
+                  <?php
+                    $paidAt = $p['paid_at'] ? date('d/m/Y H:i', strtotime($p['paid_at'])) : '-';
+                    $amount = number_format((float) $valorPendencia, 2, ',', '.');
+                  ?>
+                  <tr>
+                    <td><?php echo htmlspecialchars($p['student_name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars($p['guardian_name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars($p['guardian_email'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td>Pendência cadastro</td>
                     <td>R$ <?php echo $amount; ?></td>
                     <td><?php echo $paidAt; ?></td>
                   </tr>
