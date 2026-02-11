@@ -30,6 +30,23 @@ class SupabaseAuth
         );
     }
 
+    /** Cria usuário via Admin API - sem enviar e-mail de confirmação do Supabase. */
+    public function createUser(string $email, string $password, array $options = []): array
+    {
+        $payload = array_merge([
+            'email' => $email,
+            'password' => $password,
+            'email_confirm' => true,
+        ], $options);
+
+        return $this->http->request(
+            'POST',
+            $this->url . '/auth/v1/admin/users',
+            $this->headers(),
+            $payload
+        );
+    }
+
     public function signIn(string $email, string $password): array
     {
         $payload = [

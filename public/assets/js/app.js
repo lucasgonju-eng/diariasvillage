@@ -95,7 +95,7 @@ if (form) {
         return;
       }
 
-      message.textContent = 'Conta criada! Você receberá um e-mail de validação (confirmação). Confira sua caixa de entrada e a pasta de spam.';
+      message.textContent = 'Conta criada! Você já pode fazer login com seu CPF e senha.';
       message.className = 'success';
       form.reset();
     } catch (err) {

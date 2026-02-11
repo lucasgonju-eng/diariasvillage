@@ -47,18 +47,18 @@ $guardianId = $guardian['id'] ?? null;
 $guardianName = $guardian['parent_name'] ?? 'Responsável';
 
 $auth = new SupabaseAuth(new HttpClient());
-$signUpResult = $auth->signUp($email, $password, [
-    'data' => ['cpf' => $cpfDigits],
-    'email_redirect_to' => Helpers::baseUrl() . '/login.php',
+$createResult = $auth->createUser($email, $password, [
+    'user_metadata' => ['cpf' => $cpfDigits],
 ]);
 
-if (!$signUpResult['ok']) {
-    $errorMsg = $signUpResult['error'] ?? '';
-    $data = $signUpResult['data'] ?? [];
-    if (is_array($data) && !empty($data['msg'])) {
-        $errorMsg = $data['msg'];
+if (!$createResult['ok']) {
+    $data = $createResult['data'] ?? [];
+    $errorMsg = $createResult['error'] ?? '';
+    if (is_array($data)) {
+        $errorMsg = $data['msg'] ?? $data['message'] ?? $data['error_description'] ?? $errorMsg;
     }
-    if (stripos($errorMsg, 'already') !== false || stripos($errorMsg, 'registered') !== false) {
+    $errLower = strtolower($errorMsg);
+    if (strpos($errLower, 'already') !== false || strpos($errLower, 'registered') !== false || strpos($errLower, 'exists') !== false) {
         Helpers::json(['ok' => false, 'error' => 'Este e-mail já está cadastrado. Use "Já tem cadastro?" para entrar.'], 409);
     }
     Helpers::json(['ok' => false, 'error' => $errorMsg ?: 'Falha ao criar conta. Tente novamente.'], 500);
@@ -74,11 +74,11 @@ $template = <<<'HTML'
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Valide seu e-mail • Diárias Village</title>
+  <title>Conta criada • Diárias Village</title>
 </head>
 <body style="margin:0;padding:0;background:#EEF2F7;">
   <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
-    Valide seu e-mail para acessar o Diárias Village.
+    Sua conta foi criada. Você já pode fazer login no Diárias Village.
   </div>
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#EEF2F7;padding:24px 12px;">
     <tr>
@@ -103,26 +103,25 @@ $template = <<<'HTML'
                 </tr>
               </table>
               <div style="margin-top:14px;display:inline-block;padding:8px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.18);background:rgba(8,22,54,.35);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:12px;color:#EAF0FF;">
-                Validação de e-mail
+                Conta criada
               </div>
             </td>
           </tr>
           <tr>
             <td style="padding:28px 28px 10px 28px;">
               <div style="font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0B1020;">
-                <div style="font-size:26px;font-weight:800;line-height:1.15;">Valide seu e-mail</div>
+                <div style="font-size:26px;font-weight:800;line-height:1.15;">Conta criada com sucesso!</div>
                 <div style="margin-top:10px;font-size:15px;line-height:1.65;color:#1B2333;">
-                  Olá, {{nome}}! Seu cadastro foi criado com sucesso.
+                  Olá, {{nome}}! Seu cadastro foi concluído.
                 </div>
                 <div style="margin-top:20px;background:#F6F8FC;border:1px solid #E6E9F2;border-radius:14px;padding:18px;">
-                  <div style="font-size:16px;font-weight:800;margin-bottom:10px;color:#0B1020;">Próximo passo</div>
+                  <div style="font-size:16px;font-weight:800;margin-bottom:10px;color:#0B1020;">Você já pode acessar</div>
                   <div style="font-size:14px;line-height:1.7;color:#1B2333;">
-                    Você receberá em instantes um e-mail com o link para validar seu cadastro.
-                    Confira sua caixa de entrada e a pasta de spam.
+                    Faça login com seu CPF e a senha que você criou para agendar e pagar as diárias.
                   </div>
                 </div>
                 <div style="margin-top:22px;font-size:14px;line-height:1.6;color:#556070;">
-                  Após validar o e-mail, você poderá fazer login com seu CPF e senha para agendar e pagar as diárias.
+                  Acesse o sistema em <a href="{{base_url}}" style="color:#0A1B4D;font-weight:700;">{{base_url}}</a> e clique em "Já tem cadastro?".
                 </div>
               </div>
             </td>
@@ -146,14 +145,16 @@ $template = <<<'HTML'
 </html>
 HTML;
 
+$baseUrl = Helpers::baseUrl();
 $html = strtr($template, [
     '{{nome}}' => htmlspecialchars($guardianName, ENT_QUOTES, 'UTF-8'),
+    '{{base_url}}' => htmlspecialchars($baseUrl, ENT_QUOTES, 'UTF-8'),
 ]);
 
 $mailer = new Mailer();
 $mailer->send(
     $email,
-    'Valide seu e-mail • Diárias Village',
+    'Conta criada • Diárias Village',
     $html
 );
 
