@@ -9,15 +9,20 @@ use App\SupabaseClient;
 Helpers::requirePost();
 $payload = json_decode(file_get_contents('php://input'), true);
 
-$email = trim($payload['email'] ?? '');
+$cpf = trim($payload['cpf'] ?? '');
 $password = $payload['password'] ?? '';
 
-if ($email === '' || $password === '') {
-    Helpers::json(['ok' => false, 'error' => 'Informe e-mail e senha.'], 422);
+if ($cpf === '' || $password === '') {
+    Helpers::json(['ok' => false, 'error' => 'Informe CPF e senha.'], 422);
+}
+
+$cpfDigits = preg_replace('/\D+/', '', $cpf) ?? '';
+if (strlen($cpfDigits) !== 11) {
+    Helpers::json(['ok' => false, 'error' => 'CPF invalido.'], 422);
 }
 
 $auth = new Auth(new SupabaseClient(new HttpClient()));
-$result = $auth->login($email, $password);
+$result = $auth->login($cpfDigits, $password);
 
 if (!$result['ok']) {
     Helpers::json(['ok' => false, 'error' => $result['error']], 401);

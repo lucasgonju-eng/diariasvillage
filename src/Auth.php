@@ -11,22 +11,24 @@ class Auth
         $this->db = $db;
     }
 
-    public function login(string $email, string $password): array
+    public function login(string $cpf, string $password): array
     {
-        $result = $this->db->select('guardians', 'email=eq.' . urlencode($email) . '&select=*');
+        $cpfDigits = preg_replace('/\D+/', '', $cpf) ?? '';
+        $result = $this->db->select('guardians', 'parent_document=eq.' . urlencode($cpfDigits) . '&select=*');
         if (!$result['ok'] || empty($result['data'])) {
             return ['ok' => false, 'error' => 'Credenciais invalidas.'];
         }
 
-        $user = $result['data'][0];
-        if (!$user['password_hash'] || !password_verify($password, $user['password_hash'])) {
-            return ['ok' => false, 'error' => 'Credenciais invalidas.'];
+        foreach ($result['data'] as $user) {
+            if (!$user['password_hash'] || !password_verify($password, $user['password_hash'])) {
+                continue;
+            }
+            if (!$user['verified_at']) {
+                return ['ok' => false, 'error' => 'E-mail ainda nao verificado.'];
+            }
+            return ['ok' => true, 'user' => $user];
         }
 
-        if (!$user['verified_at']) {
-            return ['ok' => false, 'error' => 'E-mail ainda nao verificado.'];
-        }
-
-        return ['ok' => true, 'user' => $user];
+        return ['ok' => false, 'error' => 'Credenciais invalidas.'];
     }
 }

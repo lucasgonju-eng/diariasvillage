@@ -35,6 +35,12 @@ $missingWhatsappResult = $client->select(
 );
 $missingWhatsapp = $missingWhatsappResult['data'] ?? [];
 
+$pendenciasResult = $client->select(
+    'pendencia_de_cadastro',
+    'select=id,student_name,guardian_name,guardian_cpf,guardian_email,created_at&order=created_at.desc&limit=500'
+);
+$pendencias = $pendenciasResult['data'] ?? [];
+
 $studentsResult = $client->select('students', 'select=id,name,enrollment,created_at,active&limit=10000');
 $students = $studentsResult['data'] ?? [];
 $duplicateGroups = [];
@@ -160,6 +166,7 @@ if ($guardians) {
         <button class="btn btn-primary btn-sm" type="button" data-tab="inadimplentes">Inadimplentes</button>
         <button class="btn btn-primary btn-sm" type="button" data-tab="recebidas">Cobranças recebidas</button>
         <button class="btn btn-primary btn-sm" type="button" data-tab="sem-whatsapp">Sem WhatsApp</button>
+        <button class="btn btn-primary btn-sm" type="button" data-tab="pendencias">Pendências</button>
         <button class="btn btn-primary btn-sm" type="button" data-tab="duplicados">Duplicados</button>
         <button class="btn btn-primary btn-sm" type="button" data-tab="entries">Entradas confirmadas</button>
       </div>
@@ -359,6 +366,43 @@ if ($guardians) {
         </div>
       </section>
 
+      <section id="tab-pendencias" class="hidden">
+        <h2>Pendências de cadastro</h2>
+        <p class="muted">Solicitações registradas para ajuste manual no cadastro.</p>
+
+        <div style="overflow-x:auto;">
+          <table class="admin-table">
+            <thead>
+              <tr style="text-align:left;">
+                <th>Aluno</th>
+                <th>Responsável</th>
+                <th>CPF</th>
+                <th>E-mail</th>
+                <th>Registrado em</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php if (empty($pendencias)): ?>
+                <tr>
+                  <td colspan="5">Nenhuma pendência registrada.</td>
+                </tr>
+              <?php else: ?>
+                <?php foreach ($pendencias as $pendencia): ?>
+                  <?php $created = $pendencia['created_at'] ? date('d/m/Y H:i', strtotime($pendencia['created_at'])) : '-'; ?>
+                  <tr>
+                    <td><?php echo htmlspecialchars($pendencia['student_name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars($pendencia['guardian_name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars($pendencia['guardian_cpf'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars($pendencia['guardian_email'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo $created; ?></td>
+                  </tr>
+                <?php endforeach; ?>
+              <?php endif; ?>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <section id="tab-duplicados" class="hidden">
         <h2>Alunos duplicados</h2>
         <p class="muted">Mescla automática por nome ou matrícula (mantém o registro mais antigo). Abaixo listamos possíveis duplicados por CPF do responsável.</p>
@@ -471,6 +515,6 @@ if ($guardians) {
     <div class="footer">Desenvolvido por Lucas Goncalves Junior - 2026</div>
   </div>
 
-  <script src="/assets/js/admin-dashboard.js?v=11"></script>
+  <script src="/assets/js/admin-dashboard.js?v=12"></script>
 </body>
 </html>

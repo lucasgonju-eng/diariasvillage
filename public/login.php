@@ -33,7 +33,7 @@ require_once __DIR__ . '/src/Bootstrap.php';
           <div class="pill">Entrar</div>
           <h1>Bem-vindo de volta.</h1>
           <p class="lead">
-            Use seu e-mail verificado e a senha para acessar o sistema e
+            Use o CPF do responsável e a senha para acessar o sistema e
             concluir o pagamento.
           </p>
 
@@ -46,12 +46,12 @@ require_once __DIR__ . '/src/Bootstrap.php';
 
         <aside class="hero-card" aria-label="Formulario de acesso">
           <h3>Entrar</h3>
-          <p class="muted">Acesse com o e-mail verificado.</p>
+          <p class="muted">Acesse com o CPF do responsável.</p>
 
           <form id="login-form">
             <div class="form-group">
-              <label>E-mail</label>
-              <input type="email" id="login-email" required />
+              <label>CPF do responsável</label>
+              <input type="text" id="login-cpf" required />
             </div>
             <div class="form-group">
               <label>Senha</label>

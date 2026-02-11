@@ -1,54 +1,40 @@
 const form = document.querySelector('#register-form');
 const studentsInput = document.querySelector('#student-name');
-const studentsList = document.querySelector('#students-list');
-const studentsSelect = document.querySelector('#student-select');
 const message = document.querySelector('#form-message');
+const openPendingButton = document.querySelector('#open-pending');
+const pendingForm = document.querySelector('#pending-form');
+const pendingMessage = document.querySelector('#pending-message');
+const cpfInput = document.querySelector('#cpf');
+const pendingCpfInput = document.querySelector('#pending-cpf');
 
-function isIOS() {
-  return /iPad|iPhone|iPod/.test(navigator.userAgent);
+function applyCpfMask(value) {
+  const digits = value.replace(/\D/g, '').slice(0, 11);
+  let masked = digits;
+  if (digits.length > 3) masked = `${digits.slice(0, 3)}.${digits.slice(3)}`;
+  if (digits.length > 6) masked = `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+  if (digits.length > 9) masked = `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+  return masked;
 }
 
-async function loadStudents() {
-  const res = await fetch('/api/students.php');
-  const data = await res.json();
-  if (!data.ok) {
-    message.textContent = data.error || 'Falha ao carregar alunos.';
-    message.className = 'error';
-    return;
-  }
+if (cpfInput) {
+  cpfInput.addEventListener('input', (event) => {
+    event.target.value = applyCpfMask(event.target.value);
+  });
+}
 
-  studentsList.innerHTML = '';
-  if (studentsSelect) {
-    studentsSelect.innerHTML = '';
-  }
-  data.students.forEach((student) => {
-    const option = document.createElement('option');
-    option.value = student.name;
-    studentsList.appendChild(option);
-    if (studentsSelect) {
-      const selectOption = document.createElement('option');
-      selectOption.value = student.name;
-      selectOption.textContent = student.name;
-      studentsSelect.appendChild(selectOption);
-    }
+if (pendingCpfInput) {
+  pendingCpfInput.addEventListener('input', (event) => {
+    event.target.value = applyCpfMask(event.target.value);
   });
 }
 
 if (form) {
-  loadStudents();
-  if (studentsSelect && studentsInput && isIOS()) {
-    studentsSelect.style.display = 'block';
-    studentsInput.style.display = 'none';
-    studentsSelect.addEventListener('change', () => {
-      studentsInput.value = studentsSelect.value;
-    });
-  }
-
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     message.textContent = '';
     const payload = {
       student_name: studentsInput.value.trim(),
+      cpf: document.querySelector('#cpf').value.trim(),
       email: document.querySelector('#email').value.trim(),
       password: document.querySelector('#password').value,
       password_confirm: document.querySelector('#password-confirm').value,
@@ -70,5 +56,49 @@ if (form) {
     message.textContent = 'Cadastro enviado. Confirme o e-mail para continuar.';
     message.className = 'success';
     form.reset();
+  });
+}
+
+if (openPendingButton && pendingForm) {
+  openPendingButton.addEventListener('click', () => {
+    pendingForm.style.display = pendingForm.style.display === 'none' ? 'block' : 'none';
+  });
+}
+
+if (pendingForm) {
+  pendingForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (pendingMessage) {
+      pendingMessage.textContent = '';
+      pendingMessage.className = '';
+    }
+
+    const payload = {
+      student_name: document.querySelector('#pending-student').value.trim(),
+      guardian_name: document.querySelector('#pending-guardian').value.trim(),
+      guardian_cpf: document.querySelector('#pending-cpf').value.trim(),
+      guardian_email: document.querySelector('#pending-email').value.trim(),
+    };
+
+    const res = await fetch('/api/pendencia-cadastro.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json();
+    if (!data.ok) {
+      if (pendingMessage) {
+        pendingMessage.textContent = data.error || 'Falha ao enviar pendencia.';
+        pendingMessage.className = 'error';
+      }
+      return;
+    }
+
+    if (pendingMessage) {
+      pendingMessage.textContent = 'Pendencia enviada. Nossa equipe vai ajustar seu cadastro.';
+      pendingMessage.className = 'success';
+    }
+    pendingForm.reset();
   });
 }

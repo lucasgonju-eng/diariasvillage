@@ -47,6 +47,15 @@ create table if not exists payments (
   created_at timestamptz not null default now()
 );
 
+create table if not exists pendencia_de_cadastro (
+  id uuid primary key default gen_random_uuid(),
+  student_name text not null,
+  guardian_name text not null,
+  guardian_cpf text not null,
+  guardian_email text,
+  created_at timestamptz not null default now()
+);
+
 create index if not exists idx_students_name on students using gin (to_tsvector('simple', name));
 create index if not exists idx_students_grade on students(grade);
 create index if not exists idx_payments_guardian on payments(guardian_id);

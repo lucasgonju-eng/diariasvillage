@@ -5,6 +5,7 @@ const tabInadimplentes = document.querySelector('#tab-inadimplentes');
 const tabRecebidas = document.querySelector('#tab-recebidas');
 const tabSemWhatsapp = document.querySelector('#tab-sem-whatsapp');
 const tabDuplicados = document.querySelector('#tab-duplicados');
+const tabPendencias = document.querySelector('#tab-pendencias');
 const studentInput = document.querySelector('#charge-student');
 const studentList = document.querySelector('#students-list');
 const chargeList = document.querySelector('#charge-list');
@@ -16,7 +17,15 @@ const guardianCache = new Map();
 const studentNames = new Set();
 
 function setActiveTab(name) {
-  if (!tabEntries || !tabCharges || !tabInadimplentes || !tabRecebidas || !tabSemWhatsapp || !tabDuplicados) {
+  if (
+    !tabEntries ||
+    !tabCharges ||
+    !tabInadimplentes ||
+    !tabRecebidas ||
+    !tabSemWhatsapp ||
+    !tabDuplicados ||
+    !tabPendencias
+  ) {
     return;
   }
   tabEntries.classList.toggle('hidden', name !== 'entries');
@@ -25,6 +34,7 @@ function setActiveTab(name) {
   tabRecebidas.classList.toggle('hidden', name !== 'recebidas');
   tabSemWhatsapp.classList.toggle('hidden', name !== 'sem-whatsapp');
   tabDuplicados.classList.toggle('hidden', name !== 'duplicados');
+  tabPendencias.classList.toggle('hidden', name !== 'pendencias');
   tabs.forEach((btn) => {
     const isActive = btn.dataset.tab === name;
     btn.classList.toggle('btn-primary', isActive);

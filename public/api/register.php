@@ -10,11 +10,12 @@ Helpers::requirePost();
 $payload = json_decode(file_get_contents('php://input'), true);
 
 $studentName = trim($payload['student_name'] ?? '');
+$cpf = trim($payload['cpf'] ?? '');
 $email = trim($payload['email'] ?? '');
 $password = $payload['password'] ?? '';
 $passwordConfirm = $payload['password_confirm'] ?? '';
 
-if ($studentName === '' || $email === '' || $password === '') {
+if ($studentName === '' || $cpf === '' || $email === '' || $password === '') {
     Helpers::json(['ok' => false, 'error' => 'Preencha todos os campos.'], 422);
 }
 
@@ -31,6 +32,18 @@ if (!$studentResult['ok'] || empty($studentResult['data'])) {
 
 $student = $studentResult['data'][0];
 
+$cpfDigits = preg_replace('/\D+/', '', $cpf) ?? '';
+if (strlen($cpfDigits) !== 11) {
+    Helpers::json(['ok' => false, 'error' => 'CPF invalido.'], 422);
+}
+$guardianExists = $client->select(
+    'guardians',
+    'select=id&student_id=eq.' . urlencode($student['id']) . '&parent_document=eq.' . urlencode($cpfDigits)
+);
+if ($guardianExists['ok'] && !empty($guardianExists['data'])) {
+    Helpers::json(['ok' => false, 'error' => 'CPF ja cadastrado para este aluno.'], 409);
+}
+
 $exists = $client->select('guardians', 'select=id&email=eq.' . urlencode($email));
 if ($exists['ok'] && !empty($exists['data'])) {
     Helpers::json(['ok' => false, 'error' => 'E-mail ja cadastrado.'], 409);
@@ -40,6 +53,7 @@ $guardian = $client->insert('guardians', [[
     'student_id' => $student['id'],
     'email' => $email,
     'password_hash' => password_hash($password, PASSWORD_DEFAULT),
+    'parent_document' => $cpfDigits,
 ]]);
 
 if (!$guardian['ok']) {

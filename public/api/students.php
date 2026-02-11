@@ -5,6 +5,11 @@ use App\Helpers;
 use App\HttpClient;
 use App\SupabaseClient;
 
+$isAdmin = isset($_SESSION['admin_authenticated']) && $_SESSION['admin_authenticated'] === true;
+if (!$isAdmin) {
+    Helpers::json(['ok' => false, 'error' => 'Nao autorizado.'], 401);
+}
+
 $client = new SupabaseClient(new HttpClient());
 $result = $client->select('students', 'select=name&grade=in.(6,7,8)&active=eq.true&order=name.asc');
 

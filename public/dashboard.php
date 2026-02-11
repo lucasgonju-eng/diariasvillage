@@ -55,6 +55,9 @@ $minDate = $hour >= 16 ? date('Y-m-d', strtotime('+1 day')) : $today;
         <aside class="hero-card" aria-label="Formulário de pagamento">
           <h3>Gerar pagamento</h3>
           <p class="muted">Preencha os dados abaixo.</p>
+          <div class="info-note" id="planned-countdown" data-now="<?php echo date('c'); ?>">
+            Carregando contagem regressiva da diária planejada...
+          </div>
 
           <form id="payment-form">
             <div class="grid-2">
@@ -120,6 +123,6 @@ $minDate = $hour >= 16 ? date('Y-m-d', strtotime('+1 day')) : $today;
     </div>
   </footer>
 
-  <script src="/assets/js/dashboard.js"></script>
+  <script src="/assets/js/dashboard.js?v=2"></script>
 </body>
 </html>

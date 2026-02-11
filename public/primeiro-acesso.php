@@ -33,14 +33,14 @@ require_once __DIR__ . '/src/Bootstrap.php';
           <div class="pill">Primeiro acesso</div>
           <h1>Ative o acesso em poucos minutos.</h1>
           <p class="lead">
-            Confirme o aluno, cadastre o e-mail do responsavel e defina a senha
+            Confirme o aluno, informe o CPF e o e-mail do responsavel e defina a senha
             para liberar o acesso.
           </p>
 
           <div class="microchips" role="list">
             <span class="microchip" role="listitem">Dados protegidos</span>
+            <span class="microchip" role="listitem">CPF como acesso</span>
             <span class="microchip" role="listitem">Confirmacao via e-mail</span>
-            <span class="microchip" role="listitem">Acesso imediato</span>
           </div>
         </div>
 
@@ -51,10 +51,13 @@ require_once __DIR__ . '/src/Bootstrap.php';
           <form id="register-form">
             <div class="form-group">
               <label>Nome do aluno</label>
-              <input id="student-name" list="students-list" placeholder="Digite o nome do aluno" required />
-              <select id="student-select" style="display:none;"></select>
-              <datalist id="students-list"></datalist>
-              <div class="small">Somente alunos do 6º ao 8º ano.</div>
+              <input id="student-name" placeholder="Digite o nome do aluno" required />
+              <div class="small">Digite exatamente como no cadastro escolar.</div>
+            </div>
+
+            <div class="form-group">
+              <label>CPF do responsavel</label>
+              <input type="text" id="cpf" placeholder="000.000.000-00" required />
             </div>
 
             <div class="form-group">
@@ -75,6 +78,32 @@ require_once __DIR__ . '/src/Bootstrap.php';
 
             <button class="btn btn-primary btn-block" type="submit">Primeiro acesso</button>
             <div id="form-message"></div>
+          </form>
+
+          <div class="small" style="margin-top:12px;">
+            Problemas no cadastro? Garanta sua diária planejada clicando aqui.
+            <button class="btn btn-ghost btn-sm" id="open-pending" type="button">Abrir formulário</button>
+          </div>
+
+          <form id="pending-form" style="margin-top:12px;display:none;">
+            <div class="form-group">
+              <label>Nome do aluno</label>
+              <input type="text" id="pending-student" required />
+            </div>
+            <div class="form-group">
+              <label>Nome do responsável</label>
+              <input type="text" id="pending-guardian" required />
+            </div>
+            <div class="form-group">
+              <label>CPF do responsável</label>
+              <input type="text" id="pending-cpf" required />
+            </div>
+            <div class="form-group">
+              <label>E-mail do responsável (opcional)</label>
+              <input type="email" id="pending-email" />
+            </div>
+            <button class="btn btn-primary btn-block" type="submit">Enviar pendência</button>
+            <div id="pending-message"></div>
           </form>
         </aside>
       </div>
@@ -104,8 +133,8 @@ require_once __DIR__ . '/src/Bootstrap.php';
           <div class="step">
             <div class="step-n">2</div>
             <div>
-              <div class="step-t">Cadastre o e-mail</div>
-              <div class="muted">Use o e-mail do responsavel.</div>
+              <div class="step-t">Informe CPF e e-mail</div>
+              <div class="muted">Use os dados do responsavel.</div>
             </div>
           </div>
           <div class="step">
