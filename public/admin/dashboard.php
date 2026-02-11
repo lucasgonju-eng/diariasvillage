@@ -394,7 +394,7 @@ if ($guardians) {
           </div>
           <div class="form-group">
             <label>Cobrança Asaas</label>
-            <input id="pendencia-asaas-id" type="text" placeholder="Ex: 742559970" inputmode="numeric" />
+            <input id="pendencia-asaas-id" type="text" placeholder="Ex: 742559970 ou pay_abc" />
           </div>
           <div class="form-group" style="display:flex;align-items:flex-end;">
             <button id="check-pendencia-asaas" class="btn btn-danger btn-sm" type="button">Checar por cobrança</button>
@@ -437,7 +437,7 @@ if ($guardians) {
                     <td data-col="asaas-status">-</td>
                     <td data-col="paid-at"><?php echo $paidAt; ?></td>
                     <td data-col="asaas-link">
-                      <input class="input-sm" type="text" placeholder="Ex: 742559970" inputmode="numeric" />
+                      <input class="input-sm" type="text" placeholder="Ex: 742559970 ou pay_abc" />
                       <button class="btn btn-danger btn-sm js-link-asaas" type="button">Vincular</button>
                     </td>
                     <td data-col="action">
@@ -573,6 +573,6 @@ if ($guardians) {
     <div class="footer">Desenvolvido por Lucas Gonçalves Junior - 2026</div>
   </div>
 
-  <script src="/assets/js/admin-dashboard.js?v=17"></script>
+  <script src="/assets/js/admin-dashboard.js?v=18"></script>
 </body>
 </html>

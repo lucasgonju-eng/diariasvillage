@@ -12,22 +12,30 @@ if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated']
 
 Helpers::requirePost();
 $payload = json_decode(file_get_contents('php://input'), true);
-$asaasId = trim($payload['asaas_id'] ?? '');
-$asaasId = preg_replace('/\D+/', '', $asaasId) ?? '';
+$asaasId = trim((string) ($payload['asaas_id'] ?? ''));
 
 if ($asaasId === '') {
     Helpers::json(['ok' => false, 'error' => 'Cobrança inválida.'], 422);
 }
 
 $asaas = new AsaasClient(new HttpClient());
+$paymentData = null;
 $paymentResponse = $asaas->getPayment($asaasId);
-if (!$paymentResponse['ok']) {
-    Helpers::json(['ok' => false, 'error' => 'Cobrança não encontrada no Asaas.'], 404);
+if ($paymentResponse['ok']) {
+    $paymentData = $paymentResponse['data'] ?? null;
 }
-
-$paymentData = $paymentResponse['data'] ?? null;
+if (!$paymentData) {
+    $listResponse = $asaas->findPaymentByInvoiceNumber($asaasId);
+    $list = $listResponse['ok'] ? ($listResponse['data']['data'] ?? []) : [];
+    $paymentData = $list[0] ?? null;
+}
+if (!$paymentData) {
+    $listResponse = $asaas->findPaymentByExternalReference($asaasId);
+    $list = $listResponse['ok'] ? ($listResponse['data']['data'] ?? []) : [];
+    $paymentData = $list[0] ?? null;
+}
 if (!$paymentData || empty($paymentData['id'])) {
-    Helpers::json(['ok' => false, 'error' => 'Cobrança inválida no Asaas.'], 404);
+    Helpers::json(['ok' => false, 'error' => 'Cobrança não encontrada no Asaas.'], 404);
 }
 
 $invoiceUrl = $paymentData['invoiceUrl'] ?? $paymentData['bankSlipUrl'] ?? '';

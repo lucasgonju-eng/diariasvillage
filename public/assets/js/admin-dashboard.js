@@ -445,10 +445,10 @@ if (pendenciaCpfButton && pendenciaCpfInput) {
 
 if (pendenciaAsaasButton && pendenciaAsaasInput) {
   pendenciaAsaasInput.addEventListener('input', (event) => {
-    event.target.value = event.target.value.replace(/\D/g, '').slice(0, 20);
+    event.target.value = event.target.value.trim().slice(0, 64);
   });
   pendenciaAsaasButton.addEventListener('click', async () => {
-    const asaasId = (pendenciaAsaasInput.value || '').replace(/\D/g, '');
+    const asaasId = (pendenciaAsaasInput.value || '').trim();
     if (!asaasId) {
       if (pendenciaMessage) {
         pendenciaMessage.textContent = 'Informe o número da cobrança Asaas.';
@@ -510,7 +510,7 @@ pendenciaLinkButtons.forEach((button) => {
     const row = button.closest('tr');
     const pendenciaId = row ? row.dataset.pendenciaId : null;
     const input = row ? row.querySelector('[data-col="asaas-link"] input') : null;
-    const asaasId = input ? input.value.replace(/\D/g, '') : '';
+    const asaasId = input ? input.value.trim() : '';
     if (!pendenciaId || !asaasId) {
       if (pendenciaMessage) {
         pendenciaMessage.textContent = 'Informe a cobrança Asaas para vincular.';

@@ -44,6 +44,18 @@ class AsaasClient
         return $this->http->request('GET', $url, $this->headers());
     }
 
+    public function findPaymentByInvoiceNumber(string $invoiceNumber): array
+    {
+        $url = $this->baseUrl . '/payments?invoiceNumber=' . urlencode($invoiceNumber);
+        return $this->http->request('GET', $url, $this->headers());
+    }
+
+    public function findPaymentByExternalReference(string $externalReference): array
+    {
+        $url = $this->baseUrl . '/payments?externalReference=' . urlencode($externalReference);
+        return $this->http->request('GET', $url, $this->headers());
+    }
+
     private function headers(): array
     {
         return [
