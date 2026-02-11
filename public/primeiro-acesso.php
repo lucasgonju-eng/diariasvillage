@@ -99,8 +99,8 @@ require_once __DIR__ . '/src/Bootstrap.php';
               <input type="text" id="pending-cpf" inputmode="numeric" required />
             </div>
             <div class="form-group">
-              <label>E-mail do responsável (opcional)</label>
-              <input type="email" id="pending-email" />
+              <label>E-mail do responsável</label>
+              <input type="email" id="pending-email" required />
             </div>
             <button class="btn btn-primary btn-block" type="submit">Enviar pendência</button>
             <div id="pending-message"></div>
@@ -163,6 +163,6 @@ require_once __DIR__ . '/src/Bootstrap.php';
     </div>
   </footer>
 
-  <script src="/assets/js/app.js?v=2"></script>
+  <script src="/assets/js/app.js?v=3"></script>
 </body>
 </html>

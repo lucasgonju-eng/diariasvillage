@@ -56,6 +56,29 @@ if (form) {
         data.error ||
         'Nao foi possivel cadastrar. Verifique CPF, nome do aluno e e-mail.';
       message.className = 'error';
+      if (data.error && data.error.toLowerCase().includes('aluno nao encontrado')) {
+        if (pendingForm) {
+          pendingForm.style.display = 'block';
+          if (openPendingButton) {
+            openPendingButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+          const pendingStudent = document.querySelector('#pending-student');
+          const pendingCpf = document.querySelector('#pending-cpf');
+          const pendingEmail = document.querySelector('#pending-email');
+          if (pendingStudent && studentsInput && !pendingStudent.value) {
+            pendingStudent.value = studentsInput.value.trim();
+          }
+          if (pendingCpf && cpfInput && !pendingCpf.value) {
+            pendingCpf.value = cpfInput.value.trim();
+          }
+          if (pendingEmail) {
+            const emailValue = document.querySelector('#email').value.trim();
+            if (!pendingEmail.value && emailValue) {
+              pendingEmail.value = emailValue;
+            }
+          }
+        }
+      }
       return;
     }
 
@@ -68,6 +91,28 @@ if (form) {
 if (openPendingButton && pendingForm) {
   openPendingButton.addEventListener('click', () => {
     pendingForm.style.display = pendingForm.style.display === 'none' ? 'block' : 'none';
+    if (pendingForm.style.display === 'block') {
+      const pendingStudent = document.querySelector('#pending-student');
+      const pendingGuardian = document.querySelector('#pending-guardian');
+      const pendingCpf = document.querySelector('#pending-cpf');
+      const pendingEmail = document.querySelector('#pending-email');
+
+      if (pendingStudent && studentsInput && !pendingStudent.value) {
+        pendingStudent.value = studentsInput.value.trim();
+      }
+      if (pendingCpf && cpfInput && !pendingCpf.value) {
+        pendingCpf.value = cpfInput.value.trim();
+      }
+      if (pendingEmail) {
+        const emailValue = document.querySelector('#email').value.trim();
+        if (!pendingEmail.value && emailValue) {
+          pendingEmail.value = emailValue;
+        }
+      }
+      if (pendingGuardian && !pendingGuardian.value) {
+        pendingGuardian.focus();
+      }
+    }
   });
 }
 
@@ -102,7 +147,7 @@ if (pendingForm) {
     }
 
     if (pendingMessage) {
-      pendingMessage.textContent = 'Pendencia enviada. Nossa equipe vai ajustar seu cadastro.';
+      pendingMessage.textContent = 'Pendência enviada. Verifique seu e-mail para confirmar.';
       pendingMessage.className = 'success';
     }
     pendingForm.reset();

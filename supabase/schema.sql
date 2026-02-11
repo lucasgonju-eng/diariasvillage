@@ -53,6 +53,17 @@ create table if not exists pendencia_de_cadastro (
   guardian_name text not null,
   guardian_cpf text not null,
   guardian_email text,
+  verified_at timestamptz,
+  asaas_payment_id text,
+  asaas_invoice_url text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists pendencia_tokens (
+  id uuid primary key default gen_random_uuid(),
+  pendencia_id uuid not null references pendencia_de_cadastro(id) on delete cascade,
+  token text not null unique,
+  expires_at timestamptz not null,
   created_at timestamptz not null default now()
 );
 
