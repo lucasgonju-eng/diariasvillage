@@ -19,12 +19,28 @@ if (strlen($cpfDigits) !== 11) {
     Helpers::json(['ok' => false, 'error' => 'CPF inválido.'], 422);
 }
 
+$cpfMasked = substr($cpfDigits, 0, 3) . '.' . substr($cpfDigits, 3, 3) . '.' . substr($cpfDigits, 6, 3) . '-' . substr($cpfDigits, 9, 2);
+
 $client = new SupabaseClient(new HttpClient());
 $pendenciaResult = $client->select(
     'pendencia_de_cadastro',
     'select=id,paid_at,asaas_payment_id,asaas_invoice_url,created_at&guardian_cpf=eq.'
       . urlencode($cpfDigits) . '&order=created_at.desc&limit=1'
 );
+if (!$pendenciaResult['ok'] || empty($pendenciaResult['data'])) {
+    $pendenciaResult = $client->select(
+        'pendencia_de_cadastro',
+        'select=id,paid_at,asaas_payment_id,asaas_invoice_url,created_at&guardian_cpf=eq.'
+          . urlencode($cpfMasked) . '&order=created_at.desc&limit=1'
+    );
+}
+if (!$pendenciaResult['ok'] || empty($pendenciaResult['data'])) {
+    $pendenciaResult = $client->select(
+        'pendencia_de_cadastro',
+        'select=id,paid_at,asaas_payment_id,asaas_invoice_url,created_at&guardian_cpf=ilike.'
+          . urlencode('%' . $cpfDigits . '%') . '&order=created_at.desc&limit=1'
+    );
+}
 if (!$pendenciaResult['ok'] || empty($pendenciaResult['data'])) {
     Helpers::json(['ok' => false, 'error' => 'Pendência não encontrada.'], 404);
 }
