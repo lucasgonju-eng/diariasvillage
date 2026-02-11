@@ -48,6 +48,17 @@ class Auth
             return ['ok' => false, 'error' => 'Cadastro sem senha. Faça o primeiro acesso para criar.'];
         }
 
+        $pendencia = $this->db->select(
+            'pendencia_de_cadastro',
+            'guardian_cpf=eq.' . urlencode($cpfDigits) . '&select=id,verified_at'
+        );
+        if ($pendencia['ok'] && !empty($pendencia['data'])) {
+            return [
+                'ok' => false,
+                'error' => 'Cadastro pendente. A secretaria vai concluir e avisar por e-mail.',
+            ];
+        }
+
         return ['ok' => false, 'error' => 'Credenciais inválidas.'];
     }
 }
