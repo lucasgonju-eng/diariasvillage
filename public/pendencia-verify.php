@@ -130,6 +130,14 @@ if ($guardianEmail) {
                     CPF: <b>{{cpf_responsavel}}</b>
                   </div>
                 </div>
+                <div style="margin-top:16px;background:#F6F8FC;border:1px solid #E6E9F2;border-radius:14px;padding:18px;">
+                  <div style="font-size:16px;font-weight:800;margin-bottom:10px;color:#0B1020;">Resumo da diária</div>
+                  <div style="font-size:14px;line-height:1.7;color:#1B2333;">
+                    Data: <b>{{data_diaria}}</b><br>
+                    Tipo: <b>{{tipo_diaria}}</b><br>
+                    Valor: <b>R$ {{valor_diaria}}</b>
+                  </div>
+                </div>
                 <div style="margin-top:18px;font-size:15px;line-height:1.7;color:#1B2333;">
                   Para garantir sua diária planejada, finalize o pagamento no botão abaixo.
                 </div>
@@ -168,6 +176,9 @@ HTML;
         '{{nome_responsavel}}' => htmlspecialchars($guardianName, ENT_QUOTES, 'UTF-8'),
         '{{cpf_responsavel}}' => htmlspecialchars($guardianCpf, ENT_QUOTES, 'UTF-8'),
         '{{link_pagamento}}' => htmlspecialchars($invoiceUrl ?: Helpers::baseUrl(), ENT_QUOTES, 'UTF-8'),
+        '{{data_diaria}}' => date('d/m/Y'),
+        '{{tipo_diaria}}' => 'Planejada',
+        '{{valor_diaria}}' => '77,00',
     ]);
 
     $mailer = new Mailer();
