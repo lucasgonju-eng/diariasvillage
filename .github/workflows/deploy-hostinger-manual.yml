@@ -1,0 +1,59 @@
+name: Deploy manual para Hostinger
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: curl, json, mbstring, zip
+          coverage: none
+
+      - name: Instalar dependências
+        run: composer install --no-dev --optimize-autoloader --ignore-platform-req=ext-gd
+
+      - name: Preparar estrutura de deploy
+        run: |
+          mkdir -p deploy
+          cp -r public/* deploy/
+          cp -r src deploy/
+          cp -r vendor deploy/
+          cp .env.example deploy/
+
+      - name: Preparar server-dir
+        id: serverdir
+        run: |
+          DIR="${{ secrets.FTP_SERVER_DIR || '/' }}"
+          DIR="${DIR%/}/"
+          echo "dir=$DIR" >> $GITHUB_OUTPUT
+
+      - name: Verificar pasta remota (SSH)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            pwd
+            ls -la
+            ls -la ${{ secrets.SSH_TARGET_DIR }}
+
+      - name: Deploy via SFTP (SSH)
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          port: ${{ secrets.SSH_PORT }}
+          source: "deploy"
+          target: ${{ secrets.SSH_TARGET_DIR }}
+          strip_components: 1
