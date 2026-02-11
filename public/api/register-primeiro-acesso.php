@@ -4,6 +4,7 @@ require_once __DIR__ . '/../src/Bootstrap.php';
 use App\Helpers;
 use App\HttpClient;
 use App\Mailer;
+use App\SupabaseAuth;
 use App\SupabaseClient;
 
 Helpers::requirePost();
@@ -56,29 +57,67 @@ if ($emailCheck['ok'] && !empty($emailCheck['data'])) {
     }
 }
 
-// Cadastro apenas na tabela guardians (sem Supabase Auth) – só e-mail do SaaS
-$passwordHash = password_hash($password, PASSWORD_DEFAULT);
-$verifiedAt = date('c');
-$updateResult = $client->update(
+// Supabase Auth (OAuth Server) – criar ou atualizar usuário; só e-mail do SaaS
+$auth = new SupabaseAuth(new HttpClient());
+$createResult = $auth->createUser($email, $password, [
+    'user_metadata' => ['cpf' => $cpfDigits],
+]);
+
+if (!$createResult['ok']) {
+    $data = $createResult['data'] ?? [];
+    $errorMsg = (string) ($createResult['error'] ?? '');
+    if (is_array($data)) {
+        $errorMsg = $data['msg'] ?? $data['message'] ?? $data['error_description'] ?? $errorMsg;
+    }
+    $errLower = strtolower($errorMsg);
+
+    // E-mail já existe no Supabase Auth – atualizar senha do usuário existente
+    if (strpos($errLower, 'already') !== false || strpos($errLower, 'registered') !== false || strpos($errLower, 'exists') !== false) {
+        $listResult = $auth->listUsers(1, 1000);
+        $userId = null;
+        if ($listResult['ok'] && !empty($listResult['data']['users'])) {
+            foreach ($listResult['data']['users'] as $u) {
+                if (strtolower(trim($u['email'] ?? '')) === strtolower($email)) {
+                    $userId = $u['id'] ?? null;
+                    break;
+                }
+            }
+        }
+        if (!$userId) {
+            Helpers::json(['ok' => false, 'error' => 'E-mail já cadastrado. Use "Já tem cadastro?" para entrar ou recupere a senha.'], 409);
+        }
+        $updateResult = $auth->updateUser($userId, [
+            'password' => $password,
+            'email_confirm' => true,
+        ]);
+        if (!$updateResult['ok']) {
+            $upErr = $updateResult['data']['message'] ?? $updateResult['error'] ?? 'Falha ao atualizar senha.';
+            Helpers::json(['ok' => false, 'error' => $upErr], 500);
+        }
+    } else {
+        Helpers::json(['ok' => false, 'error' => $errorMsg ?: 'Falha ao criar conta. Tente novamente.'], 500);
+    }
+}
+
+// Atualiza guardians (email e verified_at)
+$updateGuardian = $client->update(
     'guardians',
     'parent_document=eq.' . urlencode($cpfDigits),
     [
         'email' => $email,
-        'password_hash' => $passwordHash,
-        'verified_at' => $verifiedAt,
+        'verified_at' => date('c'),
     ]
 );
-
-if (!$updateResult['ok']) {
-    $data = $updateResult['data'] ?? [];
-    $errorMsg = $updateResult['error'] ?? '';
-    if (is_array($data)) {
-        $errorMsg = $data['message'] ?? $data['details'] ?? $errorMsg;
+if (!$updateGuardian['ok']) {
+    $gData = $updateGuardian['data'] ?? [];
+    $gErr = $updateGuardian['error'] ?? '';
+    if (is_array($gData)) {
+        $gErr = $gData['message'] ?? $gData['details'] ?? $gErr;
     }
-    if (stripos((string) $errorMsg, 'unique') !== false || stripos((string) $errorMsg, 'duplicate') !== false) {
+    if (stripos((string) $gErr, 'unique') !== false || stripos((string) $gErr, 'duplicate') !== false) {
         Helpers::json(['ok' => false, 'error' => 'Este e-mail já está cadastrado. Use "Já tem cadastro?" para entrar.'], 409);
     }
-    Helpers::json(['ok' => false, 'error' => $errorMsg ?: 'Falha ao criar conta. Tente novamente.'], 500);
+    Helpers::json(['ok' => false, 'error' => $gErr ?: 'Falha ao atualizar cadastro.'], 500);
 }
 
 $template = <<<'HTML'

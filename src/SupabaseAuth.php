@@ -47,6 +47,24 @@ class SupabaseAuth
         );
     }
 
+    /** Lista usuários (Admin API) - retorna users do Supabase Auth. */
+    public function listUsers(int $page = 1, int $perPage = 1000): array
+    {
+        $url = $this->url . '/auth/v1/admin/users?page=' . $page . '&per_page=' . $perPage;
+        return $this->http->request('GET', $url, $this->headers());
+    }
+
+    /** Atualiza usuário via Admin API (ex.: senha, email_confirm). */
+    public function updateUser(string $userId, array $attrs): array
+    {
+        return $this->http->request(
+            'PUT',
+            $this->url . '/auth/v1/admin/user/' . $userId,
+            $this->headers(),
+            $attrs
+        );
+    }
+
     public function signIn(string $email, string $password): array
     {
         $payload = [
