@@ -286,6 +286,65 @@ if (sendChargesButton) {
 }
 
 const mergeMessage = document.querySelector('#merge-message');
+const pendenciaMessage = document.querySelector('#pendencia-message');
+const pendenciaButtons = document.querySelectorAll('.js-check-pendencia');
+
+pendenciaButtons.forEach((button) => {
+  button.addEventListener('click', async () => {
+    if (!(button instanceof HTMLElement)) return;
+    const pendenciaId = button.dataset.id;
+    if (!pendenciaId) return;
+
+    button.setAttribute('disabled', 'disabled');
+    if (pendenciaMessage) {
+      pendenciaMessage.textContent = 'Checando pagamento...';
+      pendenciaMessage.className = 'charge-message';
+    }
+
+    try {
+      const res = await fetch('/api/admin-check-pendencia.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: pendenciaId }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        if (pendenciaMessage) {
+          pendenciaMessage.textContent = data.error || 'Falha ao checar pendência.';
+          pendenciaMessage.className = 'charge-message error';
+        }
+      } else {
+        const row = button.closest('tr');
+        const paidCell = row ? row.querySelector('[data-col="paid-at"]') : null;
+        const actionCell = row ? row.querySelector('[data-col="action"]') : null;
+        if (data.paid_at && paidCell) {
+          const date = new Date(data.paid_at);
+          paidCell.textContent = isNaN(date.getTime())
+            ? data.paid_at
+            : date.toLocaleString('pt-BR');
+          if (actionCell) {
+            actionCell.textContent = '-';
+          }
+          if (pendenciaMessage) {
+            pendenciaMessage.textContent = 'Pagamento confirmado pelo Asaas.';
+            pendenciaMessage.className = 'charge-message success';
+          }
+        } else if (pendenciaMessage) {
+          pendenciaMessage.textContent = 'Pagamento ainda não identificado pelo Asaas.';
+          pendenciaMessage.className = 'charge-message';
+        }
+      }
+    } catch {
+      if (pendenciaMessage) {
+        pendenciaMessage.textContent = 'Falha ao checar pendência.';
+        pendenciaMessage.className = 'charge-message error';
+      }
+    } finally {
+      button.removeAttribute('disabled');
+    }
+  });
+});
+
 const mergeButtons = document.querySelectorAll('.js-merge-duplicates');
 mergeButtons.forEach((button) => {
   button.addEventListener('click', async () => {

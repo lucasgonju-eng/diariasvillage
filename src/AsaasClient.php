@@ -33,6 +33,17 @@ class AsaasClient
         return $this->http->request('POST', $this->baseUrl . '/customers/' . $customerId, $this->headers(), $payload);
     }
 
+    public function getPayment(string $paymentId): array
+    {
+        return $this->http->request('GET', $this->baseUrl . '/payments/' . $paymentId, $this->headers());
+    }
+
+    public function findPaymentByInvoiceUrl(string $invoiceUrl): array
+    {
+        $url = $this->baseUrl . '/payments?invoiceUrl=' . urlencode($invoiceUrl);
+        return $this->http->request('GET', $url, $this->headers());
+    }
+
     private function headers(): array
     {
         return [

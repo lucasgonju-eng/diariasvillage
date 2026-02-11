@@ -369,6 +369,7 @@ if ($guardians) {
       <section id="tab-pendencias" class="hidden">
         <h2>Pendências de cadastro</h2>
         <p class="muted">Solicitações registradas para ajuste manual no cadastro.</p>
+        <div id="pendencia-message" class="charge-message"></div>
 
         <div style="overflow-x:auto;">
           <table class="admin-table">
@@ -380,12 +381,13 @@ if ($guardians) {
                 <th>E-mail</th>
                 <th>Registrado em</th>
                 <th>Pago em</th>
+                <th>Ações</th>
               </tr>
             </thead>
             <tbody>
               <?php if (empty($pendencias)): ?>
                 <tr>
-                  <td colspan="6">Nenhuma pendência registrada.</td>
+                  <td colspan="7">Nenhuma pendência registrada.</td>
                 </tr>
               <?php else: ?>
                 <?php foreach ($pendencias as $pendencia): ?>
@@ -399,7 +401,20 @@ if ($guardians) {
                     <td><?php echo htmlspecialchars($pendencia['guardian_cpf'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo htmlspecialchars($pendencia['guardian_email'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo $created; ?></td>
-                    <td><?php echo $paidAt; ?></td>
+                    <td data-col="paid-at"><?php echo $paidAt; ?></td>
+                    <td data-col="action">
+                      <?php if (!empty($pendencia['paid_at'])): ?>
+                        -
+                      <?php else: ?>
+                        <button
+                          class="btn btn-ghost btn-sm js-check-pendencia"
+                          type="button"
+                          data-id="<?php echo htmlspecialchars($pendencia['id'], ENT_QUOTES, 'UTF-8'); ?>"
+                        >
+                          Checar de novo
+                        </button>
+                      <?php endif; ?>
+                    </td>
                   </tr>
                 <?php endforeach; ?>
               <?php endif; ?>
@@ -520,6 +535,6 @@ if ($guardians) {
     <div class="footer">Desenvolvido por Lucas Gonçalves Junior - 2026</div>
   </div>
 
-  <script src="/assets/js/admin-dashboard.js?v=12"></script>
+  <script src="/assets/js/admin-dashboard.js?v=13"></script>
 </body>
 </html>
