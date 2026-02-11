@@ -35,43 +35,77 @@ if (form) {
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     message.textContent = '';
-    const payload = {
-      cpf: document.querySelector('#cpf').value.trim(),
-      email: document.querySelector('#email').value.trim(),
-      password: document.querySelector('#password').value,
-      password_confirm: document.querySelector('#password-confirm').value,
-    };
-
-    const res = await fetch('/api/register-primeiro-acesso.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    const data = await res.json();
-    if (!data.ok) {
-      message.textContent = data.error || 'Não foi possível cadastrar. Tente novamente.';
-      message.className = 'error';
-      if (
-        data.error &&
-        (data.error.toLowerCase().includes('não encontrado') ||
-          data.error.toLowerCase().includes('nao encontrado'))
-      ) {
-        if (pendingForm && openPendingButton) {
-          pendingForm.style.display = 'block';
-          openPendingButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          const pendingCpf = document.querySelector('#pending-cpf');
-          if (pendingCpf && cpfInput && !pendingCpf.value) {
-            pendingCpf.value = cpfInput.value.trim();
-          }
-        }
-      }
-      return;
+    message.className = '';
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const btnOriginalText = submitBtn ? submitBtn.textContent : '';
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Criando...';
     }
 
-    message.textContent = 'Conta criada! Você receberá um e-mail de validação (confirmação). Confira sua caixa de entrada e a pasta de spam.';
-    message.className = 'success';
-    form.reset();
+    try {
+      const payload = {
+        cpf: document.querySelector('#cpf').value.trim(),
+        email: document.querySelector('#email').value.trim(),
+        password: document.querySelector('#password').value,
+        password_confirm: document.querySelector('#password-confirm').value,
+      };
+
+      const res = await fetch('/api/register-primeiro-acesso.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const text = await res.text();
+      let data = {};
+      try {
+        data = JSON.parse(text);
+      } catch (_) {
+        message.textContent = 'Resposta inválida do servidor. Verifique o console (F12) para detalhes.';
+        message.className = 'error';
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = btnOriginalText;
+        }
+        return;
+      }
+
+      if (!data.ok) {
+        message.textContent = data.error || 'Não foi possível cadastrar. Tente novamente.';
+        message.className = 'error';
+        if (
+          data.error &&
+          (data.error.toLowerCase().includes('não encontrado') ||
+            data.error.toLowerCase().includes('nao encontrado'))
+        ) {
+          if (pendingForm && openPendingButton) {
+            pendingForm.style.display = 'block';
+            openPendingButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            const pendingCpf = document.querySelector('#pending-cpf');
+            if (pendingCpf && cpfInput && !pendingCpf.value) {
+              pendingCpf.value = cpfInput.value.trim();
+            }
+          }
+        }
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = btnOriginalText;
+        }
+        return;
+      }
+
+      message.textContent = 'Conta criada! Você receberá um e-mail de validação (confirmação). Confira sua caixa de entrada e a pasta de spam.';
+      message.className = 'success';
+      form.reset();
+    } catch (err) {
+      message.textContent = 'Erro ao enviar: ' + (err.message || 'Tente novamente.');
+      message.className = 'error';
+    }
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = btnOriginalText;
+    }
   });
 }
 

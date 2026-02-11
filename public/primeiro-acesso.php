@@ -72,7 +72,7 @@ require_once __DIR__ . '/src/Bootstrap.php';
             </div>
 
             <button class="btn btn-primary btn-block" type="submit">Criar conta</button>
-            <div id="form-message"></div>
+            <div id="form-message" style="margin-top:12px;min-height:24px;font-size:14px;font-weight:600;"></div>
           </form>
 
           <div class="small" style="margin-top:12px;">
