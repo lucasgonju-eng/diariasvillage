@@ -33,8 +33,8 @@ require_once __DIR__ . '/src/Bootstrap.php';
           <div class="pill">Primeiro acesso</div>
           <h1>Ative o acesso em poucos minutos.</h1>
           <p class="lead">
-            Informe o CPF do responsável e crie uma senha. O sistema buscará seu cadastro
-            e enviará um e-mail de validação para confirmar.
+            Informe o CPF do responsável, seu e-mail e crie uma senha. O sistema validará
+            o CPF e enviará um e-mail de confirmação.
           </p>
 
           <div class="microchips" role="list">
@@ -46,13 +46,18 @@ require_once __DIR__ . '/src/Bootstrap.php';
 
         <aside class="hero-card" aria-label="Cadastro do responsável">
           <h3>Cadastro do responsável</h3>
-          <p class="muted">CPF e senha. O e-mail será obtido do cadastro escolar.</p>
+          <p class="muted">CPF, e-mail e senha. O CPF deve estar no cadastro da escola.</p>
 
           <form id="register-form">
             <div class="form-group">
               <label>CPF do responsável</label>
               <input type="text" id="cpf" placeholder="000.000.000-00" inputmode="numeric" required />
               <div class="small">O CPF deve estar no cadastro da escola.</div>
+            </div>
+
+            <div class="form-group">
+              <label>E-mail do responsável</label>
+              <input type="email" id="email" placeholder="email@exemplo.com" required />
             </div>
 
             <div class="grid-2">
@@ -116,8 +121,8 @@ require_once __DIR__ . '/src/Bootstrap.php';
           <div class="step">
             <div class="step-n">1</div>
             <div>
-              <div class="step-t">Informe o CPF</div>
-              <div class="muted">O CPF do responsável no cadastro escolar.</div>
+              <div class="step-t">Informe CPF e e-mail</div>
+              <div class="muted">O CPF deve estar no cadastro da escola.</div>
             </div>
           </div>
           <div class="step">

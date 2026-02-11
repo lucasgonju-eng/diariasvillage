@@ -37,6 +37,7 @@ if (form) {
     message.textContent = '';
     const payload = {
       cpf: document.querySelector('#cpf').value.trim(),
+      email: document.querySelector('#email').value.trim(),
       password: document.querySelector('#password').value,
       password_confirm: document.querySelector('#password-confirm').value,
     };
@@ -79,8 +80,15 @@ if (openPendingButton && pendingForm) {
     pendingForm.style.display = pendingForm.style.display === 'none' ? 'block' : 'none';
     if (pendingForm.style.display === 'block') {
       const pendingCpf = document.querySelector('#pending-cpf');
+      const pendingEmail = document.querySelector('#pending-email');
       if (pendingCpf && cpfInput && !pendingCpf.value) {
         pendingCpf.value = cpfInput.value.trim();
+      }
+      if (pendingEmail) {
+        const emailEl = document.querySelector('#email');
+        if (emailEl && !pendingEmail.value) {
+          pendingEmail.value = emailEl.value.trim();
+        }
       }
       const pendingGuardian = document.querySelector('#pending-guardian');
       if (pendingGuardian && !pendingGuardian.value) {

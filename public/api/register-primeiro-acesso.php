@@ -11,11 +11,16 @@ Helpers::requirePost();
 $payload = json_decode(file_get_contents('php://input'), true);
 
 $cpf = trim($payload['cpf'] ?? '');
+$email = trim($payload['email'] ?? '');
 $password = $payload['password'] ?? '';
 $passwordConfirm = $payload['password_confirm'] ?? '';
 
-if ($cpf === '' || $password === '') {
-    Helpers::json(['ok' => false, 'error' => 'Preencha CPF e senha.'], 422);
+if ($cpf === '' || $email === '' || $password === '') {
+    Helpers::json(['ok' => false, 'error' => 'Preencha CPF, e-mail e senha.'], 422);
+}
+
+if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    Helpers::json(['ok' => false, 'error' => 'E-mail inválido.'], 422);
 }
 
 if ($password !== $passwordConfirm) {
@@ -38,10 +43,8 @@ if (!$guardianResult['ok'] || empty($guardianResult['data'])) {
 }
 
 $guardian = $guardianResult['data'][0];
-$email = trim($guardian['email'] ?? '');
-if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-    Helpers::json(['ok' => false, 'error' => 'E-mail inválido no cadastro. Entre em contato com a secretaria.'], 422);
-}
+$guardianId = $guardian['id'] ?? null;
+$guardianName = $guardian['parent_name'] ?? 'Responsável';
 
 $auth = new SupabaseAuth(new HttpClient());
 $signUpResult = $auth->signUp($email, $password, [
@@ -56,12 +59,14 @@ if (!$signUpResult['ok']) {
         $errorMsg = $data['msg'];
     }
     if (stripos($errorMsg, 'already') !== false || stripos($errorMsg, 'registered') !== false) {
-        Helpers::json(['ok' => false, 'error' => 'Este CPF já possui cadastro. Use "Já tem cadastro?" para entrar.'], 409);
+        Helpers::json(['ok' => false, 'error' => 'Este e-mail já está cadastrado. Use "Já tem cadastro?" para entrar.'], 409);
     }
     Helpers::json(['ok' => false, 'error' => $errorMsg ?: 'Falha ao criar conta. Tente novamente.'], 500);
 }
 
-$guardianName = $guardian['parent_name'] ?? 'Responsável';
+if ($guardianId) {
+    $client->update('guardians', 'id=eq.' . urlencode($guardianId), ['email' => $email]);
+}
 
 $template = <<<'HTML'
 <!doctype html>
