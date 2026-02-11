@@ -445,7 +445,7 @@ if (pendenciaCpfButton && pendenciaCpfInput) {
 
 if (pendenciaAsaasButton && pendenciaAsaasInput) {
   pendenciaAsaasInput.addEventListener('input', (event) => {
-    event.target.value = event.target.value.trim().slice(0, 64);
+    event.target.value = event.target.value.trim().slice(0, 120);
   });
   pendenciaAsaasButton.addEventListener('click', async () => {
     const asaasId = (pendenciaAsaasInput.value || '').trim();
