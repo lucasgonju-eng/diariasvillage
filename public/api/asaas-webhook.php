@@ -57,6 +57,19 @@ $client = new SupabaseClient(new HttpClient());
 $paymentResult = $client->select('payments', 'select=*&asaas_payment_id=eq.' . urlencode($payment['id']));
 
 if (!$paymentResult['ok'] || empty($paymentResult['data'])) {
+    $pendenciaResult = $client->select(
+        'pendencia_de_cadastro',
+        'select=id,paid_at&asaas_payment_id=eq.' . urlencode($payment['id'])
+    );
+    if ($pendenciaResult['ok'] && !empty($pendenciaResult['data'])) {
+        $pendenciaRow = $pendenciaResult['data'][0];
+        if (empty($pendenciaRow['paid_at'])) {
+            $client->update('pendencia_de_cadastro', 'id=eq.' . $pendenciaRow['id'], [
+                'paid_at' => date('c'),
+            ]);
+        }
+        Helpers::json(['ok' => true]);
+    }
     Helpers::json(['ok' => false, 'error' => 'Pagamento não encontrado.'], 404);
 }
 

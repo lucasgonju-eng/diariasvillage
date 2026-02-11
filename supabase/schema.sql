@@ -54,6 +54,7 @@ create table if not exists pendencia_de_cadastro (
   guardian_cpf text not null,
   guardian_email text,
   verified_at timestamptz,
+  paid_at timestamptz,
   asaas_payment_id text,
   asaas_invoice_url text,
   created_at timestamptz not null default now()

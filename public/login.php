@@ -91,6 +91,7 @@ require_once __DIR__ . '/src/Bootstrap.php';
   <footer class="footer">
     <div class="container">
       Desenvolvido por Lucas Gonçalves Junior - 2026
+      <a class="tinyLink" href="/admin/" aria-label="Acesso administrativo">Admin</a>
     </div>
   </footer>
   <script src="/assets/js/login.js?v=2"></script>

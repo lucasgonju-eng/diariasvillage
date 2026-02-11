@@ -37,7 +37,7 @@ $missingWhatsapp = $missingWhatsappResult['data'] ?? [];
 
 $pendenciasResult = $client->select(
     'pendencia_de_cadastro',
-    'select=id,student_name,guardian_name,guardian_cpf,guardian_email,created_at&order=created_at.desc&limit=500'
+    'select=id,student_name,guardian_name,guardian_cpf,guardian_email,created_at,paid_at&order=created_at.desc&limit=500'
 );
 $pendencias = $pendenciasResult['data'] ?? [];
 
@@ -379,22 +379,27 @@ if ($guardians) {
                 <th>CPF</th>
                 <th>E-mail</th>
                 <th>Registrado em</th>
+                <th>Pago em</th>
               </tr>
             </thead>
             <tbody>
               <?php if (empty($pendencias)): ?>
                 <tr>
-                  <td colspan="5">Nenhuma pendência registrada.</td>
+                  <td colspan="6">Nenhuma pendência registrada.</td>
                 </tr>
               <?php else: ?>
                 <?php foreach ($pendencias as $pendencia): ?>
-                  <?php $created = $pendencia['created_at'] ? date('d/m/Y H:i', strtotime($pendencia['created_at'])) : '-'; ?>
+                  <?php
+                    $created = $pendencia['created_at'] ? date('d/m/Y H:i', strtotime($pendencia['created_at'])) : '-';
+                    $paidAt = $pendencia['paid_at'] ? date('d/m/Y H:i', strtotime($pendencia['paid_at'])) : '-';
+                  ?>
                   <tr>
                     <td><?php echo htmlspecialchars($pendencia['student_name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo htmlspecialchars($pendencia['guardian_name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo htmlspecialchars($pendencia['guardian_cpf'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo htmlspecialchars($pendencia['guardian_email'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo $created; ?></td>
+                    <td><?php echo $paidAt; ?></td>
                   </tr>
                 <?php endforeach; ?>
               <?php endif; ?>

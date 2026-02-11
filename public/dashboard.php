@@ -120,6 +120,7 @@ $minDate = $hour >= 16 ? date('Y-m-d', strtotime('+1 day')) : $today;
   <footer class="footer">
     <div class="container">
       Desenvolvido por Lucas Gonçalves Junior - 2026
+      <a class="tinyLink" href="/admin/" aria-label="Acesso administrativo">Admin</a>
     </div>
   </footer>
 
