@@ -384,6 +384,13 @@ if ($guardians) {
           <div class="form-group" style="display:flex;align-items:flex-end;">
             <button id="check-pendencia-cpf" class="btn btn-danger btn-sm" type="button">Checar por CPF</button>
           </div>
+          <div class="form-group">
+            <label>Cobrança Asaas</label>
+            <input id="pendencia-asaas-id" type="text" placeholder="Ex: 742559970" inputmode="numeric" />
+          </div>
+          <div class="form-group" style="display:flex;align-items:flex-end;">
+            <button id="check-pendencia-asaas" class="btn btn-danger btn-sm" type="button">Checar por cobrança</button>
+          </div>
         </div>
         <div id="pendencia-message" class="charge-message"></div>
 
@@ -553,6 +560,6 @@ if ($guardians) {
     <div class="footer">Desenvolvido por Lucas Gonçalves Junior - 2026</div>
   </div>
 
-  <script src="/assets/js/admin-dashboard.js?v=15"></script>
+  <script src="/assets/js/admin-dashboard.js?v=16"></script>
 </body>
 </html>

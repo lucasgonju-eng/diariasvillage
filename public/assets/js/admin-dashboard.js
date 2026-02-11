@@ -290,6 +290,8 @@ const pendenciaMessage = document.querySelector('#pendencia-message');
 const pendenciaButtons = document.querySelectorAll('.js-check-pendencia');
 const pendenciaCpfInput = document.querySelector('#pendencia-cpf');
 const pendenciaCpfButton = document.querySelector('#check-pendencia-cpf');
+const pendenciaAsaasInput = document.querySelector('#pendencia-asaas-id');
+const pendenciaAsaasButton = document.querySelector('#check-pendencia-asaas');
 
 function normalizeCpf(value) {
   return value.replace(/\D/g, '').slice(0, 11);
@@ -429,6 +431,76 @@ if (pendenciaCpfButton && pendenciaCpfInput) {
       }
     } finally {
       pendenciaCpfButton.removeAttribute('disabled');
+    }
+  });
+}
+
+if (pendenciaAsaasButton && pendenciaAsaasInput) {
+  pendenciaAsaasInput.addEventListener('input', (event) => {
+    event.target.value = event.target.value.replace(/\D/g, '').slice(0, 20);
+  });
+  pendenciaAsaasButton.addEventListener('click', async () => {
+    const asaasId = (pendenciaAsaasInput.value || '').replace(/\D/g, '');
+    if (!asaasId) {
+      if (pendenciaMessage) {
+        pendenciaMessage.textContent = 'Informe o número da cobrança Asaas.';
+        pendenciaMessage.className = 'charge-message error';
+      }
+      return;
+    }
+
+    pendenciaAsaasButton.setAttribute('disabled', 'disabled');
+    if (pendenciaMessage) {
+      pendenciaMessage.textContent = 'Checando pagamento...';
+      pendenciaMessage.className = 'charge-message';
+    }
+
+    try {
+      const res = await fetch('/api/admin-check-pendencia-by-asaas.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ asaas_id: asaasId }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        if (pendenciaMessage) {
+          pendenciaMessage.textContent = data.error || 'Falha ao checar pendência.';
+          pendenciaMessage.className = 'charge-message error';
+        }
+        return;
+      }
+
+      const row = findPendenciaRow(data.pendencia_id);
+      const paidCell = row ? row.querySelector('[data-col="paid-at"]') : null;
+      const statusCell = row ? row.querySelector('[data-col="asaas-status"]') : null;
+      const actionCell = row ? row.querySelector('[data-col="action"]') : null;
+      if (statusCell) statusCell.textContent = data.status || '-';
+      if (data.paid_at && paidCell) {
+        const date = new Date(data.paid_at);
+        paidCell.textContent = isNaN(date.getTime())
+          ? data.paid_at
+          : date.toLocaleString('pt-BR');
+        if (actionCell) actionCell.textContent = '-';
+        if (pendenciaMessage) {
+          pendenciaMessage.textContent = 'Pagamento confirmado pelo Asaas.';
+          pendenciaMessage.className = 'charge-message success';
+        }
+        return;
+      }
+      if (pendenciaMessage) {
+        pendenciaMessage.textContent =
+          data.status === 'NOT_FOUND'
+            ? 'Pagamento não encontrado no Asaas.'
+            : 'Pagamento ainda não identificado pelo Asaas.';
+        pendenciaMessage.className = 'charge-message';
+      }
+    } catch {
+      if (pendenciaMessage) {
+        pendenciaMessage.textContent = 'Falha ao checar pendência.';
+        pendenciaMessage.className = 'charge-message error';
+      }
+    } finally {
+      pendenciaAsaasButton.removeAttribute('disabled');
     }
   });
 }
