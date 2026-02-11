@@ -186,6 +186,7 @@ if ($guardians) {
         <button class="btn btn-primary btn-sm" type="button" data-tab="sem-whatsapp">Sem WhatsApp</button>
         <button class="btn btn-primary btn-sm" type="button" data-tab="pendencias">Pendências</button>
         <button class="btn btn-primary btn-sm" type="button" data-tab="duplicados">Duplicados</button>
+        <button class="btn btn-primary btn-sm" type="button" data-tab="reset-senha">Resetar senha</button>
         <button class="btn btn-primary btn-sm" type="button" data-tab="entries">Entradas confirmadas</button>
       </div>
 
@@ -611,11 +612,35 @@ if ($guardians) {
         <?php endif; ?>
         <div class="charge-message" id="merge-message"></div>
       </section>
+
+      <section id="tab-reset-senha" class="hidden">
+        <h2>Resetar senha do usuário</h2>
+        <p class="muted">Busque o usuário pelo CPF e defina uma nova senha. Use para recuperação quando o responsável esquecer a senha.</p>
+
+        <div class="charge-fields" style="margin-bottom:12px;">
+          <div class="form-group">
+            <label>CPF do responsável</label>
+            <input id="reset-cpf" type="text" placeholder="Digite o CPF (apenas números)" inputmode="numeric" maxlength="14" />
+          </div>
+          <div class="form-group">
+            <label>Nova senha</label>
+            <input id="reset-senha-nova" type="password" placeholder="Mínimo 6 caracteres" minlength="6" autocomplete="new-password" />
+          </div>
+          <div class="form-group">
+            <label>Confirmar nova senha</label>
+            <input id="reset-senha-confirm" type="password" placeholder="Repita a nova senha" minlength="6" autocomplete="new-password" />
+          </div>
+          <div class="form-group" style="display:flex;align-items:flex-end;">
+            <button id="reset-senha-btn" class="btn btn-danger btn-sm" type="button">Resetar senha</button>
+          </div>
+        </div>
+        <div id="reset-senha-message" class="charge-message"></div>
+      </section>
     </div>
 
     <div class="footer">Desenvolvido por Lucas Gonçalves Junior - 2026</div>
   </div>
 
-  <script src="/assets/js/admin-dashboard.js?v=20"></script>
+  <script src="/assets/js/admin-dashboard.js?v=21"></script>
 </body>
 </html>

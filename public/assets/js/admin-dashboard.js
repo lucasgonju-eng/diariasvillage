@@ -6,6 +6,7 @@ const tabRecebidas = document.querySelector('#tab-recebidas');
 const tabSemWhatsapp = document.querySelector('#tab-sem-whatsapp');
 const tabDuplicados = document.querySelector('#tab-duplicados');
 const tabPendencias = document.querySelector('#tab-pendencias');
+const tabResetSenha = document.querySelector('#tab-reset-senha');
 const studentInput = document.querySelector('#charge-student');
 const studentList = document.querySelector('#students-list');
 const chargeList = document.querySelector('#charge-list');
@@ -35,6 +36,7 @@ function setActiveTab(name) {
   tabSemWhatsapp.classList.toggle('hidden', name !== 'sem-whatsapp');
   tabDuplicados.classList.toggle('hidden', name !== 'duplicados');
   tabPendencias.classList.toggle('hidden', name !== 'pendencias');
+  if (tabResetSenha) tabResetSenha.classList.toggle('hidden', name !== 'reset-senha');
   tabs.forEach((btn) => {
     const isActive = btn.dataset.tab === name;
     btn.classList.toggle('btn-primary', isActive);
@@ -654,6 +656,82 @@ mergeButtons.forEach((button) => {
     }
   });
 });
+
+const resetCpfInput = document.querySelector('#reset-cpf');
+const resetSenhaNovaInput = document.querySelector('#reset-senha-nova');
+const resetSenhaConfirmInput = document.querySelector('#reset-senha-confirm');
+const resetSenhaBtn = document.querySelector('#reset-senha-btn');
+const resetSenhaMessage = document.querySelector('#reset-senha-message');
+
+if (resetSenhaBtn && resetCpfInput && resetSenhaNovaInput && resetSenhaConfirmInput) {
+  resetCpfInput.addEventListener('input', (event) => {
+    event.target.value = normalizeCpf(event.target.value);
+  });
+  resetSenhaBtn.addEventListener('click', async () => {
+    const cpf = normalizeCpf(resetCpfInput.value || '');
+    const novaSenha = (resetSenhaNovaInput.value || '').trim();
+    const confirmSenha = (resetSenhaConfirmInput.value || '').trim();
+
+    if (cpf.length !== 11) {
+      if (resetSenhaMessage) {
+        resetSenhaMessage.textContent = 'Informe um CPF válido (11 dígitos).';
+        resetSenhaMessage.className = 'charge-message error';
+      }
+      return;
+    }
+    if (novaSenha.length < 6) {
+      if (resetSenhaMessage) {
+        resetSenhaMessage.textContent = 'A nova senha deve ter pelo menos 6 caracteres.';
+        resetSenhaMessage.className = 'charge-message error';
+      }
+      return;
+    }
+    if (novaSenha !== confirmSenha) {
+      if (resetSenhaMessage) {
+        resetSenhaMessage.textContent = 'As senhas não conferem.';
+        resetSenhaMessage.className = 'charge-message error';
+      }
+      return;
+    }
+
+    resetSenhaBtn.setAttribute('disabled', 'disabled');
+    if (resetSenhaMessage) {
+      resetSenhaMessage.textContent = 'Alterando senha...';
+      resetSenhaMessage.className = 'charge-message';
+    }
+
+    try {
+      const res = await fetch('/api/admin-reset-password.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cpf, nova_senha: novaSenha }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        if (resetSenhaMessage) {
+          resetSenhaMessage.textContent = data.error || 'Falha ao resetar senha.';
+          resetSenhaMessage.className = 'charge-message error';
+        }
+      } else {
+        if (resetSenhaMessage) {
+          const name = data.guardian_name ? ` (${data.guardian_name})` : '';
+          resetSenhaMessage.textContent = data.message + name;
+          resetSenhaMessage.className = 'charge-message success';
+        }
+        resetCpfInput.value = '';
+        resetSenhaNovaInput.value = '';
+        resetSenhaConfirmInput.value = '';
+      }
+    } catch {
+      if (resetSenhaMessage) {
+        resetSenhaMessage.textContent = 'Falha ao resetar senha.';
+        resetSenhaMessage.className = 'charge-message error';
+      }
+    } finally {
+      resetSenhaBtn.removeAttribute('disabled');
+    }
+  });
+}
 
 setActiveTab('charges');
 loadStudents();
