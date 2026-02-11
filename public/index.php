@@ -58,10 +58,83 @@ $timeHint = 'Após 16h, só é possível comprar para uma data futura.';
     .modal h4{margin:6px 0 10px}
     .modal ul{margin:0;padding-left:18px;color:var(--muted);font-size:13px;line-height:1.55}
     .modal .closeRow{display:flex;justify-content:flex-end;margin-top:12px}
+    /* Popup primeiro acesso */
+    .popup-inicio{
+      position:fixed;
+      inset:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:rgba(0,0,0,.5);
+      padding:20px;
+      z-index:50;
+    }
+    .popup-inicio.hidden{display:none}
+    .popup-inicio .popup-card{
+      background:#fff;
+      color:#1a2133;
+      border-radius:20px;
+      padding:32px;
+      max-width:420px;
+      width:100%;
+      text-align:center;
+      box-shadow:0 24px 60px rgba(0,0,0,.25);
+      border:1px solid var(--line);
+    }
+    .popup-inicio .popup-card h3{
+      margin:0 0 20px;
+      font-size:22px;
+      font-weight:800;
+    }
+    .popup-inicio .popup-options{
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+      margin-top:24px;
+    }
+    .popup-inicio .popup-options a{
+      display:block;
+      padding:16px 24px;
+      border-radius:14px;
+      font-weight:700;
+      font-size:16px;
+      transition:transform .15s, box-shadow .15s;
+    }
+    .popup-inicio .popup-options a:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.12)}
+    .popup-inicio .popup-options .btn-primeiro{
+      background:linear-gradient(135deg, var(--gold), var(--gold-2));
+      color:#0B1020;
+      border:none;
+    }
+    .popup-inicio .popup-options .btn-ja-cadastro{
+      background:#E8F0FF;
+      color:#0A1B4D;
+      border:2px solid #BFD0EE;
+    }
+    .popup-inicio .popup-fechar{
+      margin-top:16px;
+      font-size:13px;
+      color:var(--muted);
+      cursor:pointer;
+      background:none;
+      border:none;
+    }
   </style>
 </head>
 
 <body>
+  <div class="popup-inicio" id="popupInicio" role="dialog" aria-modal="true" aria-labelledby="popupInicioTitle">
+    <div class="popup-card">
+      <h3 id="popupInicioTitle">Como deseja continuar?</h3>
+      <p class="muted">Escolha uma opção para começar.</p>
+      <div class="popup-options">
+        <a href="/primeiro-acesso.php" class="btn-primeiro">É seu primeiro acesso?</a>
+        <a href="/login.php" class="btn-ja-cadastro">Já tem cadastro?</a>
+      </div>
+      <button type="button" class="popup-fechar" onclick="fecharPopupInicio()">Continuar navegando</button>
+    </div>
+  </div>
+
   <header class="hero" id="top">
     <div class="container">
 
@@ -260,6 +333,12 @@ $timeHint = 'Após 16h, só é possível comprar para uma data futura.';
   </div>
 
   <script>
+    function fecharPopupInicio(){
+      document.getElementById('popupInicio').classList.add('hidden');
+    }
+    document.getElementById('popupInicio').addEventListener('click', function(e){
+      if(e.target.id === 'popupInicio') fecharPopupInicio();
+    });
     function openRules(){ document.getElementById('rulesBg').style.display='block'; }
     function closeRules(){ document.getElementById('rulesBg').style.display='none'; }
     document.getElementById('rulesBg').addEventListener('click', function(e){
