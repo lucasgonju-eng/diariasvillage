@@ -4,7 +4,6 @@ require_once __DIR__ . '/../src/Bootstrap.php';
 use App\Helpers;
 use App\HttpClient;
 use App\Mailer;
-use App\SupabaseAuth;
 use App\SupabaseClient;
 
 Helpers::requirePost();
@@ -43,29 +42,43 @@ if (!$guardianResult['ok'] || empty($guardianResult['data'])) {
 }
 
 $guardian = $guardianResult['data'][0];
-$guardianId = $guardian['id'] ?? null;
 $guardianName = $guardian['parent_name'] ?? 'Responsável';
 
-$auth = new SupabaseAuth(new HttpClient());
-$createResult = $auth->createUser($email, $password, [
-    'user_metadata' => ['cpf' => $cpfDigits],
-]);
-
-if (!$createResult['ok']) {
-    $data = $createResult['data'] ?? [];
-    $errorMsg = $createResult['error'] ?? '';
-    if (is_array($data)) {
-        $errorMsg = $data['msg'] ?? $data['message'] ?? $data['error_description'] ?? $errorMsg;
+// Verifica se o e-mail já está em uso por outro responsável (CPF diferente)
+$emailCheck = $client->select(
+    'guardians',
+    'select=parent_document&email=eq.' . urlencode($email)
+);
+if ($emailCheck['ok'] && !empty($emailCheck['data'])) {
+    $whoHas = $emailCheck['data'][0]['parent_document'] ?? '';
+    if ($whoHas !== $cpfDigits) {
+        Helpers::json(['ok' => false, 'error' => 'Este e-mail já está cadastrado. Use "Já tem cadastro?" para entrar.'], 409);
     }
-    $errLower = strtolower($errorMsg);
-    if (strpos($errLower, 'already') !== false || strpos($errLower, 'registered') !== false || strpos($errLower, 'exists') !== false) {
+}
+
+// Cadastro apenas na tabela guardians (sem Supabase Auth) – só e-mail do SaaS
+$passwordHash = password_hash($password, PASSWORD_DEFAULT);
+$verifiedAt = date('c');
+$updateResult = $client->update(
+    'guardians',
+    'parent_document=eq.' . urlencode($cpfDigits),
+    [
+        'email' => $email,
+        'password_hash' => $passwordHash,
+        'verified_at' => $verifiedAt,
+    ]
+);
+
+if (!$updateResult['ok']) {
+    $data = $updateResult['data'] ?? [];
+    $errorMsg = $updateResult['error'] ?? '';
+    if (is_array($data)) {
+        $errorMsg = $data['message'] ?? $data['details'] ?? $errorMsg;
+    }
+    if (stripos((string) $errorMsg, 'unique') !== false || stripos((string) $errorMsg, 'duplicate') !== false) {
         Helpers::json(['ok' => false, 'error' => 'Este e-mail já está cadastrado. Use "Já tem cadastro?" para entrar.'], 409);
     }
     Helpers::json(['ok' => false, 'error' => $errorMsg ?: 'Falha ao criar conta. Tente novamente.'], 500);
-}
-
-if ($guardianId) {
-    $client->update('guardians', 'id=eq.' . urlencode($guardianId), ['email' => $email]);
 }
 
 $template = <<<'HTML'
