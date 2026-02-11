@@ -288,6 +288,17 @@ if (sendChargesButton) {
 const mergeMessage = document.querySelector('#merge-message');
 const pendenciaMessage = document.querySelector('#pendencia-message');
 const pendenciaButtons = document.querySelectorAll('.js-check-pendencia');
+const pendenciaCpfInput = document.querySelector('#pendencia-cpf');
+const pendenciaCpfButton = document.querySelector('#check-pendencia-cpf');
+
+function normalizeCpf(value) {
+  return value.replace(/\D/g, '').slice(0, 11);
+}
+
+function findPendenciaRow(id) {
+  if (!id) return null;
+  return document.querySelector(`[data-pendencia-id="${id}"]`);
+}
 
 pendenciaButtons.forEach((button) => {
   button.addEventListener('click', async () => {
@@ -351,6 +362,76 @@ pendenciaButtons.forEach((button) => {
     }
   });
 });
+
+if (pendenciaCpfButton && pendenciaCpfInput) {
+  pendenciaCpfInput.addEventListener('input', (event) => {
+    event.target.value = normalizeCpf(event.target.value);
+  });
+  pendenciaCpfButton.addEventListener('click', async () => {
+    const cpf = normalizeCpf(pendenciaCpfInput.value || '');
+    if (cpf.length !== 11) {
+      if (pendenciaMessage) {
+        pendenciaMessage.textContent = 'CPF inválido.';
+        pendenciaMessage.className = 'charge-message error';
+      }
+      return;
+    }
+
+    pendenciaCpfButton.setAttribute('disabled', 'disabled');
+    if (pendenciaMessage) {
+      pendenciaMessage.textContent = 'Checando pagamento...';
+      pendenciaMessage.className = 'charge-message';
+    }
+
+    try {
+      const res = await fetch('/api/admin-check-pendencia-by-cpf.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cpf }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        if (pendenciaMessage) {
+          pendenciaMessage.textContent = data.error || 'Falha ao checar pendência.';
+          pendenciaMessage.className = 'charge-message error';
+        }
+        return;
+      }
+
+      const row = findPendenciaRow(data.pendencia_id);
+      const paidCell = row ? row.querySelector('[data-col="paid-at"]') : null;
+      const statusCell = row ? row.querySelector('[data-col="asaas-status"]') : null;
+      const actionCell = row ? row.querySelector('[data-col="action"]') : null;
+      if (statusCell) statusCell.textContent = data.status || '-';
+      if (data.paid_at && paidCell) {
+        const date = new Date(data.paid_at);
+        paidCell.textContent = isNaN(date.getTime())
+          ? data.paid_at
+          : date.toLocaleString('pt-BR');
+        if (actionCell) actionCell.textContent = '-';
+        if (pendenciaMessage) {
+          pendenciaMessage.textContent = 'Pagamento confirmado pelo Asaas.';
+          pendenciaMessage.className = 'charge-message success';
+        }
+        return;
+      }
+      if (pendenciaMessage) {
+        pendenciaMessage.textContent =
+          data.status === 'NOT_FOUND'
+            ? 'Pagamento não encontrado no Asaas.'
+            : 'Pagamento ainda não identificado pelo Asaas.';
+        pendenciaMessage.className = 'charge-message';
+      }
+    } catch {
+      if (pendenciaMessage) {
+        pendenciaMessage.textContent = 'Falha ao checar pendência.';
+        pendenciaMessage.className = 'charge-message error';
+      }
+    } finally {
+      pendenciaCpfButton.removeAttribute('disabled');
+    }
+  });
+}
 
 const mergeButtons = document.querySelectorAll('.js-merge-duplicates');
 mergeButtons.forEach((button) => {

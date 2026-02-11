@@ -376,6 +376,15 @@ if ($guardians) {
       <section id="tab-pendencias" class="hidden">
         <h2>Pendências de cadastro</h2>
         <p class="muted">Solicitações registradas para ajuste manual no cadastro.</p>
+        <div class="charge-fields" style="margin-bottom:12px;">
+          <div class="form-group">
+            <label>CPF para rechecagem</label>
+            <input id="pendencia-cpf" type="text" placeholder="Digite o CPF" inputmode="numeric" />
+          </div>
+          <div class="form-group" style="display:flex;align-items:flex-end;">
+            <button id="check-pendencia-cpf" class="btn btn-danger btn-sm" type="button">Checar por CPF</button>
+          </div>
+        </div>
         <div id="pendencia-message" class="charge-message"></div>
 
         <div style="overflow-x:auto;">
@@ -403,7 +412,7 @@ if ($guardians) {
                     $created = $pendencia['created_at'] ? date('d/m/Y H:i', strtotime($pendencia['created_at'])) : '-';
                     $paidAt = $pendencia['paid_at'] ? date('d/m/Y H:i', strtotime($pendencia['paid_at'])) : '-';
                   ?>
-                  <tr>
+                  <tr data-pendencia-id="<?php echo htmlspecialchars($pendencia['id'], ENT_QUOTES, 'UTF-8'); ?>">
                     <td><?php echo htmlspecialchars($pendencia['student_name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo htmlspecialchars($pendencia['guardian_name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo htmlspecialchars($pendencia['guardian_cpf'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
@@ -544,6 +553,6 @@ if ($guardians) {
     <div class="footer">Desenvolvido por Lucas Gonçalves Junior - 2026</div>
   </div>
 
-  <script src="/assets/js/admin-dashboard.js?v=14"></script>
+  <script src="/assets/js/admin-dashboard.js?v=15"></script>
 </body>
 </html>
