@@ -293,6 +293,7 @@ const pendenciaCpfButton = document.querySelector('#check-pendencia-cpf');
 const pendenciaAsaasInput = document.querySelector('#pendencia-asaas-id');
 const pendenciaAsaasButton = document.querySelector('#check-pendencia-asaas');
 const pendenciaLinkButtons = document.querySelectorAll('.js-link-asaas');
+const pendenciaSettleButtons = document.querySelectorAll('.js-settle-pendencia');
 
 function normalizeCpf(value) {
   return value.replace(/\D/g, '').slice(0, 11);
@@ -555,6 +556,49 @@ pendenciaLinkButtons.forEach((button) => {
     } catch {
       if (pendenciaMessage) {
         pendenciaMessage.textContent = 'Falha ao vincular pendência.';
+        pendenciaMessage.className = 'charge-message error';
+      }
+    } finally {
+      button.removeAttribute('disabled');
+    }
+  });
+});
+
+pendenciaSettleButtons.forEach((button) => {
+  button.addEventListener('click', async () => {
+    const pendenciaId = button.dataset.id;
+    if (!pendenciaId) return;
+    if (!confirm('Confirmar baixa manual desta pendência?')) return;
+
+    button.setAttribute('disabled', 'disabled');
+    if (pendenciaMessage) {
+      pendenciaMessage.textContent = 'Dando baixa...';
+      pendenciaMessage.className = 'charge-message';
+    }
+
+    try {
+      const res = await fetch('/api/admin-settle-pendencia.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: pendenciaId }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        if (pendenciaMessage) {
+          pendenciaMessage.textContent = data.error || 'Falha ao dar baixa.';
+          pendenciaMessage.className = 'charge-message error';
+        }
+        return;
+      }
+      const row = findPendenciaRow(pendenciaId);
+      updatePendenciaRow(row, { paid_at: data.paid_at, status: 'BAIXA_MANUAL' });
+      if (pendenciaMessage) {
+        pendenciaMessage.textContent = 'Baixa manual registrada.';
+        pendenciaMessage.className = 'charge-message success';
+      }
+    } catch {
+      if (pendenciaMessage) {
+        pendenciaMessage.textContent = 'Falha ao dar baixa.';
         pendenciaMessage.className = 'charge-message error';
       }
     } finally {

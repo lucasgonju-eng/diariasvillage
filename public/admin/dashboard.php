@@ -451,6 +451,13 @@ if ($guardians) {
                         >
                           Checar de novo
                         </button>
+                        <button
+                          class="btn btn-ghost btn-sm js-settle-pendencia"
+                          type="button"
+                          data-id="<?php echo htmlspecialchars($pendencia['id'], ENT_QUOTES, 'UTF-8'); ?>"
+                        >
+                          Dar baixa
+                        </button>
                       <?php endif; ?>
                     </td>
                   </tr>
@@ -573,6 +580,6 @@ if ($guardians) {
     <div class="footer">Desenvolvido por Lucas Gonçalves Junior - 2026</div>
   </div>
 
-  <script src="/assets/js/admin-dashboard.js?v=19"></script>
+  <script src="/assets/js/admin-dashboard.js?v=20"></script>
 </body>
 </html>
