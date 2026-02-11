@@ -6,7 +6,7 @@ require_once __DIR__ . '/src/Bootstrap.php';
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Primeiro acesso - Diarias Village</title>
+  <title>Primeiro acesso - Diárias Village</title>
   <meta name="description" content="Confirme o aluno, cadastre o e-mail e defina a senha para liberar o acesso." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -20,7 +20,7 @@ require_once __DIR__ . '/src/Bootstrap.php';
         <div class="brand">
           <span class="brand-mark" aria-hidden="true"></span>
           <div class="brand-text">
-            <div class="brand-title">DIARIAS VILLAGE</div>
+            <div class="brand-title">DIÁRIAS VILLAGE</div>
             <div class="brand-sub">Primeiro acesso e cadastro</div>
           </div>
         </div>
@@ -33,19 +33,19 @@ require_once __DIR__ . '/src/Bootstrap.php';
           <div class="pill">Primeiro acesso</div>
           <h1>Ative o acesso em poucos minutos.</h1>
           <p class="lead">
-            Confirme o aluno, informe o CPF e o e-mail do responsavel e defina a senha
+            Confirme o aluno, informe o CPF e o e-mail do responsável e defina a senha
             para liberar o acesso.
           </p>
 
           <div class="microchips" role="list">
             <span class="microchip" role="listitem">Dados protegidos</span>
             <span class="microchip" role="listitem">CPF como acesso</span>
-            <span class="microchip" role="listitem">Confirmacao via e-mail</span>
+            <span class="microchip" role="listitem">Confirmação via e-mail</span>
           </div>
         </div>
 
-        <aside class="hero-card" aria-label="Cadastro do responsavel">
-          <h3>Cadastro do responsavel</h3>
+        <aside class="hero-card" aria-label="Cadastro do responsável">
+          <h3>Cadastro do responsável</h3>
           <p class="muted">Complete os dados para continuar.</p>
 
           <form id="register-form">
@@ -56,12 +56,12 @@ require_once __DIR__ . '/src/Bootstrap.php';
             </div>
 
             <div class="form-group">
-              <label>CPF do responsavel</label>
+              <label>CPF do responsável</label>
               <input type="text" id="cpf" placeholder="000.000.000-00" inputmode="numeric" required />
             </div>
 
             <div class="form-group">
-              <label>E-mail do responsavel</label>
+              <label>E-mail do responsável</label>
               <input type="email" id="email" placeholder="email@exemplo.com" required />
             </div>
 
@@ -134,7 +134,7 @@ require_once __DIR__ . '/src/Bootstrap.php';
             <div class="step-n">2</div>
             <div>
               <div class="step-t">Informe CPF e e-mail</div>
-              <div class="muted">Use os dados do responsavel.</div>
+              <div class="muted">Use os dados do responsável.</div>
             </div>
           </div>
           <div class="step">
@@ -148,7 +148,7 @@ require_once __DIR__ . '/src/Bootstrap.php';
 
         <div class="final-cta">
           <div>
-            <div class="final-title">Ja possui cadastro?</div>
+            <div class="final-title">Já possui cadastro?</div>
             <div class="muted">Entre com seu e-mail e senha.</div>
           </div>
           <a class="btn btn-primary" href="/login.php">Entrar</a>
@@ -159,10 +159,10 @@ require_once __DIR__ . '/src/Bootstrap.php';
 
   <footer class="footer">
     <div class="container">
-      Desenvolvido por Lucas Goncalves Junior - 2026
+      Desenvolvido por Lucas Gonçalves Junior - 2026
     </div>
   </footer>
 
-  <script src="/assets/js/app.js?v=3"></script>
+  <script src="/assets/js/app.js?v=5"></script>
 </body>
 </html>

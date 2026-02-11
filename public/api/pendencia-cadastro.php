@@ -15,12 +15,12 @@ $guardianCpf = trim($payload['guardian_cpf'] ?? '');
 $guardianEmail = trim($payload['guardian_email'] ?? '');
 
 if ($studentName === '' || $guardianName === '' || $guardianCpf === '' || $guardianEmail === '') {
-    Helpers::json(['ok' => false, 'error' => 'Preencha nome do aluno, responsavel, CPF e e-mail.'], 422);
+    Helpers::json(['ok' => false, 'error' => 'Preencha nome do aluno, responsável, CPF e e-mail.'], 422);
 }
 
 $cpfDigits = preg_replace('/\D+/', '', $guardianCpf) ?? '';
 if (strlen($cpfDigits) !== 11) {
-    Helpers::json(['ok' => false, 'error' => 'CPF invalido.'], 422);
+    Helpers::json(['ok' => false, 'error' => 'CPF inválido.'], 422);
 }
 
 $client = new SupabaseClient(new HttpClient());
@@ -32,12 +32,12 @@ $insert = $client->insert('pendencia_de_cadastro', [[
 ]]);
 
 if (!$insert['ok']) {
-    Helpers::json(['ok' => false, 'error' => 'Falha ao registrar pendencia.'], 500);
+    Helpers::json(['ok' => false, 'error' => 'Falha ao registrar pendência.'], 500);
 }
 
 $pendenciaId = $insert['data'][0]['id'] ?? null;
 if (!$pendenciaId) {
-    Helpers::json(['ok' => false, 'error' => 'Falha ao registrar pendencia.'], 500);
+    Helpers::json(['ok' => false, 'error' => 'Falha ao registrar pendência.'], 500);
 }
 
 $token = bin2hex(random_bytes(16));
@@ -76,7 +76,7 @@ $template = <<<'HTML'
                   </td>
                   <td valign="middle">
                     <div style="font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-weight:800;letter-spacing:.06em;font-size:14px;line-height:1;">
-                      DIARIAS VILLAGE
+                      DIÁRIAS VILLAGE
                     </div>
                     <div style="font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:13px;opacity:.90;margin-top:4px;">
                       Pagamento rápido do Day use Village
@@ -97,7 +97,7 @@ $template = <<<'HTML'
                   Para garantir a diária planejada, confirme seu e-mail clicando no botão abaixo.
                 </div>
                 <div style="margin-top:20px;background:#F6F8FC;border:1px solid #E6E9F2;border-radius:14px;padding:18px;">
-                  <div style="font-size:16px;font-weight:800;margin-bottom:10px;color:#0B1020;">Resumo do cadastro</div>
+                    <div style="font-size:16px;font-weight:800;margin-bottom:10px;color:#0B1020;">Resumo do cadastro</div>
                   <div style="font-size:14px;line-height:1.7;color:#1B2333;">
                     Aluno: <b>{{nome_aluno}}</b><br>
                     Responsável: <b>{{nome_responsavel}}</b>

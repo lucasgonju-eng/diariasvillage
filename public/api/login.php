@@ -18,7 +18,7 @@ if ($cpf === '' || $password === '') {
 
 $cpfDigits = preg_replace('/\D+/', '', $cpf) ?? '';
 if (strlen($cpfDigits) !== 11) {
-    Helpers::json(['ok' => false, 'error' => 'CPF invalido.'], 422);
+    Helpers::json(['ok' => false, 'error' => 'CPF inválido.'], 422);
 }
 
 $auth = new Auth(new SupabaseClient(new HttpClient()));

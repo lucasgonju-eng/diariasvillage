@@ -15,7 +15,7 @@ foreach ($bootstrapPaths as $bootstrapPath) {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Entrar - Diarias Village</title>
+  <title>Entrar - Diárias Village</title>
   <meta name="description" content="Acesse com seu e-mail verificado para continuar." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -29,8 +29,8 @@ foreach ($bootstrapPaths as $bootstrapPath) {
         <div class="brand">
           <span class="brand-mark" aria-hidden="true"></span>
           <div class="brand-text">
-            <div class="brand-title">DIARIAS VILLAGE</div>
-            <div class="brand-sub">Acesso do responsavel</div>
+            <div class="brand-title">DIÁRIAS VILLAGE</div>
+            <div class="brand-sub">Acesso do responsável</div>
           </div>
         </div>
 
@@ -48,7 +48,7 @@ foreach ($bootstrapPaths as $bootstrapPath) {
 
           <div class="microchips" role="list">
             <span class="microchip" role="listitem">Acesso seguro</span>
-            <span class="microchip" role="listitem">Confirmacao rapida</span>
+            <span class="microchip" role="listitem">Confirmação rápida</span>
             <span class="microchip" role="listitem">Sem burocracia</span>
           </div>
         </div>
@@ -99,7 +99,7 @@ foreach ($bootstrapPaths as $bootstrapPath) {
 
   <footer class="footer">
     <div class="container">
-      Desenvolvido por Lucas Goncalves Junior - 2026
+      Desenvolvido por Lucas Gonçalves Junior - 2026
     </div>
   </footer>
   <script src="/assets/js/login.js"></script>

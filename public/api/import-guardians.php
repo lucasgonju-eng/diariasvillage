@@ -13,7 +13,7 @@ $sessionOk = isset($_SESSION['admin_authenticated']) && $_SESSION['admin_authent
 $keyOk = $key !== '' && $key === Env::get('ADMIN_SECRET', '');
 
 if (!$sessionOk && !$keyOk) {
-    Helpers::json(['ok' => false, 'error' => 'Nao autorizado.'], 401);
+    Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
 }
 
 Helpers::requirePost();
@@ -326,7 +326,7 @@ if (!empty($_FILES['file']['tmp_name'])) {
     if ($ext === 'json') {
         $payload = json_decode(file_get_contents($tmpPath), true);
         if (!is_array($payload)) {
-            Helpers::json(['ok' => false, 'error' => 'JSON invalido.'], 422);
+            Helpers::json(['ok' => false, 'error' => 'JSON inválido.'], 422);
         }
         $placeholderCounter = [];
         foreach ($payload as $entry) {
@@ -335,7 +335,7 @@ if (!empty($_FILES['file']['tmp_name'])) {
     } elseif ($ext === 'pdf') {
         $text = extract_text_from_pdf($tmpPath);
         if ($text === '') {
-            Helpers::json(['ok' => false, 'error' => 'Nao foi possivel ler o PDF. Envie um JSON.'], 422);
+            Helpers::json(['ok' => false, 'error' => 'Não foi possível ler o PDF. Envie um JSON.'], 422);
         }
         $parsed = parse_guardians_from_text($text);
         $meta = [
@@ -349,7 +349,7 @@ if (!empty($_FILES['file']['tmp_name'])) {
 } elseif (!empty($_POST['json'])) {
     $payload = json_decode((string) $_POST['json'], true);
     if (!is_array($payload)) {
-        Helpers::json(['ok' => false, 'error' => 'JSON invalido.'], 422);
+        Helpers::json(['ok' => false, 'error' => 'JSON inválido.'], 422);
     }
     $placeholderCounter = [];
     foreach ($payload as $entry) {
@@ -425,7 +425,7 @@ foreach ($entries as $entry) {
             'parent_document' => $guardianCpf ?: null,
         ]);
         if (!$update['ok']) {
-            $result['errors'][] = ['student' => $studentName, 'error' => 'Falha ao atualizar responsavel.'];
+            $result['errors'][] = ['student' => $studentName, 'error' => 'Falha ao atualizar responsável.'];
             continue;
         }
         $result['updated']++;
@@ -443,7 +443,7 @@ foreach ($entries as $entry) {
     ]]);
 
     if (!$insert['ok']) {
-        $result['errors'][] = ['student' => $studentName, 'error' => 'Falha ao inserir responsavel.'];
+        $result['errors'][] = ['student' => $studentName, 'error' => 'Falha ao inserir responsável.'];
         continue;
     }
 

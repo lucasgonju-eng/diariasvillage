@@ -83,13 +83,13 @@ if ($date === $today) {
 }
 
 if (!in_array($billingType, ['PIX', 'DEBIT_CARD'], true)) {
-    Helpers::json(['ok' => false, 'error' => 'Forma de pagamento invalida.'], 422);
+    Helpers::json(['ok' => false, 'error' => 'Forma de pagamento inválida.'], 422);
 }
 
 $client = new SupabaseClient(new HttpClient());
 $guardian = $client->select('guardians', 'select=*&id=eq.' . $user['id']);
 if (!$guardian['ok'] || empty($guardian['data'])) {
-    Helpers::json(['ok' => false, 'error' => 'Usuario nao encontrado.'], 404);
+    Helpers::json(['ok' => false, 'error' => 'Usuário não encontrado.'], 404);
 }
 
 $guardianData = $guardian['data'][0];
@@ -246,7 +246,7 @@ $template = <<<'HTML'
                   </td>
                   <td valign="middle">
                     <div style="font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-weight:800;letter-spacing:.06em;font-size:14px;line-height:1;">
-                      DIARIAS VILLAGE
+                      DIÁRIAS VILLAGE
                     </div>
                     <div style="font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:13px;opacity:.90;margin-top:4px;">
                       Pagamento rápido do Day use Village
@@ -371,7 +371,7 @@ $html = strtr($template, $replace);
 
 $mailer->send(
     $guardianData['email'],
-    'Pagamento criado - Diarias Village',
+    'Pagamento criado - Diárias Village',
     $html
 );
 

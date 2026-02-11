@@ -20,21 +20,21 @@ if ($studentName === '' || $cpf === '' || $email === '' || $password === '') {
 }
 
 if ($password !== $passwordConfirm) {
-    Helpers::json(['ok' => false, 'error' => 'As senhas nao conferem.'], 422);
+    Helpers::json(['ok' => false, 'error' => 'As senhas não conferem.'], 422);
 }
 
 $client = new SupabaseClient(new HttpClient());
 $studentResult = $client->select('students', 'select=id,name,grade&name=eq.' . urlencode($studentName) . '&grade=in.(6,7,8)&active=eq.true');
 
 if (!$studentResult['ok'] || empty($studentResult['data'])) {
-    Helpers::json(['ok' => false, 'error' => 'Aluno nao encontrado.'], 404);
+    Helpers::json(['ok' => false, 'error' => 'Aluno não encontrado.'], 404);
 }
 
 $student = $studentResult['data'][0];
 
 $cpfDigits = preg_replace('/\D+/', '', $cpf) ?? '';
 if (strlen($cpfDigits) !== 11) {
-    Helpers::json(['ok' => false, 'error' => 'CPF invalido.'], 422);
+    Helpers::json(['ok' => false, 'error' => 'CPF inválido.'], 422);
 }
 $guardianExists = $client->select(
     'guardians',
@@ -74,7 +74,7 @@ $verifyLink = Helpers::baseUrl() . '/verify.php?token=' . $token;
 $mailer = new Mailer();
 $mailResult = $mailer->send(
     $email,
-    'Confirme seu acesso - Diarias Village',
+    'Confirme seu acesso - Diárias Village',
     '<p>Ola! Clique no link para confirmar seu e-mail:</p><p><a href="' . $verifyLink . '">' . $verifyLink . '</a></p>'
 );
 

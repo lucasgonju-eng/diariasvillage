@@ -153,7 +153,7 @@ if ($guardians) {
 <body>
   <div class="admin-wrap">
     <header class="admin-header">
-      <div class="admin-title">DIARIAS VILLAGE • ADMIN</div>
+      <div class="admin-title">DIÁRIAS VILLAGE • ADMIN</div>
       <div class="cta">
         <a class="btn btn-ghost btn-sm" href="/admin/import.php">Importar alunos</a>
         <a class="btn btn-ghost btn-sm" href="/logout.php">Sair</a>
@@ -512,7 +512,7 @@ if ($guardians) {
       </section>
     </div>
 
-    <div class="footer">Desenvolvido por Lucas Goncalves Junior - 2026</div>
+    <div class="footer">Desenvolvido por Lucas Gonçalves Junior - 2026</div>
   </div>
 
   <script src="/assets/js/admin-dashboard.js?v=12"></script>

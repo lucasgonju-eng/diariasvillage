@@ -1,11 +1,11 @@
 <?php
 /**
- * Landing Page - Diarias Village (layout referencia)
+ * Landing Page - Diárias Village (layout referência)
  * Ajuste somente o $continueUrl se necessario.
  */
 $continueUrl = '/primeiro-acesso.php';
 $brand = [
-  'name' => 'Diarias Village',
+  'name' => 'Diárias Village',
   'tag'  => 'Pagamento rapido do Day use Village',
 ];
 
@@ -18,7 +18,7 @@ date_default_timezone_set('America/Sao_Paulo');
 $hour = (int) date('G');
 $timeHint = '';
 if ($hour >= 16) {
-  $timeHint = 'Apos 16h, so e possivel comprar para uma data futura.';
+$timeHint = 'Após 16h, só é possível comprar para uma data futura.';
 } elseif ($hour >= 10) {
   $timeHint = 'Para hoje, agora a compra entra como Emergencial.';
 } else {
@@ -31,7 +31,7 @@ if ($hour >= 16) {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title><?php echo htmlspecialchars($brand['name'], ENT_QUOTES, 'UTF-8'); ?></title>
-  <meta name="description" content="Pague o Day use Village em minutos. Sem fila, sem burocracia. PIX e liberacao automatica." />
+  <meta name="description" content="Pague o Day use Village em minutos. Sem fila, sem burocracia. PIX e liberação automática." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -84,7 +84,7 @@ if ($hour >= 16) {
           <h1>Resolve em minutos.<br>Sem fila. Sem estresse.</h1>
           <p class="lead">
             Escolha o aluno, selecione a data, pague via PIX e pronto:
-            a liberacao acontece automaticamente.
+            a liberação acontece automaticamente.
           </p>
 
           <div class="cta">
@@ -94,14 +94,14 @@ if ($hour >= 16) {
           </div>
 
           <div class="microchips" role="list">
-            <span class="microchip" role="listitem">Confirmacao por e-mail</span>
+            <span class="microchip" role="listitem">Confirmação por e-mail</span>
             <span class="microchip" role="listitem">Processo seguro</span>
             <span class="microchip" role="listitem">Secretaria avisada automaticamente</span>
           </div>
         </div>
 
         <aside class="hero-card" aria-label="Fluxo rapido">
-          <h3>Voce so precisa fazer isso</h3>
+          <h3>Você só precisa fazer isso</h3>
           <p class="muted"><?php echo htmlspecialchars($timeHint, ENT_QUOTES, 'UTF-8'); ?></p>
 
           <div class="steps">
@@ -116,20 +116,20 @@ if ($hour >= 16) {
               <div class="step-n">2</div>
               <div>
                 <div class="step-t">Selecionar a data</div>
-                <div class="muted">Hoje (se disponivel) ou uma data futura.</div>
+                <div class="muted">Hoje (se disponível) ou uma data futura.</div>
               </div>
             </div>
             <div class="step">
               <div class="step-n">3</div>
               <div>
                 <div class="step-t">Pagar via PIX</div>
-                <div class="muted">Confirmacao rapida e liberacao automatica.</div>
+                <div class="muted">Confirmação rápida e liberação automática.</div>
               </div>
             </div>
           </div>
 
           <div class="note">
-            Apos 16h, compras para o dia atual nao ficam disponiveis.
+            Após 16h, compras para o dia atual não ficam disponíveis.
           </div>
         </aside>
       </div>
@@ -145,8 +145,8 @@ if ($hour >= 16) {
     <section class="section" id="pagar">
       <div class="container">
         <div class="section-head">
-          <h2>Pagamento da diaria</h2>
-          <p class="muted">Sem friccao. Sem conversa. So resolver.</p>
+          <h2>Pagamento da diária</h2>
+          <p class="muted">Sem fricção. Sem conversa. Só resolver.</p>
         </div>
 
         <div class="pay-card">
@@ -164,7 +164,7 @@ if ($hour >= 16) {
           <a class="btn btn-primary btn-block" href="<?php echo htmlspecialchars($continueUrl, ENT_QUOTES, 'UTF-8'); ?>">Primeiro acesso</a>
 
           <div class="info">
-            <strong>Importante:</strong> nao e necessario escolher tipo de diaria. O sistema aplica automaticamente a regra correta conforme a hora do pagamento.
+            <strong>Importante:</strong> não é necessário escolher tipo de diária. O sistema aplica automaticamente a regra correta conforme a hora do pagamento.
             <?php if ($timeHint !== ''): ?>
               <br><?php echo htmlspecialchars($timeHint, ENT_QUOTES, 'UTF-8'); ?>
             <?php endif; ?>
@@ -193,7 +193,7 @@ if ($hour >= 16) {
             <div class="step-n">2</div>
             <div>
               <div class="step-t">Informe o essencial</div>
-              <div class="muted">Dados minimos para identificacao e pagamento.</div>
+              <div class="muted">Dados mínimos para identificação e pagamento.</div>
             </div>
           </div>
 
@@ -209,7 +209,7 @@ if ($hour >= 16) {
         <div class="final-cta">
           <div>
             <div class="final-title">Resolver agora</div>
-            <div class="muted">Pagamento rapido. Acesso regularizado.</div>
+            <div class="muted">Pagamento rápido. Acesso regularizado.</div>
           </div>
           <a class="btn btn-primary" href="<?php echo htmlspecialchars($continueUrl, ENT_QUOTES, 'UTF-8'); ?>">Primeiro acesso</a>
         </div>
@@ -220,16 +220,16 @@ if ($hour >= 16) {
       <div class="container">
         <div class="section-head">
           <h2>Regras</h2>
-          <p class="muted">Horarios, valores e cancelamento seguem as diretrizes do Einstein Village.</p>
+          <p class="muted">Horários, valores e cancelamento seguem as diretrizes do Einstein Village.</p>
         </div>
 
         <div class="rules-card">
           <ul>
             <li><b>Planejada:</b> para usar hoje, pague ate <b>10h</b> — <b>R$ 77,00</b>.</li>
-            <li><b>Emergencial:</b> para usar hoje, apos <b>10h</b> — <b>R$ 97,00</b>.</li>
-            <li><b>Apos 16h:</b> nao e possivel comprar para o dia atual.</li>
-            <li>Pagamento disponivel via <b>PIX</b>.</li>
-            <li>Depois do pagamento, responsavel e secretaria recebem confirmacao por e-mail.</li>
+            <li><b>Emergencial:</b> para usar hoje, após <b>10h</b> — <b>R$ 97,00</b>.</li>
+            <li><b>Após 16h:</b> não é possível comprar para o dia atual.</li>
+            <li>Pagamento disponível via <b>PIX</b>.</li>
+            <li>Depois do pagamento, responsável e secretaria recebem confirmação por e-mail.</li>
           </ul>
         </div>
       </div>
@@ -238,20 +238,20 @@ if ($hour >= 16) {
 
   <footer class="footer">
     <div class="container">
-      Diarias Village • Sistema de pagamento e controle de acesso
+      Diárias Village • Sistema de pagamento e controle de acesso
       <a class="tinyLink" href="/admin/dashboard.php" aria-label="Acesso administrativo">Admin</a>
     </div>
   </footer>
 
   <div class="modalBg" id="rulesBg" role="dialog" aria-modal="true" aria-label="Regras do Day use Village">
     <div class="modal">
-      <h4>Regras rapidas</h4>
+      <h4>Regras rápidas</h4>
       <ul>
         <li><b>Planejada:</b> para usar hoje, pague ate <b>10h</b> — <b>R$ 77,00</b>.</li>
-        <li><b>Emergencial:</b> para usar hoje, apos <b>10h</b> — <b>R$ 97,00</b>.</li>
-        <li><b>Apos 16h:</b> nao e possivel comprar para o dia atual.</li>
-        <li>Pagamento disponivel via <b>PIX</b>.</li>
-        <li>Depois do pagamento, responsavel e secretaria recebem confirmacao por e-mail.</li>
+        <li><b>Emergencial:</b> para usar hoje, após <b>10h</b> — <b>R$ 97,00</b>.</li>
+        <li><b>Após 16h:</b> não é possível comprar para o dia atual.</li>
+        <li>Pagamento disponível via <b>PIX</b>.</li>
+        <li>Depois do pagamento, responsável e secretaria recebem confirmação por e-mail.</li>
       </ul>
       <div class="closeRow">
         <button class="btn btn-ghost btn-sm" type="button" onclick="closeRules()">Fechar</button>

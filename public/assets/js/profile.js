@@ -22,7 +22,7 @@ if (profileForm) {
 
     const data = await res.json();
     if (!data.ok) {
-      profileMessage.textContent = data.error || 'Nao foi possivel atualizar.';
+      profileMessage.textContent = data.error || 'Não foi possível atualizar.';
       profileMessage.className = 'error';
       return;
     }

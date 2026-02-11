@@ -57,7 +57,7 @@ function parseDayUseDate(string $date): ?string
 }
 
 if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
-    Helpers::json(['ok' => false, 'error' => 'Nao autorizado.'], 401);
+    Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
 }
 
 Helpers::requirePost();
@@ -108,7 +108,7 @@ $template = <<<'HTML'
                   </td>
                   <td valign="middle">
                     <div style="font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-weight:800;letter-spacing:.06em;font-size:14px;line-height:1;">
-                      DIARIAS VILLAGE
+                      DIÁRIAS VILLAGE
                     </div>
                     <div style="font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:13px;opacity:.90;margin-top:4px;">
                       Pagamento rápido do Day use Village

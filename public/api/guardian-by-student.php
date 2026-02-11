@@ -6,19 +6,19 @@ use App\HttpClient;
 use App\SupabaseClient;
 
 if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
-    Helpers::json(['ok' => false, 'error' => 'Nao autorizado.'], 401);
+    Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
 }
 
 $studentName = trim($_GET['name'] ?? '');
 if ($studentName === '') {
-    Helpers::json(['ok' => false, 'error' => 'Aluno invalido.'], 422);
+    Helpers::json(['ok' => false, 'error' => 'Aluno inválido.'], 422);
 }
 
 $client = new SupabaseClient(new HttpClient());
 $studentResult = $client->select('students', 'select=id,name&name=eq.' . urlencode($studentName));
 $student = $studentResult['data'][0] ?? null;
 if (!$student) {
-    Helpers::json(['ok' => false, 'error' => 'Aluno nao encontrado.'], 404);
+    Helpers::json(['ok' => false, 'error' => 'Aluno não encontrado.'], 404);
 }
 
 $guardianResult = $client->select(

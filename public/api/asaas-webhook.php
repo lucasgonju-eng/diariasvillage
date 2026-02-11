@@ -38,7 +38,7 @@ if ($expected && $token !== $expected) {
         'Webhook token mismatch. Esperado ' . $safeExpected . ' recebido ' . $safeToken . PHP_EOL,
         FILE_APPEND
     );
-    Helpers::json(['ok' => false, 'error' => 'Token invalido.'], 401);
+    Helpers::json(['ok' => false, 'error' => 'Token inválido.'], 401);
 }
 
 $payload = json_decode(file_get_contents('php://input'), true);
@@ -46,7 +46,7 @@ $event = $payload['event'] ?? '';
 $payment = $payload['payment'] ?? [];
 
 if (!$event || empty($payment['id'])) {
-    Helpers::json(['ok' => false, 'error' => 'Payload invalido.'], 400);
+    Helpers::json(['ok' => false, 'error' => 'Payload inválido.'], 400);
 }
 
 if (!in_array($event, ['PAYMENT_CONFIRMED', 'PAYMENT_RECEIVED'], true)) {
@@ -57,7 +57,7 @@ $client = new SupabaseClient(new HttpClient());
 $paymentResult = $client->select('payments', 'select=*&asaas_payment_id=eq.' . urlencode($payment['id']));
 
 if (!$paymentResult['ok'] || empty($paymentResult['data'])) {
-    Helpers::json(['ok' => false, 'error' => 'Pagamento nao encontrado.'], 404);
+    Helpers::json(['ok' => false, 'error' => 'Pagamento não encontrado.'], 404);
 }
 
 $paymentRow = $paymentResult['data'][0];
@@ -121,7 +121,7 @@ if ($guardian) {
                   </td>
                   <td valign="middle">
                     <div style="font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-weight:800;letter-spacing:.06em;font-size:14px;line-height:1;">
-                      DIARIAS VILLAGE
+                      DIÁRIAS VILLAGE
                     </div>
                     <div style="font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:13px;opacity:.90;margin-top:4px;">
                       Pagamento rápido do Day use Village
@@ -265,7 +265,7 @@ HTML;
                   </td>
                   <td valign="middle">
                     <div style="font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-weight:800;letter-spacing:.06em;font-size:14px;line-height:1;">
-                      DIARIAS VILLAGE
+                      DIÁRIAS VILLAGE
                     </div>
                     <div style="font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:13px;opacity:.90;margin-top:4px;">
                       Pagamento rápido do Day use Village

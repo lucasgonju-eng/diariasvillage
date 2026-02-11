@@ -21,7 +21,7 @@
             </div>
           </div>
           <nav class="nav">
-            <a href="#beneficios">Beneficios</a>
+            <a href="#beneficios">Benefícios</a>
             <a href="#como-funciona">Como funciona</a>
             <a href="#cta">Começar</a>
           </nav>
@@ -30,11 +30,11 @@
         <section class="hero">
           <div class="hero-grid">
             <div>
-              <span class="kicker">Teste rapido e elegante</span>
+              <span class="kicker">Teste rápido e elegante</span>
               <h1>LP2 pronta para validar sua ideia com foco e clareza.</h1>
               <p class="lead">
                 Estrutura direta, visual premium e hierarquia bem definida para
-                apresentar o valor principal e conduzir a acao.
+                apresentar o valor principal e conduzir a ação.
               </p>
               <div class="actions">
                 <a class="btn btn-primary" href="#cta">Quero testar agora</a>
@@ -44,13 +44,13 @@
             <div class="card panel">
               <h3>Resumo do teste</h3>
               <p class="lead">
-                Uma pagina simples para experimentar mensagens, ofertas e
-                conversao.
+                Uma página simples para experimentar mensagens, ofertas e
+                conversão.
               </p>
               <div class="badges">
                 <span class="badge">Design responsivo</span>
-                <span class="badge">Rapido de editar</span>
-                <span class="badge">Foco em conversao</span>
+                <span class="badge">Rápido de editar</span>
+                <span class="badge">Foco em conversão</span>
               </div>
             </div>
           </div>
@@ -60,19 +60,19 @@
 
     <section id="beneficios" class="section">
       <div class="container">
-        <h2>Beneficios principais</h2>
-        <p>Clareza na proposta, narrativa objetiva e chamada para acao visivel.</p>
+        <h2>Benefícios principais</h2>
+        <p>Clareza na proposta, narrativa objetiva e chamada para ação visível.</p>
         <div class="grid-3">
           <div class="card info">
             <h3>Mensagem central</h3>
-            <p>Deixe o diferencial em evidência com titulo e texto alinhados.</p>
+            <p>Deixe o diferencial em evidência com título e texto alinhados.</p>
           </div>
           <div class="card info">
-            <h3>Prova rapida</h3>
-            <p>Use marcadores para reforcar confianca e reduzir duvidas.</p>
+            <h3>Prova rápida</h3>
+            <p>Use marcadores para reforçar confiança e reduzir dúvidas.</p>
           </div>
           <div class="card info">
-            <h3>Conversao</h3>
+            <h3>Conversão</h3>
             <p>Botoes claros e repetidos para capturar o interesse.</p>
           </div>
         </div>
@@ -82,7 +82,7 @@
     <section id="como-funciona" class="section">
       <div class="container">
         <h2>Como funciona</h2>
-        <p>Processo em tres passos para validar rapidamente.</p>
+        <p>Processo em três passos para validar rapidamente.</p>
         <div class="steps">
           <div class="step">
             <div class="n">1</div>
@@ -91,13 +91,13 @@
           </div>
           <div class="step">
             <div class="n">2</div>
-            <h3>Direcione o publico</h3>
+            <h3>Direcione o público</h3>
             <p>Envie visitantes para esta pagina e acompanhe.</p>
           </div>
           <div class="step">
             <div class="n">3</div>
-            <h3>Ajuste rapido</h3>
-            <p>Edite a copia e refine o resultado com facilidade.</p>
+            <h3>Ajuste rápido</h3>
+            <p>Edite a cópia e refine o resultado com facilidade.</p>
           </div>
         </div>
       </div>
@@ -107,7 +107,7 @@
       <div class="container">
         <div class="cta-band">
           <h2>Pronto para testar?</h2>
-          <p>Ative a LP2 e comece a medir a conversao.</p>
+          <p>Ative a LP2 e comece a medir a conversão.</p>
           <div class="actions">
             <a class="btn btn-primary" href="lp.php">Ver LP principal</a>
             <a class="btn btn-ghost" href="index.php">Voltar ao site</a>
@@ -118,7 +118,7 @@
 
     <footer class="footer">
       <div class="container">
-        <small>LP2 criada para teste rapido de mensagens e oferta.</small>
+        <small>LP2 criada para teste rápido de mensagens e oferta.</small>
         <small>Arquivo separado de `index.php` conforme solicitado.</small>
       </div>
     </footer>

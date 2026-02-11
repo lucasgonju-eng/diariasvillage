@@ -15,7 +15,7 @@ foreach ($bootstrapPaths as $bootstrapPath) {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Primeiro acesso - Diarias Village</title>
+  <title>Primeiro acesso - Diárias Village</title>
   <meta name="description" content="Confirme o aluno, cadastre o e-mail e defina a senha para liberar o acesso." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -29,7 +29,7 @@ foreach ($bootstrapPaths as $bootstrapPath) {
         <div class="brand">
           <span class="brand-mark" aria-hidden="true"></span>
           <div class="brand-text">
-            <div class="brand-title">DIARIAS VILLAGE</div>
+            <div class="brand-title">DIÁRIAS VILLAGE</div>
             <div class="brand-sub">Primeiro acesso e cadastro</div>
           </div>
         </div>
@@ -42,19 +42,19 @@ foreach ($bootstrapPaths as $bootstrapPath) {
           <div class="pill">Primeiro acesso</div>
           <h1>Ative o acesso em poucos minutos.</h1>
           <p class="lead">
-            Confirme o aluno, cadastre o e-mail do responsavel e defina a senha
+            Confirme o aluno, cadastre o e-mail do responsável e defina a senha
             para liberar o acesso.
           </p>
 
           <div class="microchips" role="list">
             <span class="microchip" role="listitem">Dados protegidos</span>
-            <span class="microchip" role="listitem">Confirmacao via e-mail</span>
+            <span class="microchip" role="listitem">Confirmação via e-mail</span>
             <span class="microchip" role="listitem">Acesso imediato</span>
           </div>
         </div>
 
-        <aside class="hero-card" aria-label="Cadastro do responsavel">
-          <h3>Cadastro do responsavel</h3>
+        <aside class="hero-card" aria-label="Cadastro do responsável">
+          <h3>Cadastro do responsável</h3>
           <p class="muted">Complete os dados para continuar.</p>
 
           <form id="register-form">
@@ -67,7 +67,7 @@ foreach ($bootstrapPaths as $bootstrapPath) {
             </div>
 
             <div class="form-group">
-              <label>E-mail do responsavel</label>
+              <label>E-mail do responsável</label>
               <input type="email" id="email" placeholder="email@exemplo.com" required />
             </div>
 
@@ -114,7 +114,7 @@ foreach ($bootstrapPaths as $bootstrapPath) {
             <div class="step-n">2</div>
             <div>
               <div class="step-t">Cadastre o e-mail</div>
-              <div class="muted">Use o e-mail do responsavel.</div>
+              <div class="muted">Use o e-mail do responsável.</div>
             </div>
           </div>
           <div class="step">
@@ -128,7 +128,7 @@ foreach ($bootstrapPaths as $bootstrapPath) {
 
         <div class="final-cta">
           <div>
-            <div class="final-title">Ja possui cadastro?</div>
+            <div class="final-title">Já possui cadastro?</div>
             <div class="muted">Entre com seu e-mail e senha.</div>
           </div>
           <a class="btn btn-primary" href="/village-preview/login.php">Entrar</a>
@@ -139,10 +139,10 @@ foreach ($bootstrapPaths as $bootstrapPath) {
 
   <footer class="footer">
     <div class="container">
-      Desenvolvido por Lucas Goncalves Junior - 2026
+      Desenvolvido por Lucas Gonçalves Junior - 2026
     </div>
   </footer>
 
-  <script src="/assets/js/app.js"></script>
+  <script src="/assets/js/app.js?v=5"></script>
 </body>
 </html>

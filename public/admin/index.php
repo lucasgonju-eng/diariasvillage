@@ -33,13 +33,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <body>
   <div class="container">
     <header class="header">
-      <div class="logo">Diarias Village</div>
+      <div class="logo">Diárias Village</div>
     </header>
 
     <div class="card">
       <h2>Painel administrativo</h2>
       <?php if (isset($_SESSION['admin_authenticated']) && $_SESSION['admin_authenticated'] === true): ?>
-        <p class="subtitle">Escolha uma opcao abaixo.</p>
+        <p class="subtitle">Escolha uma opção abaixo.</p>
         <div class="nav">
           <a class="button" href="/admin/dashboard.php">Entradas confirmadas</a>
           <a class="button secondary" href="/admin/import.php">Importar alunos</a>
@@ -62,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </form>
       <?php endif; ?>
     </div>
-    <div class="footer">Desenvolvido por Lucas Goncalves Junior - 2026</div>
+    <div class="footer">Desenvolvido por Lucas Gonçalves Junior - 2026</div>
   </div>
 </body>
 </html>

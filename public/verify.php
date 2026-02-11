@@ -11,7 +11,7 @@ $client = new SupabaseClient(new HttpClient());
 $result = $client->select('verification_tokens', 'token=eq.' . urlencode($token) . '&select=*');
 
 if (!$result['ok'] || empty($result['data'])) {
-    $status = 'Token invalido.';
+    $status = 'Token inválido.';
 } else {
     $record = $result['data'][0];
     $expiresAt = strtotime($record['expires_at']);
@@ -30,19 +30,19 @@ if (!$result['ok'] || empty($result['data'])) {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Confirmacao</title>
+  <title>Confirmação</title>
   <link rel="stylesheet" href="/assets/css/style.css" />
 </head>
 <body>
   <div class="container">
     <header class="header">
-      <div class="logo">Diarias Village</div>
+      <div class="logo">Diárias Village</div>
     </header>
     <div class="card">
       <h2><?php echo htmlspecialchars($status, ENT_QUOTES, 'UTF-8'); ?></h2>
       <a class="button" href="/login.php">Ir para login</a>
     </div>
-    <div class="footer">Desenvolvido por Lucas Goncalves Junior - 2026</div>
+    <div class="footer">Desenvolvido por Lucas Gonçalves Junior - 2026</div>
   </div>
 </body>
 </html>

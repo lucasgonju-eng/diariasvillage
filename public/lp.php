@@ -1,11 +1,11 @@
 <?php
 /**
- * Landing Page - Diarias Village (isolada)
+ * Landing Page - Diárias Village (isolada)
  * Ajuste somente o $continueUrl se necessario.
  */
 $continueUrl = '/primeiro-acesso.php';
 $brand = [
-  'name' => 'Diarias Village',
+  'name' => 'Diárias Village',
   'tag'  => 'Pagamento rapido do Day use Village',
 ];
 
@@ -18,7 +18,7 @@ date_default_timezone_set('America/Sao_Paulo');
 $hour = (int) date('G');
 $timeHint = '';
 if ($hour >= 16) {
-  $timeHint = 'Apos 16h, so e possivel comprar para uma data futura.';
+$timeHint = 'Após 16h, só é possível comprar para uma data futura.';
 } elseif ($hour >= 10) {
   $timeHint = 'Para hoje, agora a compra entra como Emergencial.';
 } else {
@@ -31,7 +31,7 @@ if ($hour >= 16) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title><?php echo htmlspecialchars($brand['name'], ENT_QUOTES, 'UTF-8'); ?></title>
-  <meta name="description" content="Pague o Day use Village em minutos. Sem fila, sem burocracia. PIX e liberacao automatica.">
+  <meta name="description" content="Pague o Day use Village em minutos. Sem fila, sem burocracia. PIX e liberação automática.">
   <style>
     :root{
       --bg:#0B0B0F;
@@ -334,7 +334,7 @@ if ($hour >= 16) {
 
       <div class="pill" title="Status do pagamento">
         <span aria-hidden="true">⚡</span>
-        <span>PIX com confirmacao rapida</span>
+        <span>PIX com confirmação rápida</span>
       </div>
     </header>
 
@@ -346,7 +346,7 @@ if ($hour >= 16) {
         <h2>Resolve em minutos.<br><span>Sem fila. Sem estresse.</span></h2>
         <p class="sub">
           Escolha o aluno, selecione a data, pague via PIX e pronto:
-          a liberacao acontece automaticamente.
+          a liberação acontece automaticamente.
         </p>
 
         <div class="ctaRow">
@@ -354,8 +354,8 @@ if ($hour >= 16) {
           <button class="btn btnGhost" type="button" onclick="openRules()">Ver regras</button>
         </div>
 
-        <div class="trust" aria-label="Garantias e confirmacao">
-          <span class="chip">✅ Confirmacao por e-mail</span>
+        <div class="trust" aria-label="Garantias e confirmação">
+          <span class="chip">✅ Confirmação por e-mail</span>
           <span class="chip">🔐 Processo seguro</span>
           <span class="chip">📩 Secretaria avisada automaticamente</span>
         </div>
@@ -363,7 +363,7 @@ if ($hour >= 16) {
 
       <aside class="side">
         <div class="sectionTitle">
-          <h3>Voce so precisa fazer isso</h3>
+          <h3>Você só precisa fazer isso</h3>
           <span class="hint"><?php echo htmlspecialchars($timeHint, ENT_QUOTES, 'UTF-8'); ?></span>
         </div>
 
@@ -379,14 +379,14 @@ if ($hour >= 16) {
             <div class="num">2</div>
             <div>
               <b>Selecionar a data</b>
-              <p>Hoje (se disponivel) ou uma data futura.</p>
+              <p>Hoje (se disponível) ou uma data futura.</p>
             </div>
           </div>
           <div class="step">
             <div class="num">3</div>
             <div>
               <b>Pagar via PIX</b>
-              <p>Confirmacao rapida e liberacao automatica.</p>
+              <p>Confirmação rápida e liberação automática.</p>
             </div>
           </div>
         </div>
@@ -413,8 +413,8 @@ if ($hour >= 16) {
 
         <div class="footer">
           <div>
-            <div><b>Apos 16h</b>, compras para o dia atual nao ficam disponiveis.</div>
-            <div>Voce consegue escolher uma data futura (Planejada).</div>
+            <div><b>Após 16h</b>, compras para o dia atual não ficam disponíveis.</div>
+            <div>Você consegue escolher uma data futura (Planejada).</div>
           </div>
           <div>
             <a class="tinyLink" href="<?php echo htmlspecialchars($continueUrl, ENT_QUOTES, 'UTF-8'); ?>">Ir para Continuar</a>
@@ -426,13 +426,13 @@ if ($hour >= 16) {
 
   <div class="modalBg" id="rulesBg" role="dialog" aria-modal="true" aria-label="Regras do Day use Village">
     <div class="modal">
-      <h4>Regras rapidas</h4>
+      <h4>Regras rápidas</h4>
       <ul>
-        <li><b>Planejada:</b> para usar hoje, pague ate <b>10h</b> — <b>R$ 77,00</b>.</li>
-        <li><b>Emergencial:</b> para usar hoje, apos <b>10h</b> — <b>R$ 97,00</b>.</li>
-        <li><b>Apos 16h:</b> nao e possivel comprar para o dia atual.</li>
-        <li>Pagamento disponivel via <b>PIX</b>.</li>
-        <li>Depois do pagamento, responsavel e secretaria recebem confirmacao por e-mail.</li>
+        <li><b>Planejada:</b> para usar hoje, pague até <b>10h</b> — <b>R$ 77,00</b>.</li>
+        <li><b>Emergencial:</b> para usar hoje, após <b>10h</b> — <b>R$ 97,00</b>.</li>
+        <li><b>Após 16h:</b> não é possível comprar para o dia atual.</li>
+        <li>Pagamento disponível via <b>PIX</b>.</li>
+        <li>Depois do pagamento, responsável e secretaria recebem confirmação por e-mail.</li>
       </ul>
       <div class="closeRow">
         <button class="btn btnGhost" type="button" onclick="closeRules()">Fechar</button>

@@ -23,7 +23,7 @@ $passwordConfirm = $payload['password_confirm'] ?? '';
 
 if ($password !== '') {
     if ($password !== $passwordConfirm) {
-        Helpers::json(['ok' => false, 'error' => 'As senhas nao conferem.'], 422);
+        Helpers::json(['ok' => false, 'error' => 'As senhas não conferem.'], 422);
     }
     $update['password_hash'] = password_hash($password, PASSWORD_DEFAULT);
 }

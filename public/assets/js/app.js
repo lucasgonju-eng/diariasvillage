@@ -54,9 +54,13 @@ if (form) {
     if (!data.ok) {
       message.textContent =
         data.error ||
-        'Nao foi possivel cadastrar. Verifique CPF, nome do aluno e e-mail.';
+        'Não foi possível cadastrar. Verifique CPF, nome do aluno e e-mail.';
       message.className = 'error';
-      if (data.error && data.error.toLowerCase().includes('aluno nao encontrado')) {
+      if (
+        data.error &&
+        (data.error.toLowerCase().includes('aluno não encontrado') ||
+          data.error.toLowerCase().includes('aluno nao encontrado'))
+      ) {
         if (pendingForm) {
           pendingForm.style.display = 'block';
           if (openPendingButton) {
@@ -130,26 +134,45 @@ if (pendingForm) {
       guardian_cpf: document.querySelector('#pending-cpf').value.trim(),
       guardian_email: document.querySelector('#pending-email').value.trim(),
     };
-
-    const res = await fetch('/api/pendencia-cadastro.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    const data = await res.json();
-    if (!data.ok) {
+    if (
+      !payload.student_name ||
+      !payload.guardian_name ||
+      !payload.guardian_cpf ||
+      !payload.guardian_email
+    ) {
       if (pendingMessage) {
-        pendingMessage.textContent = data.error || 'Falha ao enviar pendencia.';
+        pendingMessage.textContent = 'Preencha nome do aluno, responsável, CPF e e-mail.';
         pendingMessage.className = 'error';
       }
       return;
     }
 
-    if (pendingMessage) {
-      pendingMessage.textContent = 'Pendência enviada. Verifique seu e-mail para confirmar.';
-      pendingMessage.className = 'success';
+    try {
+      const res = await fetch('/api/pendencia-cadastro.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!data.ok) {
+        if (pendingMessage) {
+          pendingMessage.textContent = data.error || 'Falha ao enviar pendência.';
+          pendingMessage.className = 'error';
+        }
+        return;
+      }
+
+      if (pendingMessage) {
+        pendingMessage.textContent = 'Pendência enviada. Verifique seu e-mail para confirmar.';
+        pendingMessage.className = 'success';
+      }
+      pendingForm.reset();
+    } catch (error) {
+      if (pendingMessage) {
+        pendingMessage.textContent = 'Falha ao enviar pendência. Tente novamente.';
+        pendingMessage.className = 'error';
+      }
     }
-    pendingForm.reset();
   });
 }

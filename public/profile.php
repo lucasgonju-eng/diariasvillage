@@ -10,8 +10,8 @@ $user = Helpers::requireAuthWeb();
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Perfil - Diarias Village</title>
-  <meta name="description" content="Atualize os dados do responsavel e mantenha o cadastro em dia." />
+  <title>Perfil - Diárias Village</title>
+  <meta name="description" content="Atualize os dados do responsável e mantenha o cadastro em dia." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -24,8 +24,8 @@ $user = Helpers::requireAuthWeb();
         <div class="brand">
           <span class="brand-mark" aria-hidden="true"></span>
           <div class="brand-text">
-            <div class="brand-title">DIARIAS VILLAGE</div>
-            <div class="brand-sub">Perfil do responsavel</div>
+            <div class="brand-title">DIÁRIAS VILLAGE</div>
+            <div class="brand-sub">Perfil do responsável</div>
           </div>
         </div>
 
@@ -39,22 +39,22 @@ $user = Helpers::requireAuthWeb();
         <div class="hero-left">
           <div class="pill">Perfil</div>
           <h1>Atualize seus dados.</h1>
-          <p class="lead">Mantenha o cadastro do responsavel sempre atualizado.</p>
+          <p class="lead">Mantenha o cadastro do responsável sempre atualizado.</p>
 
           <div class="microchips" role="list">
             <span class="microchip" role="listitem">Dados protegidos</span>
-            <span class="microchip" role="listitem">Atualizacao rapida</span>
+          <span class="microchip" role="listitem">Atualização rápida</span>
             <span class="microchip" role="listitem">Acesso seguro</span>
           </div>
         </div>
 
         <aside class="hero-card" aria-label="Formulario do perfil">
           <h3>Editar perfil</h3>
-          <p class="muted">Atualize os dados do responsavel.</p>
+          <p class="muted">Atualize os dados do responsável.</p>
 
           <form id="profile-form">
             <div class="form-group">
-              <label>Nome do responsavel</label>
+              <label>Nome do responsável</label>
               <input id="parent-name" value="<?php echo htmlspecialchars($user['parent_name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>" />
             </div>
             <div class="form-group">
@@ -91,7 +91,7 @@ $user = Helpers::requireAuthWeb();
 
   <footer class="footer">
     <div class="container">
-      Desenvolvido por Lucas Goncalves Junior - 2026
+      Desenvolvido por Lucas Gonçalves Junior - 2026
     </div>
   </footer>
 

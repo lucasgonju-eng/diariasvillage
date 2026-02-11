@@ -6,7 +6,7 @@ use App\HttpClient;
 use App\SupabaseClient;
 
 if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
-    Helpers::json(['ok' => false, 'error' => 'Nao autorizado.'], 401);
+    Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
 }
 
 Helpers::requirePost();
@@ -16,7 +16,7 @@ $primaryId = trim($payload['primary_id'] ?? '');
 $duplicateIds = $payload['duplicate_ids'] ?? [];
 
 if ($primaryId === '' || !is_array($duplicateIds) || !$duplicateIds) {
-    Helpers::json(['ok' => false, 'error' => 'Dados invalidos.'], 422);
+    Helpers::json(['ok' => false, 'error' => 'Dados inválidos.'], 422);
 }
 
 $client = new SupabaseClient(new HttpClient());

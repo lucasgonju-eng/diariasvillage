@@ -17,7 +17,7 @@ if (!$sessionOk && !$keyOk) {
 }
 
 if (empty($_FILES['file']['tmp_name'])) {
-    echo 'Arquivo nao enviado.';
+    echo 'Arquivo não enviado.';
     exit;
 }
 
@@ -68,7 +68,7 @@ if ($birthIndex === false) {
 }
 
 if ($nameIndex === false || ($gradeIndex === false && $classIndex === false)) {
-    echo 'Cabecalho invalido. Use colunas nome e serie ou serie / turma.';
+    echo 'Cabeçalho inválido. Use colunas nome e série ou série / turma.';
     exit;
 }
 

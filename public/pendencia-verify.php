@@ -65,7 +65,7 @@ if ($invoiceUrl === '') {
             'billingType' => 'PIX',
             'value' => 77.00,
             'dueDate' => date('Y-m-d'),
-            'description' => 'Diaria planejada - pendencia cadastro - Einstein Village',
+            'description' => 'Diária planejada - pendência cadastro - Einstein Village',
         ]);
         $paymentData = $payment['data'] ?? [];
         $invoiceUrl = $paymentData['invoiceUrl'] ?? $paymentData['bankSlipUrl'] ?? '';
@@ -103,7 +103,7 @@ if ($guardianEmail) {
                   </td>
                   <td valign="middle">
                     <div style="font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-weight:800;letter-spacing:.06em;font-size:14px;line-height:1;">
-                      DIARIAS VILLAGE
+                      DIÁRIAS VILLAGE
                     </div>
                     <div style="font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:13px;opacity:.90;margin-top:4px;">
                       Pagamento rápido do Day use Village
@@ -215,7 +215,7 @@ HTML;
                   </td>
                   <td valign="middle">
                     <div style="font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-weight:800;letter-spacing:.06em;font-size:14px;line-height:1;">
-                      DIARIAS VILLAGE
+                      DIÁRIAS VILLAGE
                     </div>
                     <div style="font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:13px;opacity:.90;margin-top:4px;">
                       Confirmação de e-mail

@@ -33,7 +33,7 @@ $success = ($_GET['success'] ?? '') === '1';
 <body>
   <div class="container">
     <header class="header">
-      <div class="logo">Diarias Village</div>
+      <div class="logo">Diárias Village</div>
       <nav class="nav">
         <a class="button secondary" href="/admin/dashboard.php">Entradas</a>
         <a class="button secondary" href="/logout.php">Sair</a>
@@ -42,9 +42,9 @@ $success = ($_GET['success'] ?? '') === '1';
 
     <div class="card">
       <h2>Importar alunos</h2>
-      <p class="subtitle">Envie CSV, XLS ou XLSX com colunas: nome, matricula, serie / turma, nascimento.</p>
+      <p class="subtitle">Envie CSV, XLS ou XLSX com colunas: nome, matrícula, série / turma, nascimento.</p>
       <?php if ($success): ?>
-        <div class="success">Importacao concluida com sucesso.</div>
+        <div class="success">Importação concluída com sucesso.</div>
       <?php endif; ?>
 
       <form action="/api/import-students.php<?php echo $keyOk ? '?key=' . htmlspecialchars($key, ENT_QUOTES, 'UTF-8') : ''; ?>" method="post" enctype="multipart/form-data">
@@ -71,7 +71,7 @@ $success = ($_GET['success'] ?? '') === '1';
         <button class="button" type="submit">Importar responsáveis</button>
       </form>
     </div>
-    <div class="footer">Desenvolvido por Lucas Goncalves Junior - 2026</div>
+    <div class="footer">Desenvolvido por Lucas Gonçalves Junior - 2026</div>
   </div>
 </body>
 </html>
