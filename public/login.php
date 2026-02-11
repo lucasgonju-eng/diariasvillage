@@ -93,6 +93,6 @@ require_once __DIR__ . '/src/Bootstrap.php';
       Desenvolvido por Lucas Goncalves Junior - 2026
     </div>
   </footer>
-  <script src="/assets/js/login.js"></script>
+  <script src="/assets/js/login.js?v=2"></script>
 </body>
 </html>
