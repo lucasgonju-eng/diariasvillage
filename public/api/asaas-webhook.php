@@ -57,16 +57,34 @@ $client = new SupabaseClient(new HttpClient());
 $paymentResult = $client->select('payments', 'select=*&asaas_payment_id=eq.' . urlencode($payment['id']));
 
 if (!$paymentResult['ok'] || empty($paymentResult['data'])) {
+    $invoiceUrl = $payment['invoiceUrl'] ?? $payment['bankSlipUrl'] ?? '';
     $pendenciaResult = $client->select(
         'pendencia_de_cadastro',
         'select=id,paid_at&asaas_payment_id=eq.' . urlencode($payment['id'])
     );
+    if ((!$pendenciaResult['ok'] || empty($pendenciaResult['data'])) && $invoiceUrl !== '') {
+        $pendenciaResult = $client->select(
+            'pendencia_de_cadastro',
+            'select=id,paid_at&asaas_invoice_url=eq.' . urlencode($invoiceUrl)
+        );
+    }
     if ($pendenciaResult['ok'] && !empty($pendenciaResult['data'])) {
         $pendenciaRow = $pendenciaResult['data'][0];
         if (empty($pendenciaRow['paid_at'])) {
-            $client->update('pendencia_de_cadastro', 'id=eq.' . $pendenciaRow['id'], [
+            $update = $client->update('pendencia_de_cadastro', 'id=eq.' . $pendenciaRow['id'], [
                 'paid_at' => date('c'),
+                'asaas_payment_id' => $payment['id'],
+                'asaas_invoice_url' => $invoiceUrl ?: null,
             ]);
+            if (!$update['ok']) {
+                $logPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'error_log_custom.txt';
+                file_put_contents(
+                    $logPath,
+                    'Falha ao atualizar pendencia paga. ID ' . ($pendenciaRow['id'] ?? '-') . PHP_EOL,
+                    FILE_APPEND
+                );
+                Helpers::json(['ok' => false, 'error' => 'Falha ao atualizar pendência.'], 500);
+            }
         }
         Helpers::json(['ok' => true]);
     }
