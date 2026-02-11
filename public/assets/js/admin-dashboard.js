@@ -706,10 +706,25 @@ if (resetSenhaBtn && resetCpfInput && resetSenhaNovaInput && resetSenhaConfirmIn
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cpf, nova_senha: novaSenha }),
       });
-      const data = await res.json();
-      if (!data.ok) {
+      let data;
+      try {
+        data = await res.json();
+      } catch {
         if (resetSenhaMessage) {
-          resetSenhaMessage.textContent = data.error || 'Falha ao resetar senha.';
+          resetSenhaMessage.textContent = `Erro no servidor (${res.status || 'sem resposta'}). Tente novamente.`;
+          resetSenhaMessage.className = 'charge-message error';
+        }
+        return;
+      }
+      if (!data.ok) {
+        const errMsg =
+          data.error ||
+          data.error_description ||
+          data.message ||
+          data.msg ||
+          'Falha ao resetar senha.';
+        if (resetSenhaMessage) {
+          resetSenhaMessage.textContent = errMsg;
           resetSenhaMessage.className = 'charge-message error';
         }
       } else {

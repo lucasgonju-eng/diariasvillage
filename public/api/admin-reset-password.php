@@ -64,22 +64,29 @@ if ($usaSupabaseAuth) {
             'email_confirm' => true,
         ]);
         if (!$updateResult['ok']) {
-            $upErr = $updateResult['data']['message'] ?? $updateResult['error'] ?? 'Falha ao atualizar senha.';
+            $authData = $updateResult['data'] ?? [];
+            $upErr = $updateResult['error'] ?? $authData['msg'] ?? $authData['message'] ?? $authData['error_description'] ?? 'Falha ao atualizar senha no Supabase Auth.';
             Helpers::json(['ok' => false, 'error' => $upErr], 500);
         }
     }
 }
 
 $passwordHash = password_hash($novaSenha, PASSWORD_DEFAULT);
-$updateGuardian = $client->update(
-    'guardians',
-    'parent_document=eq.' . urlencode($cpfDigits),
-    ['password_hash' => $passwordHash]
-);
-
-if (!$updateGuardian['ok']) {
-    $gErr = $updateGuardian['error'] ?? 'Falha ao atualizar senha local.';
-    Helpers::json(['ok' => false, 'error' => $gErr], 500);
+foreach ($guardians as $g) {
+    $guardianId = $g['id'] ?? null;
+    if (!$guardianId) {
+        continue;
+    }
+    $updateGuardian = $client->update(
+        'guardians',
+        'id=eq.' . urlencode($guardianId),
+        ['password_hash' => $passwordHash]
+    );
+    if (!$updateGuardian['ok']) {
+        $gData = $updateGuardian['data'] ?? [];
+        $gErr = $updateGuardian['error'] ?? $gData['message'] ?? $gData['error_description'] ?? $gData['details'] ?? 'Falha ao atualizar senha local.';
+        Helpers::json(['ok' => false, 'error' => $gErr], 500);
+    }
 }
 
 Helpers::json([
