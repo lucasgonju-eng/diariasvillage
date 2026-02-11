@@ -170,6 +170,7 @@ if ($guardians) {
     <header class="admin-header">
       <div class="admin-title">DIÁRIAS VILLAGE • ADMIN</div>
       <div class="cta">
+        <a class="btn btn-danger btn-sm" href="/admin/settle-pendencia.php">Baixa manual</a>
         <a class="btn btn-ghost btn-sm" href="/admin/import.php">Importar alunos</a>
         <a class="btn btn-ghost btn-sm" href="/logout.php">Sair</a>
       </div>
@@ -382,7 +383,10 @@ if ($guardians) {
       </section>
 
       <section id="tab-pendencias" class="hidden">
-        <h2>Pendências de cadastro</h2>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
+          <h2 style="margin:0;">Pendências de cadastro</h2>
+          <a href="/admin/settle-pendencia.php" class="btn btn-danger btn-sm">Baixa manual (página dedicada)</a>
+        </div>
         <p class="muted">Solicitações registradas para ajuste manual no cadastro.</p>
         <div class="charge-fields" style="margin-bottom:12px;">
           <div class="form-group">
@@ -452,7 +456,7 @@ if ($guardians) {
                           Checar de novo
                         </button>
                         <button
-                          class="btn btn-ghost btn-sm js-settle-pendencia"
+                          class="btn btn-danger btn-sm js-settle-pendencia"
                           type="button"
                           data-id="<?php echo htmlspecialchars($pendencia['id'], ENT_QUOTES, 'UTF-8'); ?>"
                         >
