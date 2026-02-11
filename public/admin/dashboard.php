@@ -152,6 +152,14 @@ if ($guardians) {
       font-weight:800;
     }
     .btn-danger:hover{filter:brightness(.97)}
+    .input-sm{
+      width:140px;
+      padding:6px 8px;
+      border-radius:10px;
+      border:1px solid #E6E9F2;
+      font-size:12px;
+      margin-right:8px;
+    }
     .date-actions{display:flex;gap:6px}
     .charge-message{margin-top:12px;font-size:13px}
     .hidden{display:none}
@@ -405,13 +413,14 @@ if ($guardians) {
                 <th>Registrado em</th>
                 <th>Status Asaas</th>
                 <th>Pago em</th>
+                <th>Cobrança Asaas</th>
                 <th>Ações</th>
               </tr>
             </thead>
             <tbody>
               <?php if (empty($pendencias)): ?>
                 <tr>
-                  <td colspan="8">Nenhuma pendência registrada.</td>
+                  <td colspan="9">Nenhuma pendência registrada.</td>
                 </tr>
               <?php else: ?>
                 <?php foreach ($pendencias as $pendencia): ?>
@@ -427,6 +436,10 @@ if ($guardians) {
                     <td><?php echo $created; ?></td>
                     <td data-col="asaas-status">-</td>
                     <td data-col="paid-at"><?php echo $paidAt; ?></td>
+                    <td data-col="asaas-link">
+                      <input class="input-sm" type="text" placeholder="Ex: 742559970" inputmode="numeric" />
+                      <button class="btn btn-danger btn-sm js-link-asaas" type="button">Vincular</button>
+                    </td>
                     <td data-col="action">
                       <?php if (!empty($pendencia['paid_at'])): ?>
                         -
@@ -560,6 +573,6 @@ if ($guardians) {
     <div class="footer">Desenvolvido por Lucas Gonçalves Junior - 2026</div>
   </div>
 
-  <script src="/assets/js/admin-dashboard.js?v=16"></script>
+  <script src="/assets/js/admin-dashboard.js?v=17"></script>
 </body>
 </html>

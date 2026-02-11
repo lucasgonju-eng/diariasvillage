@@ -292,6 +292,7 @@ const pendenciaCpfInput = document.querySelector('#pendencia-cpf');
 const pendenciaCpfButton = document.querySelector('#check-pendencia-cpf');
 const pendenciaAsaasInput = document.querySelector('#pendencia-asaas-id');
 const pendenciaAsaasButton = document.querySelector('#check-pendencia-asaas');
+const pendenciaLinkButtons = document.querySelectorAll('.js-link-asaas');
 
 function normalizeCpf(value) {
   return value.replace(/\D/g, '').slice(0, 11);
@@ -300,6 +301,21 @@ function normalizeCpf(value) {
 function findPendenciaRow(id) {
   if (!id) return null;
   return document.querySelector(`[data-pendencia-id="${id}"]`);
+}
+
+function updatePendenciaRow(row, data) {
+  if (!row) return;
+  const paidCell = row.querySelector('[data-col="paid-at"]');
+  const statusCell = row.querySelector('[data-col="asaas-status"]');
+  const actionCell = row.querySelector('[data-col="action"]');
+  if (statusCell) statusCell.textContent = data.status || '-';
+  if (data.paid_at && paidCell) {
+    const date = new Date(data.paid_at);
+    paidCell.textContent = isNaN(date.getTime())
+      ? data.paid_at
+      : date.toLocaleString('pt-BR');
+    if (actionCell) actionCell.textContent = '-';
+  }
 }
 
 pendenciaButtons.forEach((button) => {
@@ -401,16 +417,8 @@ if (pendenciaCpfButton && pendenciaCpfInput) {
       }
 
       const row = findPendenciaRow(data.pendencia_id);
-      const paidCell = row ? row.querySelector('[data-col="paid-at"]') : null;
-      const statusCell = row ? row.querySelector('[data-col="asaas-status"]') : null;
-      const actionCell = row ? row.querySelector('[data-col="action"]') : null;
-      if (statusCell) statusCell.textContent = data.status || '-';
-      if (data.paid_at && paidCell) {
-        const date = new Date(data.paid_at);
-        paidCell.textContent = isNaN(date.getTime())
-          ? data.paid_at
-          : date.toLocaleString('pt-BR');
-        if (actionCell) actionCell.textContent = '-';
+      updatePendenciaRow(row, data);
+      if (data.paid_at) {
         if (pendenciaMessage) {
           pendenciaMessage.textContent = 'Pagamento confirmado pelo Asaas.';
           pendenciaMessage.className = 'charge-message success';
@@ -471,16 +479,8 @@ if (pendenciaAsaasButton && pendenciaAsaasInput) {
       }
 
       const row = findPendenciaRow(data.pendencia_id);
-      const paidCell = row ? row.querySelector('[data-col="paid-at"]') : null;
-      const statusCell = row ? row.querySelector('[data-col="asaas-status"]') : null;
-      const actionCell = row ? row.querySelector('[data-col="action"]') : null;
-      if (statusCell) statusCell.textContent = data.status || '-';
-      if (data.paid_at && paidCell) {
-        const date = new Date(data.paid_at);
-        paidCell.textContent = isNaN(date.getTime())
-          ? data.paid_at
-          : date.toLocaleString('pt-BR');
-        if (actionCell) actionCell.textContent = '-';
+      updatePendenciaRow(row, data);
+      if (data.paid_at) {
         if (pendenciaMessage) {
           pendenciaMessage.textContent = 'Pagamento confirmado pelo Asaas.';
           pendenciaMessage.className = 'charge-message success';
@@ -504,6 +504,64 @@ if (pendenciaAsaasButton && pendenciaAsaasInput) {
     }
   });
 }
+
+pendenciaLinkButtons.forEach((button) => {
+  button.addEventListener('click', async () => {
+    const row = button.closest('tr');
+    const pendenciaId = row ? row.dataset.pendenciaId : null;
+    const input = row ? row.querySelector('[data-col="asaas-link"] input') : null;
+    const asaasId = input ? input.value.replace(/\D/g, '') : '';
+    if (!pendenciaId || !asaasId) {
+      if (pendenciaMessage) {
+        pendenciaMessage.textContent = 'Informe a cobrança Asaas para vincular.';
+        pendenciaMessage.className = 'charge-message error';
+      }
+      return;
+    }
+
+    button.setAttribute('disabled', 'disabled');
+    if (pendenciaMessage) {
+      pendenciaMessage.textContent = 'Vinculando cobrança...';
+      pendenciaMessage.className = 'charge-message';
+    }
+
+    try {
+      const res = await fetch('/api/admin-link-pendencia-by-asaas.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pendencia_id: pendenciaId, asaas_id: asaasId }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        if (pendenciaMessage) {
+          pendenciaMessage.textContent = data.error || 'Falha ao vincular pendência.';
+          pendenciaMessage.className = 'charge-message error';
+        }
+        return;
+      }
+
+      updatePendenciaRow(row, data);
+      if (data.paid_at) {
+        if (pendenciaMessage) {
+          pendenciaMessage.textContent = 'Cobrança vinculada e paga.';
+          pendenciaMessage.className = 'charge-message success';
+        }
+        return;
+      }
+      if (pendenciaMessage) {
+        pendenciaMessage.textContent = 'Cobrança vinculada. Aguardando pagamento.';
+        pendenciaMessage.className = 'charge-message';
+      }
+    } catch {
+      if (pendenciaMessage) {
+        pendenciaMessage.textContent = 'Falha ao vincular pendência.';
+        pendenciaMessage.className = 'charge-message error';
+      }
+    } finally {
+      button.removeAttribute('disabled');
+    }
+  });
+});
 
 const mergeButtons = document.querySelectorAll('.js-merge-duplicates');
 mergeButtons.forEach((button) => {
