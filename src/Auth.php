@@ -5,10 +5,12 @@ namespace App;
 class Auth
 {
     private SupabaseClient $db;
+    private ?SupabaseAuth $supabaseAuth;
 
-    public function __construct(SupabaseClient $db)
+    public function __construct(SupabaseClient $db, ?SupabaseAuth $supabaseAuth = null)
     {
         $this->db = $db;
+        $this->supabaseAuth = $supabaseAuth ?? new SupabaseAuth(new HttpClient());
     }
 
     public function login(string $cpf, string $password): array
@@ -27,6 +29,19 @@ class Auth
                 ];
             }
             return ['ok' => false, 'error' => 'Credenciais inválidas.'];
+        }
+
+        $email = trim($result['data'][0]['email'] ?? '');
+        $isPlaceholder = str_contains($email, '@placeholder.');
+        if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) && !$isPlaceholder) {
+            $signIn = $this->supabaseAuth->signIn($email, $password);
+            if ($signIn['ok'] && !empty($signIn['data'])) {
+                return ['ok' => true, 'user' => $result['data'][0]];
+            }
+            $err = ($signIn['data'] ?? [])['error_description'] ?? ($signIn['error'] ?? '');
+            if (stripos((string) $err, 'email') !== false && stripos((string) $err, 'confirm') !== false) {
+                return ['ok' => false, 'error' => 'E-mail ainda não verificado.'];
+            }
         }
 
         $hasPassword = false;

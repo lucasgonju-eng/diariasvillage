@@ -33,8 +33,8 @@ require_once __DIR__ . '/src/Bootstrap.php';
           <div class="pill">Primeiro acesso</div>
           <h1>Ative o acesso em poucos minutos.</h1>
           <p class="lead">
-            Confirme o aluno, informe o CPF e o e-mail do responsável e defina a senha
-            para liberar o acesso.
+            Informe o CPF do responsável e crie uma senha. O sistema buscará seu cadastro
+            e enviará um e-mail de validação para confirmar.
           </p>
 
           <div class="microchips" role="list">
@@ -46,37 +46,27 @@ require_once __DIR__ . '/src/Bootstrap.php';
 
         <aside class="hero-card" aria-label="Cadastro do responsável">
           <h3>Cadastro do responsável</h3>
-          <p class="muted">Complete os dados para continuar.</p>
+          <p class="muted">CPF e senha. O e-mail será obtido do cadastro escolar.</p>
 
           <form id="register-form">
             <div class="form-group">
-              <label>Nome do aluno</label>
-              <input id="student-name" placeholder="Digite o nome do aluno" required />
-              <div class="small">Digite exatamente como no cadastro escolar.</div>
-            </div>
-
-            <div class="form-group">
               <label>CPF do responsável</label>
               <input type="text" id="cpf" placeholder="000.000.000-00" inputmode="numeric" required />
-            </div>
-
-            <div class="form-group">
-              <label>E-mail do responsável</label>
-              <input type="email" id="email" placeholder="email@exemplo.com" required />
+              <div class="small">O CPF deve estar no cadastro da escola.</div>
             </div>
 
             <div class="grid-2">
               <div class="form-group">
                 <label>Senha</label>
-                <input type="password" id="password" required />
+                <input type="password" id="password" required minlength="6" />
               </div>
               <div class="form-group">
                 <label>Confirmar senha</label>
-                <input type="password" id="password-confirm" required />
+                <input type="password" id="password-confirm" required minlength="6" />
               </div>
             </div>
 
-            <button class="btn btn-primary btn-block" type="submit">Primeiro acesso</button>
+            <button class="btn btn-primary btn-block" type="submit">Criar conta</button>
             <div id="form-message"></div>
           </form>
 
@@ -126,22 +116,22 @@ require_once __DIR__ . '/src/Bootstrap.php';
           <div class="step">
             <div class="step-n">1</div>
             <div>
-              <div class="step-t">Encontre o aluno</div>
-              <div class="muted">Digite o nome e selecione na lista.</div>
+              <div class="step-t">Informe o CPF</div>
+              <div class="muted">O CPF do responsável no cadastro escolar.</div>
             </div>
           </div>
           <div class="step">
             <div class="step-n">2</div>
             <div>
-              <div class="step-t">Informe CPF e e-mail</div>
-              <div class="muted">Use os dados do responsável.</div>
+              <div class="step-t">Crie e confirme a senha</div>
+              <div class="muted">Mínimo de 6 caracteres.</div>
             </div>
           </div>
           <div class="step">
             <div class="step-n">3</div>
             <div>
-              <div class="step-t">Defina a senha</div>
-              <div class="muted">Pronto para acessar o sistema.</div>
+              <div class="step-t">Valide o e-mail</div>
+              <div class="muted">Você receberá um e-mail de confirmação.</div>
             </div>
           </div>
         </div>
@@ -149,7 +139,7 @@ require_once __DIR__ . '/src/Bootstrap.php';
         <div class="final-cta">
           <div>
             <div class="final-title">Já possui cadastro?</div>
-            <div class="muted">Entre com seu e-mail e senha.</div>
+            <div class="muted">Entre com seu CPF e senha.</div>
           </div>
           <a class="btn btn-primary" href="/login.php">Entrar</a>
         </div>

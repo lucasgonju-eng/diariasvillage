@@ -1,5 +1,4 @@
 const form = document.querySelector('#register-form');
-const studentsInput = document.querySelector('#student-name');
 const message = document.querySelector('#form-message');
 const openPendingButton = document.querySelector('#open-pending');
 const pendingForm = document.querySelector('#pending-form');
@@ -37,14 +36,12 @@ if (form) {
     event.preventDefault();
     message.textContent = '';
     const payload = {
-      student_name: studentsInput.value.trim(),
       cpf: document.querySelector('#cpf').value.trim(),
-      email: document.querySelector('#email').value.trim(),
       password: document.querySelector('#password').value,
       password_confirm: document.querySelector('#password-confirm').value,
     };
 
-    const res = await fetch('/api/register.php', {
+    const res = await fetch('/api/register-primeiro-acesso.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -52,41 +49,26 @@ if (form) {
 
     const data = await res.json();
     if (!data.ok) {
-      message.textContent =
-        data.error ||
-        'Não foi possível cadastrar. Verifique CPF, nome do aluno e e-mail.';
+      message.textContent = data.error || 'Não foi possível cadastrar. Tente novamente.';
       message.className = 'error';
       if (
         data.error &&
-        (data.error.toLowerCase().includes('aluno não encontrado') ||
-          data.error.toLowerCase().includes('aluno nao encontrado'))
+        (data.error.toLowerCase().includes('não encontrado') ||
+          data.error.toLowerCase().includes('nao encontrado'))
       ) {
-        if (pendingForm) {
+        if (pendingForm && openPendingButton) {
           pendingForm.style.display = 'block';
-          if (openPendingButton) {
-            openPendingButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }
-          const pendingStudent = document.querySelector('#pending-student');
+          openPendingButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
           const pendingCpf = document.querySelector('#pending-cpf');
-          const pendingEmail = document.querySelector('#pending-email');
-          if (pendingStudent && studentsInput && !pendingStudent.value) {
-            pendingStudent.value = studentsInput.value.trim();
-          }
           if (pendingCpf && cpfInput && !pendingCpf.value) {
             pendingCpf.value = cpfInput.value.trim();
-          }
-          if (pendingEmail) {
-            const emailValue = document.querySelector('#email').value.trim();
-            if (!pendingEmail.value && emailValue) {
-              pendingEmail.value = emailValue;
-            }
           }
         }
       }
       return;
     }
 
-    message.textContent = 'Cadastro enviado. Confirme o e-mail para continuar.';
+    message.textContent = 'Conta criada! Você receberá um e-mail de validação (confirmação). Confira sua caixa de entrada e a pasta de spam.';
     message.className = 'success';
     form.reset();
   });
@@ -96,23 +78,11 @@ if (openPendingButton && pendingForm) {
   openPendingButton.addEventListener('click', () => {
     pendingForm.style.display = pendingForm.style.display === 'none' ? 'block' : 'none';
     if (pendingForm.style.display === 'block') {
-      const pendingStudent = document.querySelector('#pending-student');
-      const pendingGuardian = document.querySelector('#pending-guardian');
       const pendingCpf = document.querySelector('#pending-cpf');
-      const pendingEmail = document.querySelector('#pending-email');
-
-      if (pendingStudent && studentsInput && !pendingStudent.value) {
-        pendingStudent.value = studentsInput.value.trim();
-      }
       if (pendingCpf && cpfInput && !pendingCpf.value) {
         pendingCpf.value = cpfInput.value.trim();
       }
-      if (pendingEmail) {
-        const emailValue = document.querySelector('#email').value.trim();
-        if (!pendingEmail.value && emailValue) {
-          pendingEmail.value = emailValue;
-        }
-      }
+      const pendingGuardian = document.querySelector('#pending-guardian');
       if (pendingGuardian && !pendingGuardian.value) {
         pendingGuardian.focus();
       }
