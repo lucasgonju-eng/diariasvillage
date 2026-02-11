@@ -51,7 +51,7 @@ require_once __DIR__ . '/src/Bootstrap.php';
           <form id="login-form">
             <div class="form-group">
               <label>CPF do responsável</label>
-              <input type="text" id="login-cpf" required />
+              <input type="text" id="login-cpf" inputmode="numeric" required />
             </div>
             <div class="form-group">
               <label>Senha</label>

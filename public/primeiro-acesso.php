@@ -57,7 +57,7 @@ require_once __DIR__ . '/src/Bootstrap.php';
 
             <div class="form-group">
               <label>CPF do responsavel</label>
-              <input type="text" id="cpf" placeholder="000.000.000-00" required />
+              <input type="text" id="cpf" placeholder="000.000.000-00" inputmode="numeric" required />
             </div>
 
             <div class="form-group">
@@ -96,7 +96,7 @@ require_once __DIR__ . '/src/Bootstrap.php';
             </div>
             <div class="form-group">
               <label>CPF do responsável</label>
-              <input type="text" id="pending-cpf" required />
+              <input type="text" id="pending-cpf" inputmode="numeric" required />
             </div>
             <div class="form-group">
               <label>E-mail do responsável (opcional)</label>

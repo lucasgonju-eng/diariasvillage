@@ -29,6 +29,10 @@ if (pendingCpfInput) {
 }
 
 if (form) {
+  if (message) {
+    message.textContent = '';
+    message.className = '';
+  }
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     message.textContent = '';
