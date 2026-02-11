@@ -82,7 +82,7 @@ require_once __DIR__ . '/src/Bootstrap.php';
 
           <div class="small" style="margin-top:12px;">
             Problemas no cadastro? Garanta sua diária planejada clicando aqui.
-            <button class="btn btn-ghost btn-sm" id="open-pending" type="button">Abrir formulário</button>
+            <button class="btn btn-primary btn-sm" id="open-pending" type="button">Abrir formulário</button>
           </div>
 
           <form id="pending-form" style="margin-top:12px;display:none;">

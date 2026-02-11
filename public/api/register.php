@@ -16,7 +16,7 @@ $password = $payload['password'] ?? '';
 $passwordConfirm = $payload['password_confirm'] ?? '';
 
 if ($studentName === '' || $cpf === '' || $email === '' || $password === '') {
-    Helpers::json(['ok' => false, 'error' => 'Preencha todos os campos.'], 422);
+    Helpers::json(['ok' => false, 'error' => 'Preencha nome do aluno, CPF, e-mail e senha.'], 422);
 }
 
 if ($password !== $passwordConfirm) {

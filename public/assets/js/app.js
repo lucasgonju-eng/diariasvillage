@@ -48,7 +48,9 @@ if (form) {
 
     const data = await res.json();
     if (!data.ok) {
-      message.textContent = data.error || 'Nao foi possivel cadastrar.';
+      message.textContent =
+        data.error ||
+        'Nao foi possivel cadastrar. Verifique CPF, nome do aluno e e-mail.';
       message.className = 'error';
       return;
     }
