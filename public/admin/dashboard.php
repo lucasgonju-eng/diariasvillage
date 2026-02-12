@@ -37,7 +37,7 @@ $missingWhatsapp = $missingWhatsappResult['data'] ?? [];
 
 $pendenciasResult = $client->select(
     'pendencia_de_cadastro',
-    'select=id,student_name,guardian_name,guardian_cpf,guardian_email,created_at,paid_at&order=created_at.desc&limit=500'
+    'select=id,student_name,guardian_name,guardian_cpf,guardian_email,created_at,paid_at,payment_date,access_code,enrollment&order=created_at.desc&limit=500'
 );
 $pendencias = $pendenciasResult['data'] ?? [];
 $pendenciasPagas = array_filter($pendencias, fn($p) => !empty($p['paid_at']));
@@ -240,16 +240,25 @@ if ($guardians) {
                   <?php
                     $confirmed = $p['paid_at'] ? date('d/m/Y H:i', strtotime($p['paid_at'])) : '-';
                     $amount = number_format((float) $valorPendencia, 2, ',', '.');
+                    $dayUse = !empty($p['payment_date']) ? date('d/m/Y', strtotime($p['payment_date'])) : '-';
+                    $matricula = $p['enrollment'] ?? null;
+                    $codigo = $p['access_code'] ?? null;
+                    $cpfNaoVinculado = empty($matricula) && !empty($p['paid_at']);
                   ?>
-                  <tr>
+                  <tr<?php echo $cpfNaoVinculado ? ' style="background:#FEF2F2;"' : ''; ?>>
                     <td><?php echo htmlspecialchars($p['student_name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
-                    <td>-</td>
+                    <td>
+                      <?php echo htmlspecialchars($matricula ?? '-', ENT_QUOTES, 'UTF-8'); ?>
+                      <?php if ($cpfNaoVinculado): ?>
+                        <span title="CPF não vinculado ao aluno matriculado" style="color:#B91C1C;font-size:11px;">⚠️</span>
+                      <?php endif; ?>
+                    </td>
                     <td>PIX</td>
                     <td>Pendência cadastro</td>
-                    <td>-</td>
+                    <td><?php echo $dayUse; ?></td>
                     <td><?php echo $confirmed; ?></td>
                     <td>R$ <?php echo $amount; ?></td>
-                    <td>-</td>
+                    <td><?php echo htmlspecialchars($codigo ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                   </tr>
                 <?php endforeach; ?>
               <?php endif; ?>

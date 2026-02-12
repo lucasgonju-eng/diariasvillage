@@ -60,22 +60,54 @@ if (!$paymentResult['ok'] || empty($paymentResult['data'])) {
     $invoiceUrl = $payment['invoiceUrl'] ?? $payment['bankSlipUrl'] ?? '';
     $pendenciaResult = $client->select(
         'pendencia_de_cadastro',
-        'select=id,paid_at&asaas_payment_id=eq.' . urlencode($payment['id'])
+        'select=id,paid_at,student_name,guardian_name,guardian_cpf,guardian_email,payment_date&asaas_payment_id=eq.' . urlencode($payment['id'])
     );
     if ((!$pendenciaResult['ok'] || empty($pendenciaResult['data'])) && $invoiceUrl !== '') {
         $pendenciaResult = $client->select(
             'pendencia_de_cadastro',
-            'select=id,paid_at&asaas_invoice_url=eq.' . urlencode($invoiceUrl)
+            'select=id,paid_at,student_name,guardian_name,guardian_cpf,guardian_email,payment_date&asaas_invoice_url=eq.' . urlencode($invoiceUrl)
         );
     }
     if ($pendenciaResult['ok'] && !empty($pendenciaResult['data'])) {
         $pendenciaRow = $pendenciaResult['data'][0];
         if (empty($pendenciaRow['paid_at'])) {
-            $update = $client->update('pendencia_de_cadastro', 'id=eq.' . $pendenciaRow['id'], [
+            $accessCode = Helpers::randomNumericCode(6);
+            $paymentDateFromAsaas = $payment['dueDate'] ?? null;
+            $dayUseDate = $pendenciaRow['payment_date'] ?? $paymentDateFromAsaas;
+
+            $guardianByCpf = $client->select(
+                'guardians',
+                'select=student_id&parent_document=eq.' . urlencode($pendenciaRow['guardian_cpf'] ?? '') . '&limit=1'
+            );
+            $enrollment = null;
+            $studentId = null;
+            if ($guardianByCpf['ok'] && !empty($guardianByCpf['data'])) {
+                $studentId = $guardianByCpf['data'][0]['student_id'] ?? null;
+                if ($studentId) {
+                    $studentRes = $client->select('students', 'select=enrollment&id=eq.' . urlencode($studentId));
+                    if ($studentRes['ok'] && !empty($studentRes['data'])) {
+                        $enrollment = $studentRes['data'][0]['enrollment'] ?? null;
+                    }
+                }
+            }
+
+            $updatePayload = [
                 'paid_at' => date('c'),
                 'asaas_payment_id' => $payment['id'],
                 'asaas_invoice_url' => $invoiceUrl ?: null,
-            ]);
+                'access_code' => $accessCode,
+            ];
+            if ($dayUseDate) {
+                $updatePayload['payment_date'] = $dayUseDate;
+            }
+            if ($studentId) {
+                $updatePayload['student_id'] = $studentId;
+            }
+            if ($enrollment !== null) {
+                $updatePayload['enrollment'] = $enrollment;
+            }
+
+            $update = $client->update('pendencia_de_cadastro', 'id=eq.' . $pendenciaRow['id'], $updatePayload);
             if (!$update['ok']) {
                 $logPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'error_log_custom.txt';
                 file_put_contents(
@@ -84,6 +116,119 @@ if (!$paymentResult['ok'] || empty($paymentResult['data'])) {
                     FILE_APPEND
                 );
                 Helpers::json(['ok' => false, 'error' => 'Falha ao atualizar pendência.'], 500);
+            }
+
+            $guardianEmail = $pendenciaRow['guardian_email'] ?? '';
+            if ($guardianEmail) {
+                $studentName = $pendenciaRow['student_name'] ?? 'Aluno';
+                $amount = '77,00';
+                $paymentDateFormatted = $dayUseDate ? date('d/m/Y', strtotime($dayUseDate)) : '-';
+                $portalLink = Helpers::baseUrl() ?: 'https://village.einsteinhub.co';
+                $paymentLink = $payment['invoiceUrl'] ?? $payment['bankSlipUrl'] ?? $portalLink;
+
+                $pendenciaTemplate = <<<'HTML'
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pagamento confirmado • Diárias Village</title>
+</head>
+<body style="margin:0;padding:0;background:#EEF2F7;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
+    Pagamento confirmado. Liberação automática e secretaria avisada.
+  </div>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#EEF2F7;padding:24px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0"
+               style="width:600px;max-width:600px;background:#FFFFFF;border-radius:18px;overflow:hidden;
+                      box-shadow:0 10px 30px rgba(11,16,32,.14);">
+          <tr>
+            <td style="padding:26px 28px;background: radial-gradient(1100px 380px at 25% 0%, #163A7A 0%, #0A1B4D 40%, #081636 100%); color:#FFFFFF;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td valign="middle"><div style="font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-weight:800;letter-spacing:.06em;font-size:14px;">DIÁRIAS VILLAGE</div>
+                    <div style="font-size:13px;opacity:.90;margin-top:4px;">Pagamento rápido do Day use Village</div></td>
+                </tr>
+              </table>
+              <div style="margin-top:14px;display:inline-block;padding:8px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.18);background:rgba(8,22,54,.35);font-size:12px;color:#EAF0FF;">
+                Pagamento confirmado
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px 28px 10px 28px;">
+              <div style="font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0B1020;">
+                <div style="font-size:26px;font-weight:800;line-height:1.15;">Pagamento confirmado <span style="font-size:22px;">✅</span></div>
+                <div style="margin-top:10px;font-size:15px;line-height:1.65;color:#1B2333;">
+                  Tudo certo! Recebemos o pagamento da diária e o acesso foi <b>liberado automaticamente</b>.
+                </div>
+                <div style="margin-top:20px;background:#F6F8FC;border:1px solid #E6E9F2;border-radius:14px;padding:18px;">
+                  <div style="font-size:16px;font-weight:800;margin-bottom:10px;color:#0B1020;">Resumo da sua compra</div>
+                  <div style="font-size:14px;line-height:1.7;color:#1B2333;">
+                    Aluno: <b>{{nome_aluno}}</b><br>
+                    Data da diária: <b>{{data_diaria}}</b><br>
+                    Tipo: <b>Planejada</b><br>
+                    Valor pago: <b>R$ {{valor}}</b><br>
+                    Código de acesso: <b>{{codigo_acesso}}</b>
+                  </div>
+                </div>
+                {{extra_dados}}
+                <div style="margin-top:18px;font-size:15px;line-height:1.7;color:#1B2333;">
+                  Você não precisa fazer mais nada.<br>
+                  <b>A secretaria já foi avisada automaticamente.</b>
+                </div>
+                <div style="margin-top:22px;">
+                  <a href="{{link_portal}}" style="display:inline-block;background:#D6B25E;color:#0B1020;text-decoration:none;font-weight:800;padding:12px 16px;border-radius:14px;">Acessar Diárias Village</a>
+                </div>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:18px 28px;background:#F3F6FB;border-top:1px solid #E6E9F2;">
+              <div style="font-size:12px;line-height:1.5;color:#556070;text-align:center;">
+                Diárias Village • Sistema oficial de pagamento e controle de acesso
+              </div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+HTML;
+
+                $replace = [
+                    '{{nome_aluno}}' => htmlspecialchars($studentName, ENT_QUOTES, 'UTF-8'),
+                    '{{data_diaria}}' => htmlspecialchars($paymentDateFormatted, ENT_QUOTES, 'UTF-8'),
+                    '{{valor}}' => $amount,
+                    '{{codigo_acesso}}' => htmlspecialchars($accessCode, ENT_QUOTES, 'UTF-8'),
+                    '{{link_portal}}' => htmlspecialchars($portalLink, ENT_QUOTES, 'UTF-8'),
+                    '{{extra_dados}}' => '',
+                ];
+                $html = strtr($pendenciaTemplate, $replace);
+
+                $mailer = new Mailer();
+                $mailer->send($guardianEmail, 'Pagamento confirmado • Diárias Village', $html);
+
+                $secretaria = App\Env::get('EMAIL_SECRETARIA', '');
+                $copia = App\Env::get('EMAIL_COPIA', '');
+                if ($secretaria) {
+                    $extraBlock = '<div style="margin-top:16px;background:#F6F8FC;border:1px solid #E6E9F2;border-radius:14px;padding:16px;">
+                      <div style="font-size:14px;font-weight:800;margin-bottom:8px;color:#0B1020;">Dados do responsável</div>
+                      <div style="font-size:13px;line-height:1.6;color:#1B2333;">
+                        CPF/CNPJ: <b>' . htmlspecialchars($pendenciaRow['guardian_cpf'] ?? '', ENT_QUOTES, 'UTF-8') . '</b><br>
+                        E-mail: <b>' . htmlspecialchars($guardianEmail, ENT_QUOTES, 'UTF-8') . '</b><br>
+                        Código de acesso: <b>' . htmlspecialchars($accessCode, ENT_QUOTES, 'UTF-8') . '</b><br>
+                        Matrícula: <b>' . htmlspecialchars($enrollment ?? '(CPF não vinculado ao aluno)', ENT_QUOTES, 'UTF-8') . '</b>
+                      </div>
+                    </div>';
+                    $replace['{{extra_dados}}'] = $extraBlock;
+                    $htmlSecretaria = strtr($pendenciaTemplate, $replace);
+                    $mailer->send($secretaria, 'Pagamento confirmado - liberar estudante (pendência)', $htmlSecretaria, $copia ? [$copia] : []);
+                }
             }
         }
         Helpers::json(['ok' => true]);

@@ -18,19 +18,6 @@ $result = $client->select(
 $pendencias = $result['data'] ?? [];
 
 $message = '';
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $pendenciaId = trim($_POST['pendencia_id'] ?? '');
-    if ($pendenciaId !== '') {
-        $update = $client->update('pendencia_de_cadastro', 'id=eq.' . urlencode($pendenciaId), [
-            'paid_at' => date('c'),
-        ]);
-        $message = $update['ok'] ? 'Baixa manual registrada.' : 'Falha ao dar baixa.';
-        if ($update['ok']) {
-            header('Location: /admin/settle-pendencia.php?ok=1');
-            exit;
-        }
-    }
-}
 
 $ok = isset($_GET['ok']) && $_GET['ok'] === '1';
 ?>
@@ -69,7 +56,7 @@ $ok = isset($_GET['ok']) && $_GET['ok'] === '1';
       <div class="msg msg-err"><?php echo htmlspecialchars($message, ENT_QUOTES, 'UTF-8'); ?></div>
     <?php endif; ?>
 
-    <p class="muted">Pendências sem baixa. Marque como pago após conferir no Asaas.</p>
+    <p class="muted">Pendências sem baixa. Marque como pago após conferir no Asaas. Informe a data do day-use.</p>
 
     <table class="settle-table">
       <thead>
@@ -79,16 +66,20 @@ $ok = isset($_GET['ok']) && $_GET['ok'] === '1';
           <th>CPF</th>
           <th>E-mail</th>
           <th>Registrado em</th>
+          <th>Data day-use</th>
           <th>Ação</th>
         </tr>
       </thead>
       <tbody>
         <?php
         $pendentes = array_filter($pendencias, fn($p) => empty($p['paid_at']));
+        $today = date('Y-m-d');
+        $hour = (int) date('H');
+        $minDate = $hour >= 16 ? date('Y-m-d', strtotime('+1 day')) : $today;
         if (empty($pendentes)):
         ?>
           <tr>
-            <td colspan="6">Nenhuma pendência sem baixa.</td>
+            <td colspan="7">Nenhuma pendência sem baixa.</td>
           </tr>
         <?php else: ?>
           <?php foreach ($pendentes as $p): ?>
@@ -100,10 +91,10 @@ $ok = isset($_GET['ok']) && $_GET['ok'] === '1';
               <td><?php echo htmlspecialchars($p['guardian_email'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
               <td><?php echo $created; ?></td>
               <td>
-                <form method="post" style="display:inline;">
-                  <input type="hidden" name="pendencia_id" value="<?php echo htmlspecialchars($p['id'], ENT_QUOTES, 'UTF-8'); ?>" />
-                  <button type="submit" class="btn-settle" onclick="return confirm('Confirmar baixa manual?');">Dar baixa</button>
-                </form>
+                <input type="date" class="settle-date" data-id="<?php echo htmlspecialchars($p['id'], ENT_QUOTES, 'UTF-8'); ?>" value="<?php echo $minDate; ?>" min="<?php echo $minDate; ?>" style="padding:6px;border-radius:8px;border:1px solid #cbd5e1;" />
+              </td>
+              <td>
+                <button type="button" class="btn-settle js-settle-manual" data-id="<?php echo htmlspecialchars($p['id'], ENT_QUOTES, 'UTF-8'); ?>">Dar baixa</button>
               </td>
             </tr>
           <?php endforeach; ?>
@@ -111,5 +102,35 @@ $ok = isset($_GET['ok']) && $_GET['ok'] === '1';
       </tbody>
     </table>
   </div>
+  <script>
+  document.querySelectorAll('.js-settle-manual').forEach(function(btn) {
+    btn.addEventListener('click', async function() {
+      const id = btn.dataset.id;
+      const row = btn.closest('tr');
+      const dateInput = row ? row.querySelector('.settle-date') : null;
+      const paymentDate = dateInput ? dateInput.value : '';
+      if (!id) return;
+      if (!confirm('Confirmar baixa manual? O código será gerado e o e-mail enviado.')) return;
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/admin-settle-pendencia.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: id, payment_date: paymentDate || new Date().toISOString().slice(0, 10) }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          window.location.href = '/admin/settle-pendencia.php?ok=1';
+        } else {
+          alert(data.error || 'Falha ao dar baixa.');
+        }
+      } catch () {
+        alert('Falha ao dar baixa.');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+  </script>
 </body>
 </html>

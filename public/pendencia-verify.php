@@ -44,35 +44,95 @@ if (empty($pendencia['verified_at'])) {
 $guardianEmail = $pendencia['guardian_email'] ?? '';
 $guardianName = $pendencia['guardian_name'] ?? 'Responsável';
 $guardianCpf = $pendencia['guardian_cpf'] ?? '';
+$studentName = $pendencia['student_name'] ?? 'Aluno';
 
 $invoiceUrl = $pendencia['asaas_invoice_url'] ?? '';
-if ($invoiceUrl === '') {
-    $asaas = new AsaasClient(new HttpClient());
-    $customerPayload = [
-        'name' => $guardianName,
-        'email' => $guardianEmail,
-    ];
-    $documentDigits = preg_replace('/\D+/', '', $guardianCpf);
-    if ($documentDigits !== '') {
-        $customerPayload['cpfCnpj'] = $documentDigits;
-    }
+$today = date('Y-m-d');
+$hour = (int) date('H');
+$minDate = $hour >= 16 ? date('Y-m-d', strtotime('+1 day')) : $today;
 
-    $customer = $asaas->createCustomer($customerPayload);
-    $customerId = $customer['data']['id'] ?? null;
-    if ($customerId) {
-        $payment = $asaas->createPayment([
-            'customer' => $customerId,
-            'billingType' => 'PIX',
-            'value' => 77.00,
-            'dueDate' => date('Y-m-d'),
-            'description' => 'Diária planejada - pendência cadastro - Einstein Village',
-        ]);
-        $paymentData = $payment['data'] ?? [];
-        $invoiceUrl = $paymentData['invoiceUrl'] ?? $paymentData['bankSlipUrl'] ?? '';
-        $client->update('pendencia_de_cadastro', 'id=eq.' . urlencode($pendenciaId), [
-            'asaas_payment_id' => $paymentData['id'] ?? null,
-            'asaas_invoice_url' => $invoiceUrl ?: null,
-        ]);
+if ($invoiceUrl === '') {
+    $paymentDate = trim($_POST['payment_date'] ?? '');
+    if ($paymentDate === '') {
+        $paymentDate = $minDate;
+    }
+    $paymentDateValid = (bool) preg_match('/^\d{4}-\d{2}-\d{2}$/', $paymentDate);
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && $paymentDateValid) {
+        $asaas = new AsaasClient(new HttpClient());
+        $customerPayload = [
+            'name' => $guardianName,
+            'email' => $guardianEmail,
+        ];
+        $documentDigits = preg_replace('/\D+/', '', $guardianCpf);
+        if ($documentDigits !== '') {
+            $customerPayload['cpfCnpj'] = $documentDigits;
+        }
+
+        $customer = $asaas->createCustomer($customerPayload);
+        $customerId = $customer['data']['id'] ?? null;
+        if ($customerId) {
+            $payment = $asaas->createPayment([
+                'customer' => $customerId,
+                'billingType' => 'PIX',
+                'value' => 77.00,
+                'dueDate' => $paymentDate,
+                'description' => 'Diária planejada - pendência cadastro - Einstein Village',
+            ]);
+            $paymentData = $payment['data'] ?? [];
+            $invoiceUrl = $paymentData['invoiceUrl'] ?? $paymentData['bankSlipUrl'] ?? '';
+            $updatePayload = [
+                'asaas_payment_id' => $paymentData['id'] ?? null,
+                'asaas_invoice_url' => $invoiceUrl ?: null,
+                'payment_date' => $paymentDate,
+            ];
+            $client->update('pendencia_de_cadastro', 'id=eq.' . urlencode($pendenciaId), $updatePayload);
+        }
+    } elseif ($_SERVER['REQUEST_METHOD'] !== 'POST' || !$paymentDateValid) {
+        $displayMin = $minDate;
+        $paymentDateDisplay = $paymentDateValid ? $paymentDate : $minDate;
+        ?>
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Selecione a data • Diárias Village</title>
+  <style>
+    body{margin:0;padding:0;background:#EEF2F7;font-family:Inter,system-ui,-apple-system,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center}
+    .card{background:#fff;border-radius:18px;box-shadow:0 10px 30px rgba(11,16,32,.14);max-width:440px;overflow:hidden}
+    .card-header{padding:26px 28px;background:linear-gradient(135deg,#163A7A 0%,#0A1B4D 100%);color:#fff}
+    .card-body{padding:28px}
+    .form-group{margin-bottom:18px}
+    .form-group label{display:block;font-weight:600;margin-bottom:8px;color:#0B1020}
+    .form-group input{width:100%;padding:12px 14px;border:1px solid #E6E9F2;border-radius:12px;font-size:15px;box-sizing:border-box}
+    .form-group .hint{font-size:12px;color:#556070;margin-top:6px}
+    .btn{display:inline-block;background:#D6B25E;color:#0B1020;text-decoration:none;font-weight:800;padding:14px 24px;border-radius:14px;border:none;cursor:pointer;font-size:15px;width:100%;text-align:center}
+    .btn:hover{opacity:.95}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="card-header">
+      <div style="font-weight:800;letter-spacing:.06em;font-size:14px;">DIÁRIAS VILLAGE</div>
+      <div style="font-size:13px;opacity:.9;margin-top:4px;">Cadastro pendente</div>
+    </div>
+    <div class="card-body">
+      <p style="margin:0 0 20px;color:#1B2333;">Selecione a <b>data do day-use</b> para gerar o pagamento da diária planejada.</p>
+      <form method="post">
+        <div class="form-group">
+          <label>Data do day-use</label>
+          <input type="date" name="payment_date" value="<?php echo htmlspecialchars($paymentDateDisplay); ?>" min="<?php echo htmlspecialchars($displayMin); ?>" required />
+          <div class="hint">Após 16h, somente datas futuras.</div>
+        </div>
+        <button type="submit" class="btn">Gerar pagamento (R$ 77,00)</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>
+<?php
+        exit;
     }
 }
 
@@ -172,11 +232,18 @@ if ($guardianEmail) {
 </html>
 HTML;
 
+    $dataDiaria = date('d/m/Y');
+    if (!empty($pendencia['payment_date'])) {
+        $dataDiaria = date('d/m/Y', strtotime($pendencia['payment_date']));
+    } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($paymentDate)) {
+        $dataDiaria = date('d/m/Y', strtotime($paymentDate));
+    }
+
     $html = strtr($template, [
         '{{nome_responsavel}}' => htmlspecialchars($guardianName, ENT_QUOTES, 'UTF-8'),
         '{{cpf_responsavel}}' => htmlspecialchars($guardianCpf, ENT_QUOTES, 'UTF-8'),
         '{{link_pagamento}}' => htmlspecialchars($invoiceUrl ?: Helpers::baseUrl(), ENT_QUOTES, 'UTF-8'),
-        '{{data_diaria}}' => date('d/m/Y'),
+        '{{data_diaria}}' => $dataDiaria,
         '{{tipo_diaria}}' => 'Planejada',
         '{{valor_diaria}}' => '77,00',
     ]);

@@ -57,6 +57,10 @@ create table if not exists pendencia_de_cadastro (
   paid_at timestamptz,
   asaas_payment_id text,
   asaas_invoice_url text,
+  payment_date date,
+  access_code text,
+  student_id uuid references students(id),
+  enrollment text,
   created_at timestamptz not null default now()
 );
 
