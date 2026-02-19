@@ -47,6 +47,12 @@
         <span class="material-symbols-outlined text-sm">smart_toy</span> Tech
       </span>
     </div>
+
+    <!-- Continuar navegando (permanece dentro de /mobile) -->
+    <a href="/mobile/?page=grade_oficinas" class="mt-6 text-slate-400 hover:text-slate-600 text-sm font-medium transition-colors flex items-center gap-1">
+      <span>Continuar navegando</span>
+      <span class="material-symbols-outlined text-sm">arrow_forward</span>
+    </a>
   </div>
 
   <!-- Footer -->

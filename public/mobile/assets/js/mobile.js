@@ -4,7 +4,17 @@
 (function () {
   'use strict';
 
+  var EXTERNAL_ROUTES = {
+    tela_login:     '/login.php',
+    tela_cadastro:  '/primeiro-acesso.php',
+    grade_oficinas: '/diaria-grade-oficina-modular.php'
+  };
+
   function navigate(page) {
+    if (EXTERNAL_ROUTES[page]) {
+      window.location.href = EXTERNAL_ROUTES[page];
+      return;
+    }
     window.location.href = '/mobile/?page=' + encodeURIComponent(page);
   }
 
