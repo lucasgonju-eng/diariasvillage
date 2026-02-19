@@ -1,7 +1,8 @@
-const CACHE_NAME = 'village-mobile-v3';
+const CACHE_NAME = 'village-mobile-v4';
 
 const PRECACHE_URLS = [
   '/mobile/',
+  '/mobile/manifest.webmanifest',
   '/mobile/assets/css/mobile.css',
   '/mobile/assets/js/mobile.js',
   '/mobile/assets/img/icon-192.png',
