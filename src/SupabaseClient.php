@@ -37,6 +37,18 @@ class SupabaseClient
         return $this->http->request('PATCH', $url, $this->headers(['Prefer' => 'return=representation']), $payload);
     }
 
+    public function rpc(string $functionName, array $payload = []): array
+    {
+        $url = $this->url . '/rest/v1/rpc/' . $functionName;
+        return $this->http->request('POST', $url, $this->headers(['Prefer' => 'return=representation']), $payload);
+    }
+
+    public function delete(string $table, string $query): array
+    {
+        $url = $this->url . '/rest/v1/' . $table . '?' . $query;
+        return $this->http->request('DELETE', $url, $this->headers(['Prefer' => 'return=representation']));
+    }
+
     private function headers(array $extra = []): array
     {
         return array_merge([
