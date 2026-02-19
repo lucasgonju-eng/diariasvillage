@@ -1,10 +1,21 @@
 # Diarias Village - Hostinger Cloud
 Options -Indexes
+
+# Bloqueia arquivos sensíveis (inclui .env e variações)
+<FilesMatch "(^\.env($|\.))|(^\.git)|(^composer\.(json|lock)$)|(^error_log_custom\.txt$)">
+    Require all denied
+</FilesMatch>
+
 <IfModule mod_rewrite.c>
     RewriteEngine On
     RewriteBase /
     RewriteCond %{HTTPS} off
     RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+    RewriteRule ^diaria/([^/]+)/grade-oficina-modular/?$ diaria-grade-oficina-modular.php?diariaId=$1 [L,QSA]
+    RewriteRule ^api/diarias/([^/]+)/oficinas-modulares/([^/]+)/selecionar/?$ api/oficina-modular-grade-selecionar.php?diariaId=$1&oficinaId=$2 [L,QSA]
+    RewriteRule ^api/diarias/([^/]+)/oficinas-modulares/([^/]+)/remover/?$ api/oficina-modular-grade-remover.php?diariaId=$1&oficinaId=$2 [L,QSA]
+    RewriteRule ^api/diarias/([^/]+)/upsell-segundo-encontro/([^/]+)/?$ api/oficina-modular-upsell-segundo-encontro.php?diariaId=$1&oficinaId=$2 [L,QSA]
+    RewriteRule ^api/oficinas-modulares/([^/]+)/criar-diaria-para-encontro/?$ api/oficina-modular-criar-diaria-encontro.php?oficinaId=$1 [L,QSA]
 </IfModule>
 DirectoryIndex index.php
 <IfModule mod_headers.c>
