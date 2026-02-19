@@ -89,7 +89,7 @@ if ($r !== null) {
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Village">
-  <link rel="manifest" href="/mobile/manifest.webmanifest">
+  <link rel="manifest" href="/mobile/manifest.json">
   <link rel="apple-touch-icon" href="/mobile/assets/img/icon-192.png">
 
   <!-- Tailwind CDN -->
