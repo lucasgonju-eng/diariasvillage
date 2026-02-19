@@ -1,0 +1,23 @@
+# Allow manifest and JSON files to be served from /mobile/
+<FilesMatch "\.(webmanifest|json)$">
+  Require all granted
+  <IfModule mod_authz_core.c>
+    Require all granted
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Allow from all
+    Satisfy any
+  </IfModule>
+</FilesMatch>
+
+# Correct MIME types
+AddType application/manifest+json .webmanifest
+AddType application/json .json
+
+# Allow service worker
+<FilesMatch "sw\.js$">
+  <IfModule mod_headers.c>
+    Header set Service-Worker-Allowed "/"
+  </IfModule>
+</FilesMatch>
