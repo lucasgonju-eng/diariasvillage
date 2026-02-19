@@ -1,4 +1,4 @@
-const CACHE_NAME = 'village-mobile-v1';
+const CACHE_NAME = 'village-mobile-v2';
 
 const PRECACHE_URLS = [
   '/mobile/',

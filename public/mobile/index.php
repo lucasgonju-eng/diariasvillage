@@ -84,9 +84,9 @@ if ($r !== null) {
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title><?= htmlspecialchars($title) ?></title>
 
-  <!-- PWA / iOS -->
+  <!-- PWA -->
   <meta name="theme-color" content="#0F2A75">
-  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Village">
   <link rel="manifest" href="/mobile/manifest.json">
