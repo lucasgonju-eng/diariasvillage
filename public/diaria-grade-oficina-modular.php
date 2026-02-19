@@ -247,7 +247,8 @@ foreach ($oficinas as $oficina) {
         }
     }
 
-    $capacidade = (int) ($oficina['capacidade'] ?? 0);
+    // Limite de vagas temporariamente desativado para todas as oficinas.
+    $capacidade = 0;
     if (!empty($encontrosHoje)) {
         foreach ($encontrosHoje as $encontroDia) {
             $statusUi = 'DISPONIVEL';

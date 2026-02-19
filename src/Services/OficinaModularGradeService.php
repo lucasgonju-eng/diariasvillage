@@ -48,14 +48,7 @@ final class OficinaModularGradeService
             return ['ok' => false, 'error' => 'Oficina fora da janela de validade.', 'reason' => 'FORA_DA_VALIDADE_30D'];
         }
 
-        $capacidade = (int) ($oficina['capacidade'] ?? 0);
-        if ($capacidade > 0) {
-            $ocupacao = $this->getOcupacaoAtual($oficinaModularId, (string) ($diaria['data_diaria'] ?? ''), $diaDiaria);
-            $totalConfirmadas = (int) ($ocupacao['total_confirmadas'] ?? 0);
-            if ($totalConfirmadas >= $capacidade) {
-                return ['ok' => false, 'error' => 'Oficina sem vagas para este horário.', 'reason' => 'CAPACIDADE_ESGOTADA'];
-            }
-        }
+        // Limite de vagas temporariamente desativado para todas as oficinas.
 
         $encontros = $this->buscarEncontros($oficinaModularId);
         if ($encontros === []) {
@@ -244,97 +237,44 @@ final class OficinaModularGradeService
 
     public function getOcupacaoAtual(string $oficinaModularId, string $dataDiaria, int $diaSemana): array
     {
-        $base = [
+        // Limite de vagas temporariamente desativado para todas as oficinas.
+        return [
             'total_confirmadas' => 0,
             'capacidade' => 0,
             'vagas_restantes' => 999999,
-        ];
-
-        if ($dataDiaria === '' || $diaSemana < 1 || $diaSemana > 7) {
-            return $base;
-        }
-
-        $rpc = $this->client->rpc('oficina_modular_get_ocupacao', [
-            'p_oficina_modular_id' => $oficinaModularId,
-            'p_data_diaria' => $dataDiaria,
-            'p_dia_semana' => $diaSemana,
-        ]);
-
-        if (!$rpc['ok']) {
-            return $base;
-        }
-
-        $data = $this->normalizarRetornoRpc($rpc['data'] ?? null);
-        if (!is_array($data)) {
-            return $base;
-        }
-
-        return [
-            'total_confirmadas' => (int) ($data['total_confirmadas'] ?? 0),
-            'capacidade' => (int) ($data['capacidade'] ?? 0),
-            'vagas_restantes' => (int) ($data['vagas_restantes'] ?? 999999),
         ];
     }
 
     public function revalidarGradeAntesDoCheckout(string $diariaId): array
     {
-        $rpc = $this->client->rpc('oficina_modular_grade_revalidar_checkout', [
-            'p_diaria_id' => $diariaId,
-        ]);
-
-        if (!$rpc['ok']) {
-            return ['ok' => false, 'error' => 'Erro ao revalidar grade antes do checkout.'];
-        }
-
-        $data = $this->normalizarRetornoRpc($rpc['data'] ?? null);
-        if (!is_array($data)) {
-            return ['ok' => false, 'error' => 'Resposta inválida da revalidação de checkout.'];
-        }
-
-        if (($data['ok'] ?? false) === true) {
-            return ['ok' => true];
-        }
-
-        return [
-            'ok' => false,
-            'changed' => (bool) ($data['changed'] ?? false),
-            'canceladas' => (int) ($data['canceladas'] ?? 0),
-            'message' => (string) ($data['message'] ?? self::MSG_REVALIDACAO_LOTACAO),
-            'error' => (string) ($data['error'] ?? self::MSG_REVALIDACAO_LOTACAO),
-        ];
+        // Limite de vagas temporariamente desativado para todas as oficinas.
+        return ['ok' => true];
     }
 
     public function confirmarGradeNoPagamento(string $diariaId): array
     {
-        $rpc = $this->client->rpc('oficina_modular_grade_confirmar_pagamento', [
-            'p_diaria_id' => $diariaId,
+        $diaria = $this->buscarDiaria($diariaId);
+        if ($diaria === null) {
+            return ['ok' => false, 'error' => 'Diária não encontrada.'];
+        }
+
+        if ((string) ($diaria['status_pagamento'] ?? 'PENDENTE') === 'PAGO' || $this->toBool($diaria['grade_travada'] ?? false)) {
+            return ['ok' => true, 'idempotent' => true, 'confirmadas' => 0, 'canceladas' => 0];
+        }
+
+        $this->client->update('diaria', 'id=eq.' . rawurlencode($diariaId), [
+            'status_pagamento' => 'PAGO',
+            'grade_travada' => true,
+            'updated_at' => date('c'),
         ]);
 
-        if (!$rpc['ok']) {
-            return ['ok' => false, 'error' => 'Erro ao confirmar grade no pagamento.'];
-        }
+        $this->client->update(
+            'diaria_oficina_modular_reserva',
+            'diaria_id=eq.' . rawurlencode($diariaId) . '&status=neq.CANCELADA',
+            ['status' => 'CONFIRMADA', 'updated_at' => date('c')]
+        );
 
-        $data = $this->normalizarRetornoRpc($rpc['data'] ?? null);
-        if (!is_array($data)) {
-            return ['ok' => false, 'error' => 'Resposta inválida da confirmação de pagamento.'];
-        }
-
-        if (($data['ok'] ?? false) !== true) {
-            return ['ok' => false, 'error' => (string) ($data['error'] ?? 'Falha ao confirmar grade.')];
-        }
-
-        $canceladas = (int) ($data['canceladas'] ?? 0);
-        $result = [
-            'ok' => true,
-            'idempotent' => (bool) ($data['idempotent'] ?? false),
-            'confirmadas' => (int) ($data['confirmadas'] ?? 0),
-            'canceladas' => $canceladas,
-        ];
-        if ($canceladas > 0) {
-            $result['user_alert'] = self::MSG_POS_PAGAMENTO_AJUSTE;
-        }
-
-        return $result;
+        return ['ok' => true, 'idempotent' => false, 'confirmadas' => 0, 'canceladas' => 0];
     }
 
     public function criarUpsellSegundoEncontro(string $diariaId, string $oficinaModularId, string $guardianId): array
