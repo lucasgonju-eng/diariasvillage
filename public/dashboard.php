@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/src/Bootstrap.php';
+require_once dirname(__DIR__) . '/src/Bootstrap.php';
 date_default_timezone_set('America/Sao_Paulo');
 
 use App\Helpers;
@@ -52,9 +52,9 @@ $minDate = $hour >= 16 ? date('Y-m-d', strtotime('+1 day')) : $today;
           </div>
         </div>
 
-        <aside class="hero-card" aria-label="Formulário de pagamento">
-          <h3>Gerar pagamento</h3>
-          <p class="muted">Preencha os dados abaixo.</p>
+        <aside class="hero-card" aria-label="Formulário de início da diária">
+          <h3>Montar grade da diária</h3>
+          <p class="muted">Escolha a data e siga para a etapa de Grade de Oficina Modular.</p>
           <div class="info-note" id="planned-countdown" data-now="<?php echo date('c'); ?>">
             Carregando contagem regressiva da diária planejada...
           </div>
@@ -66,19 +66,8 @@ $minDate = $hour >= 16 ? date('Y-m-d', strtotime('+1 day')) : $today;
                 <input type="date" id="payment-date" value="<?php echo $minDate; ?>" min="<?php echo $minDate; ?>" required />
                 <div class="small">Após 16h, somente datas futuras.</div>
               </div>
-              <div class="form-group">
-                <label>Forma de pagamento</label>
-                <select id="billing-type">
-                  <option value="PIX">PIX</option>
-                </select>
-              </div>
             </div>
-            <div class="form-group">
-              <label>CPF/CNPJ do responsável</label>
-              <input type="text" id="billing-document" value="<?php echo htmlspecialchars($user['parent_document'] ?? '', ENT_QUOTES, 'UTF-8'); ?>" placeholder="Digite o CPF ou CNPJ" required />
-              <div class="small">Necessário para confirmar o pagamento no Asaas.</div>
-            </div>
-            <button class="btn btn-primary btn-block" type="submit">Gerar pagamento</button>
+            <button class="btn btn-primary btn-block" type="submit">Ir para Grade de Oficina Modular</button>
             <div id="payment-message"></div>
           </form>
         </aside>
@@ -101,7 +90,7 @@ $minDate = $hour >= 16 ? date('Y-m-d', strtotime('+1 day')) : $today;
         <div class="info-cards">
           <div class="info-card">
             <h3>Diária Planejada</h3>
-            <p>Antes das 10h do day-use (R$ 77,00).</p>
+            <p>Antes das 10h do day-use (R$ 5,00 - valor temporário para testes).</p>
           </div>
           <div class="info-card">
             <h3>Diária Emergencial</h3>
@@ -125,5 +114,40 @@ $minDate = $hour >= 16 ? date('Y-m-d', strtotime('+1 day')) : $today;
   </footer>
 
   <script src="/assets/js/dashboard.js?v=2"></script>
+  <script>
+    (async function checkPendingPaymentAfterReturn() {
+      let paymentId = '';
+      try {
+        paymentId = sessionStorage.getItem('pendingPaymentId') || '';
+      } catch (e) {
+        return;
+      }
+      if (!paymentId) return;
+
+      try {
+        const res = await fetch('/api/payment-status.php?paymentId=' + encodeURIComponent(paymentId), {
+          method: 'GET',
+          credentials: 'same-origin',
+          headers: { 'Accept': 'application/json' },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.ok && data.payment && data.payment.status === 'paid') {
+          const successUrl = (typeof data.redirect_to === 'string' && data.redirect_to)
+            ? data.redirect_to
+            : '/pagamento-sucesso.php?paymentId=' + encodeURIComponent(paymentId);
+          try {
+            sessionStorage.removeItem('pendingPaymentId');
+            sessionStorage.removeItem('pendingPaymentSuccessUrl');
+          } catch (e) {
+            // Sem impacto no fluxo.
+          }
+          window.location.href = successUrl;
+          return;
+        }
+      } catch (e) {
+        // Não interrompe o uso normal do dashboard.
+      }
+    })();
+  </script>
 </body>
 </html>

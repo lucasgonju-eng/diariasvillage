@@ -39,11 +39,9 @@ if (paymentForm) {
 
     const payload = {
       date: document.querySelector('#payment-date').value,
-      billing_type: document.querySelector('#billing-type').value,
-      document: document.querySelector('#billing-document').value.trim(),
     };
 
-    const res = await fetch('/api/create-payment.php', {
+    const res = await fetch('/api/diaria-iniciar.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -56,10 +54,10 @@ if (paymentForm) {
       return;
     }
 
-    paymentMessage.textContent = 'Pagamento criado. Redirecionando...';
+    paymentMessage.textContent = 'Diária iniciada. Redirecionando para a grade...';
     paymentMessage.className = 'success';
-    if (data.invoice_url && data.invoice_url !== '#') {
-      window.location.href = data.invoice_url;
+    if (data.redirect_url) {
+      window.location.href = data.redirect_url;
     }
   });
 }

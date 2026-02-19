@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../src/Bootstrap.php';
+require_once dirname(__DIR__, 2) . '/src/Bootstrap.php';
 date_default_timezone_set('America/Sao_Paulo');
 
 use App\AsaasClient;
@@ -44,29 +44,93 @@ header('X-Debug-Content-Type: ' . $contentType);
 Helpers::requirePost();
 $user = Helpers::requireAuth();
 $payload = json_decode(file_get_contents('php://input'), true);
-
-$date = $payload['date'] ?? '';
+$diariaId = isset($payload['diaria_id']) ? trim((string) $payload['diaria_id']) : '';
+$checkoutToken = isset($payload['checkout_token']) ? trim((string) $payload['checkout_token']) : '';
 $billingType = $payload['billing_type'] ?? 'PIX';
 $documentRaw = trim($payload['document'] ?? '');
+$orientadoraSlotsPayload = $payload['orientadora_slots'] ?? [];
 if ($documentRaw === '') {
     $logPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'error_log_custom.txt';
-    $keys = is_array($payload) ? implode(',', array_keys($payload)) : 'payload_invalido';
+    $keys = is_array($payload) ? implode(',', array_keys($payload)) : 'payload_inválido';
     file_put_contents($logPath, 'create-payment sem documento (payload keys: ' . $keys . ')' . PHP_EOL, FILE_APPEND);
 }
 
-if ($date === '') {
-    Helpers::json(['ok' => false, 'error' => 'Selecione a data.'], 422);
+if ($diariaId === '') {
+    Helpers::json(['ok' => false, 'error' => 'Diária não informada.', 'redirect_to' => '/dashboard.php'], 422);
 }
 
 $today = date('Y-m-d');
 $hour = (int) date('H');
-$plannedAmount = 77.00;
+// TEMPORARIO (testes): valor promocional da diaria planejada.
+$plannedAmount = 5.00;
+
+if (!in_array($billingType, ['PIX', 'DEBIT_CARD'], true)) {
+    Helpers::json(['ok' => false, 'error' => 'Forma de pagamento inválida.'], 422);
+}
+
+$client = new SupabaseClient(new HttpClient());
+$guardian = $client->select('guardians', 'select=*&id=eq.' . $user['id']);
+if (!$guardian['ok'] || empty($guardian['data'])) {
+    Helpers::json(['ok' => false, 'error' => 'Usuário não encontrado.'], 404);
+}
+
+$guardianData = $guardian['data'][0];
+$diaria = $client->select('diaria', 'select=*&id=eq.' . rawurlencode($diariaId) . '&guardian_id=eq.' . rawurlencode((string) $guardianData['id']) . '&limit=1');
+if (!$diaria['ok'] || empty($diaria['data'])) {
+    Helpers::json([
+        'ok' => false,
+        'error' => 'Diária não encontrada para este responsável.',
+        'redirect_to' => '/dashboard.php',
+    ], 404);
+}
+
+$diariaRow = $diaria['data'][0];
+if (!($diariaRow['grade_oficina_modular_ok'] ?? false)) {
+    Helpers::json([
+        'ok' => false,
+        'error' => 'Finalize a etapa da Grade de Oficina Modular antes do pagamento.',
+        'redirect_to' => '/diaria-grade-oficina-modular.php?diariaId=' . rawurlencode($diariaId),
+    ], 422);
+}
+$gradeCheckoutReady = $_SESSION['grade_checkout_ready'] ?? [];
+$gradeReadyAt = is_array($gradeCheckoutReady) ? (int) ($gradeCheckoutReady[$diariaId] ?? 0) : 0;
+if ($gradeReadyAt <= 0 || (time() - $gradeReadyAt) > 1800) {
+    Helpers::json([
+        'ok' => false,
+        'error' => 'Antes de pagar, conclua novamente a etapa da Grade de Oficina Modular.',
+        'redirect_to' => '/diaria-grade-oficina-modular.php?diariaId=' . rawurlencode($diariaId),
+    ], 422);
+}
+$checkoutTokens = $_SESSION['grade_checkout_tokens'] ?? [];
+$tokenMeta = is_array($checkoutTokens) ? ($checkoutTokens[$checkoutToken] ?? null) : null;
+$tokenDiariaId = is_array($tokenMeta) ? (string) ($tokenMeta['diaria_id'] ?? '') : '';
+$tokenExpiresAt = is_array($tokenMeta) ? (int) ($tokenMeta['expires_at'] ?? 0) : 0;
+if ($checkoutToken === '' || $tokenDiariaId !== $diariaId || $tokenExpiresAt <= 0 || time() > $tokenExpiresAt) {
+    Helpers::json([
+        'ok' => false,
+        'error' => 'Sessão de checkout inválida. Conclua novamente a Grade de Oficina Modular.',
+        'redirect_to' => '/diaria-grade-oficina-modular.php?diariaId=' . rawurlencode($diariaId),
+    ], 422);
+}
+$statusPagamentoDiaria = (string) ($diariaRow['status_pagamento'] ?? 'PENDENTE');
+if ($statusPagamentoDiaria === 'PAGO' || ($diariaRow['grade_travada'] ?? false)) {
+    Helpers::json([
+        'ok' => false,
+        'error' => 'Essa diária já foi paga e está travada.',
+        'redirect_to' => '/dashboard.php',
+    ], 422);
+}
+
+$date = (string) ($diariaRow['data_diaria'] ?? '');
+if ($date === '') {
+    Helpers::json(['ok' => false, 'error' => 'Data da diária inválida.'], 422);
+}
 
 if ($date === $today) {
     if ($hour >= 16) {
         Helpers::json([
             'ok' => false,
-            'error' => 'Compras para hoje encerradas apos as 16h. Escolha uma data futura.',
+            'error' => 'Compras para hoje encerradas após as 16h. Escolha uma data futura.',
         ], 422);
     }
 
@@ -82,24 +146,36 @@ if ($date === $today) {
     $amount = $plannedAmount;
 }
 
-if (!in_array($billingType, ['PIX', 'DEBIT_CARD'], true)) {
-    Helpers::json(['ok' => false, 'error' => 'Forma de pagamento inválida.'], 422);
-}
-
-$client = new SupabaseClient(new HttpClient());
-$guardian = $client->select('guardians', 'select=*&id=eq.' . $user['id']);
-if (!$guardian['ok'] || empty($guardian['data'])) {
-    Helpers::json(['ok' => false, 'error' => 'Usuário não encontrado.'], 404);
-}
-
-$guardianData = $guardian['data'][0];
 $asaas = new AsaasClient(new HttpClient());
+$portalLink = Helpers::baseUrl() ?: 'https://village.einsteinhub.co';
+$successUrl = $portalLink . '/pagamento-retorno.php?diariaId=' . rawurlencode($diariaId);
+$isCallbackUrlValida = (bool) filter_var($successUrl, FILTER_VALIDATE_URL)
+    && str_starts_with(strtolower($successUrl), 'https://')
+    && stripos($successUrl, 'localhost') === false
+    && stripos($successUrl, '127.0.0.1') === false;
+$montarPayloadPagamento = static function (string $customerId, string $billingType, float $amount, string $date, string $dailyType, bool $includeCallback) use ($diariaId, $successUrl, $isCallbackUrlValida): array {
+    $payloadPagamento = [
+        'customer' => $customerId,
+        'billingType' => $billingType,
+        'value' => $amount,
+        'dueDate' => $date,
+        'description' => 'Diária ' . $dailyType . ' - Einstein Village',
+        'externalReference' => $diariaId,
+    ];
+    if ($includeCallback && $isCallbackUrlValida) {
+        $payloadPagamento['callback'] = [
+            'successUrl' => $successUrl,
+            'autoRedirect' => true,
+        ];
+    }
+    return $payloadPagamento;
+};
 
 $documentRaw = $documentRaw !== '' ? $documentRaw : (string) ($guardianData['parent_document'] ?? '');
 if ($documentRaw === '') {
     Helpers::json([
         'ok' => false,
-        'error' => 'Informe um CPF ou CNPJ valido para gerar o pagamento.',
+        'error' => 'Informe um CPF ou CNPJ válido para gerar o pagamento.',
     ], 422);
 }
 
@@ -107,7 +183,7 @@ $document = preg_replace('/\D+/', '', $documentRaw);
 
 if (empty($guardianData['asaas_customer_id'])) {
     $customerPayload = [
-        'name' => $guardianData['parent_name'] ?: 'Responsavel ' . $guardianData['email'],
+        'name' => $guardianData['parent_name'] ?: 'Responsável ' . $guardianData['email'],
         'email' => $guardianData['email'],
     ];
 
@@ -141,20 +217,41 @@ if (empty($guardianData['asaas_customer_id'])) {
     ]);
 }
 
-$payment = $asaas->createPayment([
-    'customer' => $guardianData['asaas_customer_id'],
-    'billingType' => $billingType,
-    'value' => $amount,
-    'dueDate' => $date,
-    'description' => 'Diaria ' . $dailyType . ' - Einstein Village',
-]);
+$payment = $asaas->createPayment(
+    $montarPayloadPagamento(
+        $guardianData['asaas_customer_id'],
+        (string) $billingType,
+        (float) $amount,
+        (string) $date,
+        (string) $dailyType,
+        true
+    )
+);
 
 if (!$payment['ok']) {
     $errorMessage = $extractAsaasError($payment);
+    $errorNorm = mb_strtolower($errorMessage, 'UTF-8');
+    $callbackInvalido = str_contains($errorNorm, 'callback') && str_contains($errorNorm, 'inválida');
+    if ($callbackInvalido) {
+        $payment = $asaas->createPayment(
+            $montarPayloadPagamento(
+                $guardianData['asaas_customer_id'],
+                (string) $billingType,
+                (float) $amount,
+                (string) $date,
+                (string) $dailyType,
+                false
+            )
+        );
+        if ($payment['ok']) {
+            goto payment_success;
+        }
+        $errorMessage = $extractAsaasError($payment);
+    }
 
     if (stripos($errorMessage, 'cliente removido') !== false) {
         $customerPayload = [
-            'name' => $guardianData['parent_name'] ?: 'Responsavel ' . $guardianData['email'],
+            'name' => $guardianData['parent_name'] ?: 'Responsável ' . $guardianData['email'],
             'email' => $guardianData['email'],
         ];
         if ($document !== '') {
@@ -169,15 +266,37 @@ if (!$payment['ok']) {
                 'parent_document' => $document,
             ]);
 
-            $payment = $asaas->createPayment([
-                'customer' => $guardianData['asaas_customer_id'],
-                'billingType' => $billingType,
-                'value' => $amount,
-                'dueDate' => $date,
-                'description' => 'Diaria ' . $dailyType . ' - Einstein Village',
-            ]);
+            $payment = $asaas->createPayment(
+                $montarPayloadPagamento(
+                    $guardianData['asaas_customer_id'],
+                    (string) $billingType,
+                    (float) $amount,
+                    (string) $date,
+                    (string) $dailyType,
+                    true
+                )
+            );
             if ($payment['ok']) {
                 goto payment_success;
+            }
+            $errorMessage = $extractAsaasError($payment);
+            $errorNorm = mb_strtolower($errorMessage, 'UTF-8');
+            $callbackInvalido = str_contains($errorNorm, 'callback') && str_contains($errorNorm, 'inválida');
+            if ($callbackInvalido) {
+                $payment = $asaas->createPayment(
+                    $montarPayloadPagamento(
+                        $guardianData['asaas_customer_id'],
+                        (string) $billingType,
+                        (float) $amount,
+                        (string) $date,
+                        (string) $dailyType,
+                        false
+                    )
+                );
+                if ($payment['ok']) {
+                    goto payment_success;
+                }
+                $errorMessage = $extractAsaasError($payment);
             }
         }
     }
@@ -193,9 +312,17 @@ if (!$payment['ok']) {
 
 payment_success:
 $paymentData = $payment['data'];
-$client->insert('payments', [[
+$studentIdForPayment = $diariaRow['student_id'] ?? $guardianData['student_id'];
+$client->update('diaria', 'id=eq.' . rawurlencode($diariaId), [
+    'status_pagamento' => 'PENDENTE',
+    'grade_travada' => false,
+    'updated_at' => date('c'),
+]);
+
+$paymentInsert = $client->insert('payments', [[
     'guardian_id' => $guardianData['id'],
-    'student_id' => $guardianData['student_id'],
+    'student_id' => $studentIdForPayment,
+    'diaria_id' => $diariaId,
     'payment_date' => $date,
     'daily_type' => $dailyType,
     'amount' => $amount,
@@ -205,13 +332,78 @@ $client->insert('payments', [[
 ]]);
 
 $invoiceUrl = $paymentData['invoiceUrl'] ?? $paymentData['bankSlipUrl'] ?? '#';
-$portalLink = Helpers::baseUrl() ?: 'https://village.einsteinhub.co';
 $paymentDate = date('d/m/Y', strtotime($date));
 $dailyLabel = $dailyType === 'emergencial' ? 'Emergencial' : 'Planejada';
 $amountFormatted = number_format((float) $amount, 2, ',', '.');
 $studentName = $guardianData['student_name']
     ?? ($guardianData['student'] ?? null)
     ?? 'Aluno';
+$dayNamesByPrefix = [
+    'SEG' => 'Segunda-feira',
+    'TER' => 'Terça-feira',
+    'QUA' => 'Quarta-feira',
+    'QUI' => 'Quinta-feira',
+    'SEX' => 'Sexta-feira',
+    'SAB' => 'Sábado',
+    'DOM' => 'Domingo',
+];
+$selecoesHtml = '<li>Nenhuma Oficina Modular travada nesta diária.</li>';
+$atrativoOficinas = 'As Oficinas Modulares foram planejadas para promover desenvolvimento emocional, autonomia e aprendizagem prática, com atividades dinâmicas e acompanhamento pedagógico contínuo.';
+$formatarSlotLabel = static function (string $slotId) use ($dayNamesByPrefix): string {
+    if ($slotId !== '' && preg_match('/^([A-Z]{3})_(\d{2}:\d{2})$/', strtoupper($slotId), $m)) {
+        $diaNome = $dayNamesByPrefix[$m[1]] ?? $m[1];
+        $horaIni = $m[2];
+        $horaFim = $horaIni === '14:00' ? '15:00' : ($horaIni === '15:40' ? '16:40' : '');
+        return $horaFim !== '' ? ($diaNome . ' • ' . $horaIni . '-' . $horaFim) : ($diaNome . ' • ' . $horaIni);
+    }
+    return '';
+};
+$selecoesResult = $client->select(
+    'diaria_slots_travados',
+    'select=slot_id,oficina_modular:oficina_modular_id(nome)'
+    . '&diaria_id=eq.' . rawurlencode($diariaId)
+    . '&order=slot_id.asc'
+);
+if (($selecoesResult['ok'] ?? false) && is_array($selecoesResult['data']) && !empty($selecoesResult['data'])) {
+    $itens = [];
+    $slotsComOficina = [];
+    foreach ($selecoesResult['data'] as $row) {
+        $slotId = (string) ($row['slot_id'] ?? '');
+        if ($slotId !== '') {
+            $slotsComOficina[strtoupper($slotId)] = true;
+        }
+        $oficinaJoin = is_array($row['oficina_modular'] ?? null) ? $row['oficina_modular'] : [];
+        $nomeOficina = (string) (($oficinaJoin['nome'] ?? '') ?: 'Oficina Modular');
+        $horarioLabel = $formatarSlotLabel($slotId);
+        $linha = htmlspecialchars($nomeOficina, ENT_QUOTES, 'UTF-8');
+        if ($horarioLabel !== '') {
+            $linha .= ' <span style="color:#556070">(' . htmlspecialchars($horarioLabel, ENT_QUOTES, 'UTF-8') . ')</span>';
+        }
+        $itens[] = '<li>' . $linha . '</li>';
+    }
+    if (is_array($orientadoraSlotsPayload)) {
+        $slotsOrientadora = [];
+        foreach ($orientadoraSlotsPayload as $slotRaw) {
+            $slotId = strtoupper(trim((string) $slotRaw));
+            if ($slotId === '' || isset($slotsOrientadora[$slotId])) {
+                continue;
+            }
+            $slotsOrientadora[$slotId] = true;
+            if (isset($slotsComOficina[$slotId])) {
+                continue;
+            }
+            $horarioLabel = $formatarSlotLabel($slotId);
+            $linha = 'A Oficina Modular deve ser escolhida pela Orientadora';
+            if ($horarioLabel !== '') {
+                $linha .= ' <span style="color:#556070">(' . htmlspecialchars($horarioLabel, ENT_QUOTES, 'UTF-8') . ')</span>';
+            }
+            $itens[] = '<li>' . $linha . '</li>';
+        }
+    }
+    if (!empty($itens)) {
+        $selecoesHtml = implode('', $itens);
+    }
+}
 
 $mailer = new Mailer();
 $template = <<<'HTML'
@@ -295,6 +487,18 @@ $template = <<<'HTML'
                   </div>
                 </div>
 
+                <div style="margin-top:14px;background:#F6F8FC;border:1px solid #E6E9F2;border-radius:14px;padding:18px;">
+                  <div style="font-size:16px;font-weight:800;margin-bottom:10px;color:#0B1020;">
+                    Oficinas Modulares escolhidas
+                  </div>
+                  <ul style="margin:0;padding-left:18px;font-size:14px;line-height:1.7;color:#1B2333;">
+                    {{oficinas_escolhidas}}
+                  </ul>
+                  <div style="margin-top:10px;font-size:14px;line-height:1.6;color:#1B2333;">
+                    {{descricao_oficinas}}
+                  </div>
+                </div>
+
                 <div style="margin-top:18px;font-size:15px;line-height:1.7;color:#1B2333;">
                   Assim que o pagamento for confirmado, o acesso é <b>liberado automaticamente</b> e a <b>secretaria é avisada</b>.
                 </div>
@@ -366,6 +570,8 @@ $replace = [
     '{{valor}}' => $amountFormatted,
     '{{link_pagamento}}' => htmlspecialchars($invoiceUrl, ENT_QUOTES, 'UTF-8'),
     '{{link_portal}}' => htmlspecialchars($portalLink, ENT_QUOTES, 'UTF-8'),
+    '{{oficinas_escolhidas}}' => $selecoesHtml,
+    '{{descricao_oficinas}}' => htmlspecialchars($atrativoOficinas, ENT_QUOTES, 'UTF-8'),
 ];
 $html = strtr($template, $replace);
 
@@ -375,4 +581,21 @@ $mailer->send(
     $html
 );
 
-Helpers::json(['ok' => true, 'invoice_url' => $invoiceUrl]);
+$paymentRow = (($paymentInsert['ok'] ?? false) && !empty($paymentInsert['data'][0]) && is_array($paymentInsert['data'][0]))
+    ? $paymentInsert['data'][0]
+    : null;
+$paymentId = (string) ($paymentRow['id'] ?? '');
+if (isset($_SESSION['grade_checkout_ready']) && is_array($_SESSION['grade_checkout_ready'])) {
+    unset($_SESSION['grade_checkout_ready'][$diariaId]);
+}
+if (isset($_SESSION['grade_checkout_tokens']) && is_array($_SESSION['grade_checkout_tokens'])) {
+    unset($_SESSION['grade_checkout_tokens'][$checkoutToken]);
+}
+
+Helpers::json([
+    'ok' => true,
+    'invoice_url' => $invoiceUrl,
+    'payment_id' => $paymentId,
+    'success_url' => $paymentId !== '' ? ('/pagamento-sucesso.php?paymentId=' . rawurlencode($paymentId)) : null,
+    'retorno_url' => '/pagamento-retorno.php?diariaId=' . rawurlencode($diariaId) . '&invoiceUrl=' . rawurlencode($invoiceUrl),
+]);

@@ -1,10 +1,30 @@
 <?php
-require_once __DIR__ . '/../src/Bootstrap.php';
+$bootstrapCandidates = [
+    dirname(__DIR__, 2) . '/src/Bootstrap.php',
+    __DIR__ . '/../src/Bootstrap.php',
+];
+$bootstrapLoaded = false;
+foreach ($bootstrapCandidates as $candidate) {
+    if (is_file($candidate)) {
+        require_once $candidate;
+        $bootstrapLoaded = true;
+        break;
+    }
+}
+if (!$bootstrapLoaded) {
+    http_response_code(500);
+    header('Content-Type: application/json');
+    echo json_encode(['ok' => false, 'error' => 'Bootstrap não encontrado.']);
+    exit;
+}
 
 use App\Helpers;
 use App\HttpClient;
 use App\Mailer;
+use App\Services\OficinaModularGradeService;
 use App\SupabaseClient;
+
+$logPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'error_log_custom.txt';
 
 $token = $_SERVER['HTTP_ASAAS_ACCESS_TOKEN']
     ?? $_SERVER['HTTP_ACCESS_TOKEN']
@@ -52,6 +72,12 @@ if (!$event || empty($payment['id'])) {
 if (!in_array($event, ['PAYMENT_CONFIRMED', 'PAYMENT_RECEIVED'], true)) {
     Helpers::json(['ok' => true]);
 }
+
+file_put_contents(
+    $logPath,
+    '[' . date('c') . '] Webhook Asaas recebido: event=' . $event . ' payment_id=' . ((string) ($payment['id'] ?? '-')) . PHP_EOL,
+    FILE_APPEND
+);
 
 $client = new SupabaseClient(new HttpClient());
 $paymentResult = $client->select('payments', 'select=*&asaas_payment_id=eq.' . urlencode($payment['id']));
@@ -243,13 +269,43 @@ HTML;
 }
 
 $paymentRow = $paymentResult['data'][0];
+$wasAlreadyPaid = (($paymentRow['status'] ?? '') === 'paid' && !empty($paymentRow['paid_at']));
 
 $accessCode = $paymentRow['access_code'] ?: Helpers::randomNumericCode(6);
-$client->update('payments', 'id=eq.' . $paymentRow['id'], [
-    'status' => 'paid',
-    'paid_at' => date('c'),
-    'access_code' => $accessCode,
-]);
+if (!$wasAlreadyPaid) {
+    $client->update('payments', 'id=eq.' . $paymentRow['id'], [
+        'status' => 'paid',
+        'paid_at' => date('c'),
+        'access_code' => $accessCode,
+    ]);
+    file_put_contents(
+        $logPath,
+        '[' . date('c') . '] Webhook Asaas confirmou pagamento: payment_row=' . ((string) ($paymentRow['id'] ?? '-')) . ' asaas_payment_id=' . ((string) ($payment['id'] ?? '-')) . PHP_EOL,
+        FILE_APPEND
+    );
+}
+
+$diariaId = (string) ($paymentRow['diaria_id'] ?? '');
+if ($diariaId !== '') {
+    $gradeService = new OficinaModularGradeService($client);
+    $confirmacaoGrade = $gradeService->confirmarGradeNoPagamento($diariaId);
+    if (!($confirmacaoGrade['ok'] ?? false)) {
+        $logPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'error_log_custom.txt';
+        file_put_contents(
+            $logPath,
+            'Falha ao confirmar grade no pagamento. diaria_id=' . $diariaId . ' payment_id=' . ($paymentRow['id'] ?? '-') . PHP_EOL,
+            FILE_APPEND
+        );
+    } elseif (!empty($confirmacaoGrade['user_alert'])) {
+        $client->update('payments', 'id=eq.' . $paymentRow['id'], [
+            'grade_alerta' => (string) $confirmacaoGrade['user_alert'],
+        ]);
+    }
+}
+
+if ($wasAlreadyPaid) {
+    Helpers::json(['ok' => true, 'idempotent' => true]);
+}
 
 $studentResult = $client->select('students', 'select=name,enrollment&' . 'id=eq.' . $paymentRow['student_id']);
 $student = $studentResult['data'][0] ?? null;
@@ -501,7 +557,7 @@ HTML;
                 </div>
 
                 <div style="margin-top:12px;font-size:13px;line-height:1.6;color:#556070;">
-                  Dica: o pagamento planejado tem desconto e sai por <b>R$ 77,00</b> quando feito antes das 10h.
+                  Dica: durante o período de testes, a diária planejada está em <b>R$ 5,00</b>.
                 </div>
 
                 <div style="margin-top:22px;">
