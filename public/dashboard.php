@@ -12,6 +12,8 @@ foreach ($bootstrapCandidates as $bootstrapFile) {
 date_default_timezone_set('America/Sao_Paulo');
 
 use App\Helpers;
+use App\HttpClient;
+use App\SupabaseClient;
 
 $user = Helpers::requireAuthWeb();
 $today = date('Y-m-d');
@@ -19,6 +21,55 @@ $hour = (int) date('H');
 $minDate = $hour >= 16 ? date('Y-m-d', strtotime('+1 day')) : $today;
 $dashboardError = isset($_SESSION['dashboard_error']) ? (string) $_SESSION['dashboard_error'] : '';
 unset($_SESSION['dashboard_error']);
+
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+  $date = trim((string) ($_POST['date'] ?? ''));
+  $error = '';
+  $dt = \DateTimeImmutable::createFromFormat('Y-m-d', $date);
+  if ($date === '' || !$dt instanceof \DateTimeImmutable || $dt->format('Y-m-d') !== $date) {
+    $error = 'Selecione uma data válida.';
+  } elseif ($date === $today && $hour >= 16) {
+    $error = 'Compras para hoje encerradas após as 16h. Escolha uma data futura.';
+  } else {
+    $client = new SupabaseClient(new HttpClient());
+    $guardian = $client->select('guardians', 'select=id,student_id&id=eq.' . rawurlencode((string) $user['id']) . '&limit=1');
+    $guardianRow = ($guardian['ok'] ?? false) && !empty($guardian['data'][0]) ? $guardian['data'][0] : null;
+    $guardianId = (string) ($guardianRow['id'] ?? '');
+    $studentId = (string) ($guardianRow['student_id'] ?? '');
+
+    if ($guardianId === '' || $studentId === '') {
+      $error = 'Responsável não encontrado.';
+    } else {
+      $query = 'select=id'
+        . '&guardian_id=eq.' . rawurlencode($guardianId)
+        . '&student_id=eq.' . rawurlencode($studentId)
+        . '&data_diaria=eq.' . rawurlencode($date)
+        . '&order=created_at.desc'
+        . '&limit=1';
+      $existing = $client->select('diaria', $query);
+      if (($existing['ok'] ?? false) && !empty($existing['data'][0]['id'])) {
+        $diariaId = (string) $existing['data'][0]['id'];
+      } else {
+        $insert = $client->insert('diaria', [[
+          'guardian_id' => $guardianId,
+          'student_id' => $studentId,
+          'data_diaria' => $date,
+          'grade_oficina_modular_ok' => false,
+        ]]);
+        $diariaId = (($insert['ok'] ?? false) && !empty($insert['data'][0]['id'])) ? (string) $insert['data'][0]['id'] : '';
+      }
+
+      if ($diariaId !== '') {
+        header('Location: /diaria-grade-oficina-modular.php?diariaId=' . rawurlencode($diariaId));
+        exit;
+      }
+      $error = 'Não foi possível iniciar a diária.';
+    }
+  }
+  if ($error !== '') {
+    $dashboardError = $error;
+  }
+}
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -70,7 +121,7 @@ unset($_SESSION['dashboard_error']);
             Carregando contagem regressiva da diária planejada...
           </div>
 
-          <form id="payment-form" method="post" action="/api/diaria-iniciar.php">
+          <form id="payment-form" method="post" action="/dashboard.php">
             <div class="grid-2">
               <div class="form-group">
                 <label>Data</label>
