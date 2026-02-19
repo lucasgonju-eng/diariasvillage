@@ -158,11 +158,12 @@ if ($date === $today) {
 $asaas = new AsaasClient(new HttpClient());
 $portalLink = Helpers::baseUrl() ?: 'https://village.einsteinhub.co';
 $successUrl = $portalLink . '/pagamento-retorno.php?diariaId=' . rawurlencode($diariaId);
-$habilitarCallbackAsaas = false; // iPhone/Safari: evita retorno automático instável durante o checkout.
 $isCallbackUrlValida = (bool) filter_var($successUrl, FILTER_VALIDATE_URL)
     && str_starts_with(strtolower($successUrl), 'https://')
     && stripos($successUrl, 'localhost') === false
     && stripos($successUrl, '127.0.0.1') === false;
+// Reativa retorno automático no Asaas quando a URL de callback é válida.
+$habilitarCallbackAsaas = $isCallbackUrlValida;
 $montarPayloadPagamento = static function (string $customerId, string $billingType, float $amount, string $date, string $dailyType, bool $includeCallback) use ($diariaId, $successUrl, $isCallbackUrlValida): array {
     $payloadPagamento = [
         'customer' => $customerId,
