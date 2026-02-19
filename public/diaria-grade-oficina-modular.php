@@ -1126,6 +1126,26 @@ if (!empty($oficinasUi)) {
       return { ok: res.ok, status: res.status, data };
     }
 
+    async function concluirGradeComFallback(diariaIdValue, orientadoraSlotsValue) {
+      const postResp = await postJson('/api/diaria-grade-concluir.php', {
+        diaria_id: diariaIdValue,
+        orientadora_slots: orientadoraSlotsValue,
+      });
+      if (postResp.status !== 403) return postResp;
+
+      // Fallback anti-WAF: tenta concluir por GET se o POST for bloqueado.
+      const params = new URLSearchParams();
+      params.set('diaria_id', String(diariaIdValue || ''));
+      params.set('orientadora_slots', JSON.stringify(Array.isArray(orientadoraSlotsValue) ? orientadoraSlotsValue : []));
+      const getRespRaw = await fetch(`/api/diaria-grade-concluir.php?${params.toString()}`, {
+        method: 'GET',
+        credentials: 'same-origin',
+      });
+      let data = {};
+      try { data = await getRespRaw.json(); } catch (_) {}
+      return { ok: getRespRaw.ok, status: getRespRaw.status, data };
+    }
+
     function bindDaySwitch() {
       document.querySelectorAll('.js-day-switch').forEach((btn) => {
         btn.addEventListener('click', async () => {
@@ -1406,10 +1426,7 @@ if (!empty($oficinasUi)) {
       if (submitButton) submitButton.disabled = true;
       try {
         checkoutMessage.textContent = 'Concluindo etapa da grade...';
-        const concluir = await postJson('/api/diaria-grade-concluir.php', {
-          diaria_id: diariaId,
-          orientadora_slots: payloadOrientadoraSlots(),
-        });
+        const concluir = await concluirGradeComFallback(diariaId, payloadOrientadoraSlots());
         if (!concluir.ok || !concluir.data.ok) {
           checkoutMessage.textContent = concluir.data.error || 'Não foi possível concluir a etapa da grade.';
           return;

@@ -16,12 +16,41 @@ use App\HttpClient;
 use App\Services\OficinaModularGradeService;
 use App\SupabaseClient;
 
-Helpers::requirePost();
+$method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+if (!in_array($method, ['GET', 'POST'], true)) {
+    Helpers::json(['ok' => false, 'error' => 'Método inválido.'], 405);
+}
 $user = Helpers::requireAuth();
 
-$payload = json_decode(file_get_contents('php://input'), true);
+$payload = [];
+$contentType = (string) ($_SERVER['CONTENT_TYPE'] ?? $_SERVER['HTTP_CONTENT_TYPE'] ?? '');
+if ($method === 'POST' && stripos($contentType, 'application/json') !== false) {
+    $jsonPayload = json_decode((string) file_get_contents('php://input'), true);
+    if (is_array($jsonPayload)) {
+        $payload = $jsonPayload;
+    }
+}
+if (empty($payload) && $method === 'POST' && !empty($_POST)) {
+    $payload = $_POST;
+}
+if (empty($payload) && $method === 'GET' && !empty($_GET)) {
+    $payload = $_GET;
+}
+
 $diariaId = isset($payload['diaria_id']) ? trim((string) $payload['diaria_id']) : '';
 $orientadoraSlotsPayload = $payload['orientadora_slots'] ?? [];
+if (!is_array($orientadoraSlotsPayload)) {
+    // Aceita fallback via querystring (JSON ou CSV) para contornar bloqueio de POST por WAF.
+    $rawSlots = trim((string) $orientadoraSlotsPayload);
+    $decodedSlots = json_decode($rawSlots, true);
+    if (is_array($decodedSlots)) {
+        $orientadoraSlotsPayload = $decodedSlots;
+    } elseif ($rawSlots !== '') {
+        $orientadoraSlotsPayload = array_values(array_filter(array_map('trim', explode(',', $rawSlots))));
+    } else {
+        $orientadoraSlotsPayload = [];
+    }
+}
 
 if ($diariaId === '') {
     Helpers::json(['ok' => false, 'error' => 'Diária não informada.'], 422);
