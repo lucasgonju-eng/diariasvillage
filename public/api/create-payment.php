@@ -70,8 +70,8 @@ if ($diariaId === '') {
 
 $today = date('Y-m-d');
 $hour = (int) date('H');
-// TEMPORARIO (testes): valor promocional da diaria planejada.
-$plannedAmount = 5.00;
+// Valor padrão da diária planejada.
+$plannedAmount = 77.00;
 
 if (!in_array($billingType, ['PIX', 'DEBIT_CARD'], true)) {
     Helpers::json(['ok' => false, 'error' => 'Forma de pagamento inválida.'], 422);

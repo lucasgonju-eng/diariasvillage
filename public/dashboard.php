@@ -104,7 +104,7 @@ unset($_SESSION['dashboard_error']);
         <div class="info-cards">
           <div class="info-card">
             <h3>Diária Planejada</h3>
-            <p>Antes das 10h do day-use (R$ 5,00 - valor temporário para testes).</p>
+            <p>Antes das 10h do day-use (R$ 77,00).</p>
           </div>
           <div class="info-card">
             <h3>Diária Emergencial</h3>

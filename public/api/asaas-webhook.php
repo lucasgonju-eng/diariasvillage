@@ -557,7 +557,7 @@ HTML;
                 </div>
 
                 <div style="margin-top:12px;font-size:13px;line-height:1.6;color:#556070;">
-                  Dica: durante o período de testes, a diária planejada está em <b>R$ 5,00</b>.
+                  Dica: o pagamento planejado tem desconto e sai por <b>R$ 77,00</b> quando feito antes das 10h.
                 </div>
 
                 <div style="margin-top:22px;">
