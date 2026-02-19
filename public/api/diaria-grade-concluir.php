@@ -143,6 +143,18 @@ if ($diaSemana >= 1 && $diaSemana <= 5) {
     }
 }
 
+// Marca a diária como concluída na etapa da grade para liberar o create-payment.
+$updateDiaria = $client->update('diaria', 'id=eq.' . rawurlencode($diariaId), [
+    'grade_oficina_modular_ok' => true,
+    'updated_at' => date('c'),
+]);
+if (!($updateDiaria['ok'] ?? false)) {
+    Helpers::json([
+        'ok' => false,
+        'error' => 'Não foi possível concluir a etapa da grade. Tente novamente.',
+    ], 500);
+}
+
 if (!isset($_SESSION['grade_checkout_ready']) || !is_array($_SESSION['grade_checkout_ready'])) {
     $_SESSION['grade_checkout_ready'] = [];
 }
