@@ -81,7 +81,7 @@ if ($r !== null) {
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title><?= htmlspecialchars($title) ?></title>
 
   <!-- PWA / iOS -->
@@ -129,10 +129,10 @@ if ($r !== null) {
   <link rel="stylesheet" href="/mobile/assets/css/mobile.css">
 
   <style>
-    body { min-height: max(884px, 100dvh); }
+    body { position: fixed; top: 0; left: 0; right: 0; bottom: 0; }
   </style>
 </head>
-<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen flex flex-col">
+<body>
 
 <?php include $pageFile; ?>
 
