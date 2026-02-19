@@ -1389,8 +1389,10 @@ if (!empty($oficinasUi)) {
 
     const checkoutForm = document.querySelector('#checkout-form');
     const checkoutMessage = document.querySelector('#checkout-message');
+    let checkoutSubmitting = false;
     checkoutForm.addEventListener('submit', async (event) => {
       event.preventDefault();
+      if (checkoutSubmitting) return;
       const slot1400 = slotIdPorColuna('1400');
       const slot1540 = slotIdPorColuna('1540');
       const falta1400 = slot1400 && !slotEstaCompleto(slot1400);
@@ -1399,48 +1401,54 @@ if (!empty($oficinasUi)) {
         checkoutMessage.textContent = 'Escolha as 2 opções da diária (14:00 e 15:40). Se preferir, use "A Oficina Modular deve ser escolhida pela Orientadora".';
         return;
       }
-      checkoutMessage.textContent = 'Concluindo etapa da grade...';
-      const concluir = await postJson('/api/diaria-grade-concluir.php', {
-        diaria_id: diariaId,
-        orientadora_slots: payloadOrientadoraSlots(),
-      });
-      if (!concluir.ok || !concluir.data.ok) {
-        checkoutMessage.textContent = concluir.data.error || 'Não foi possível concluir a etapa da grade.';
-        return;
-      }
-      state.checkoutToken = concluir.data.checkout_token || null;
-
-      checkoutMessage.textContent = 'Criando pagamento...';
-      const payload = {
-        diaria_id: diariaId,
-        billing_type: document.querySelector('#billing-type').value,
-        document: document.querySelector('#billing-document').value.trim(),
-        orientadora_slots: payloadOrientadoraSlots(),
-        checkout_token: state.checkoutToken,
-      };
-      const r = await postJson('/api/create-payment.php', payload);
-      if (!r.ok || !r.data.ok) {
-        if (r.data.redirect_to) {
-          window.location.href = r.data.redirect_to;
+      checkoutSubmitting = true;
+      const submitButton = checkoutForm.querySelector('button[type="submit"]');
+      if (submitButton) submitButton.disabled = true;
+      try {
+        checkoutMessage.textContent = 'Concluindo etapa da grade...';
+        const concluir = await postJson('/api/diaria-grade-concluir.php', {
+          diaria_id: diariaId,
+          orientadora_slots: payloadOrientadoraSlots(),
+        });
+        if (!concluir.ok || !concluir.data.ok) {
+          checkoutMessage.textContent = concluir.data.error || 'Não foi possível concluir a etapa da grade.';
           return;
         }
-        checkoutMessage.textContent = r.data.error || 'Falha ao criar pagamento.';
-        return;
-      }
-      checkoutMessage.textContent = 'Pagamento criado. Redirecionando...';
-      if (r.data.invoice_url && r.data.invoice_url !== '#') {
-        try {
-          if (r.data.payment_id) {
-            sessionStorage.setItem('pendingPaymentId', String(r.data.payment_id));
-          }
-        } catch (e) {
-          // Segue normalmente mesmo sem storage.
+        state.checkoutToken = concluir.data.checkout_token || null;
+
+        checkoutMessage.textContent = 'Criando pagamento...';
+        const payload = {
+          diaria_id: diariaId,
+          billing_type: document.querySelector('#billing-type').value,
+          document: document.querySelector('#billing-document').value.trim(),
+          orientadora_slots: payloadOrientadoraSlots(),
+          checkout_token: state.checkoutToken,
+        };
+        const r = await postJson('/api/create-payment.php', payload);
+        if (!r.ok || !r.data.ok) {
+          // Evita redirecionamento automático inesperado para dashboard/login em falhas.
+          const redirectHint = r.data && r.data.redirect_to ? ` (${r.data.redirect_to})` : '';
+          checkoutMessage.textContent = (r.data && r.data.error ? r.data.error : 'Falha ao criar pagamento.') + redirectHint;
+          return;
         }
-        // iPhone/Safari: mantém fluxo estável abrindo o Asaas na mesma aba.
-        window.location.href = r.data.invoice_url;
-        return;
+        checkoutMessage.textContent = 'Pagamento criado. Redirecionando...';
+        if (r.data.invoice_url && r.data.invoice_url !== '#') {
+          try {
+            if (r.data.payment_id) {
+              sessionStorage.setItem('pendingPaymentId', String(r.data.payment_id));
+            }
+          } catch (e) {
+            // Segue normalmente mesmo sem storage.
+          }
+          // iPhone/Safari: mantém fluxo estável abrindo o Asaas na mesma aba.
+          window.location.href = r.data.invoice_url;
+          return;
+        }
+        checkoutMessage.textContent = 'Pagamento criado, mas não foi possível abrir o link do Asaas.';
+      } finally {
+        checkoutSubmitting = false;
+        if (submitButton) submitButton.disabled = false;
       }
-      checkoutMessage.textContent = 'Pagamento criado, mas não foi possível abrir o link do Asaas.';
     });
   </script>
 </body>
