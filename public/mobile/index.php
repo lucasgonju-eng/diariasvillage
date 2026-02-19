@@ -1,32 +1,81 @@
 <?php
-$allowed = [
-    'tela_inicial',
-    'tela_login',
-    'tela_cadastro',
-    'grade_oficinas',
-    'resumo_pedido',
-];
-
-$page = $_GET['page'] ?? 'tela_inicial';
-if (!in_array($page, $allowed, true)) {
-    $page = 'tela_inicial';
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
 
-$pageFile = __DIR__ . '/pages/' . $page . '.php';
-if (!file_exists($pageFile)) {
-    $page     = 'tela_inicial';
-    $pageFile = __DIR__ . '/pages/tela_inicial.php';
-}
+$isLoggedIn = !empty($_SESSION['user']);
 
-$titles = [
-    'tela_inicial'   => 'Diárias Village',
-    'tela_login'     => 'Login – Diárias Village',
-    'tela_cadastro'  => 'Cadastro – Diárias Village',
-    'grade_oficinas' => 'Workshops – Diárias Village',
-    'resumo_pedido'  => 'Resumo do Pedido – Diárias Village',
+// ── New router: ?r= (friendly app routes) ──
+$appRoutes = [
+    'login'           => 'login',
+    'primeiro-acesso' => 'primeiro-acesso',
+    'grade'           => 'grade',
+    'resumo'          => 'resumo',
 ];
 
-$title = $titles[$page] ?? 'Diárias Village';
+$r = $_GET['r'] ?? null;
+
+// Auto-redirect: /mobile/ with no params → login or grade
+if ($r === null && !isset($_GET['page'])) {
+    $dest = $isLoggedIn ? 'grade' : 'login';
+    header('Location: /mobile/?r=' . $dest);
+    exit;
+}
+
+// If ?r= is set, serve from /app/
+if ($r !== null) {
+    $safeRoute = $appRoutes[$r] ?? null;
+    if ($safeRoute === null) {
+        header('Location: /mobile/?r=login');
+        exit;
+    }
+    $appFile = __DIR__ . '/app/' . $safeRoute . '.php';
+    if (!file_exists($appFile)) {
+        header('Location: /mobile/?r=login');
+        exit;
+    }
+
+    $appTitles = [
+        'login'           => 'Login – Diárias Village',
+        'primeiro-acesso' => 'Primeiro Acesso – Diárias Village',
+        'grade'           => 'Workshops – Diárias Village',
+        'resumo'          => 'Resumo – Diárias Village',
+    ];
+    $title = $appTitles[$safeRoute] ?? 'Diárias Village';
+    $currentRoute = $safeRoute;
+    $pageFile = $appFile;
+
+} else {
+    // ── Legacy router: ?page= (backward-compat) ──
+    $allowed = [
+        'tela_inicial',
+        'tela_login',
+        'tela_cadastro',
+        'grade_oficinas',
+        'resumo_pedido',
+    ];
+
+    $page = $_GET['page'] ?? 'tela_inicial';
+    if (!in_array($page, $allowed, true)) {
+        $page = 'tela_inicial';
+    }
+
+    $pageFile = __DIR__ . '/pages/' . $page . '.php';
+    if (!file_exists($pageFile)) {
+        $page     = 'tela_inicial';
+        $pageFile = __DIR__ . '/pages/tela_inicial.php';
+    }
+
+    $titles = [
+        'tela_inicial'   => 'Diárias Village',
+        'tela_login'     => 'Login – Diárias Village',
+        'tela_cadastro'  => 'Cadastro – Diárias Village',
+        'grade_oficinas' => 'Workshops – Diárias Village',
+        'resumo_pedido'  => 'Resumo do Pedido – Diárias Village',
+    ];
+    $title = $titles[$page] ?? 'Diárias Village';
+    $currentRoute = null;
+}
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -43,7 +92,7 @@ $title = $titles[$page] ?? 'Diárias Village';
   <link rel="manifest" href="/mobile/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/mobile/assets/img/icon-192.png">
 
-  <!-- Tailwind CDN (mesma config do Stitch) -->
+  <!-- Tailwind CDN -->
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
   <script>
     tailwind.config = {

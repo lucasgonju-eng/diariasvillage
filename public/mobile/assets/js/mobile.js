@@ -4,17 +4,20 @@
 (function () {
   'use strict';
 
-  var EXTERNAL_ROUTES = {
-    tela_login:     '/login.php',
-    tela_cadastro:  '/primeiro-acesso.php',
-    grade_oficinas: '/diaria-grade-oficina-modular.php'
+  // Maps data-go values to /mobile/?r= routes (stays inside /mobile)
+  var APP_ROUTES = {
+    tela_login:     '/mobile/?r=login',
+    tela_cadastro:  '/mobile/?r=primeiro-acesso',
+    grade_oficinas: '/mobile/?r=grade',
+    resumo_pedido:  '/mobile/?r=resumo'
   };
 
   function navigate(page) {
-    if (EXTERNAL_ROUTES[page]) {
-      window.location.href = EXTERNAL_ROUTES[page];
+    if (APP_ROUTES[page]) {
+      window.location.href = APP_ROUTES[page];
       return;
     }
+    // Fallback: legacy pages
     window.location.href = '/mobile/?page=' + encodeURIComponent(page);
   }
 
