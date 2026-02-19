@@ -1,0 +1,25 @@
+{
+  "name": "Diárias Village",
+  "short_name": "Village",
+  "description": "Workshops, oficinas e experiências para toda a família.",
+  "start_url": "/mobile/?source=pwa",
+  "scope": "/mobile/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0B1020",
+  "theme_color": "#0F2A75",
+  "icons": [
+    {
+      "src": "/mobile/assets/img/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/mobile/assets/img/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
