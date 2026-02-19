@@ -16,12 +16,17 @@ use App\Helpers;
 use App\HttpClient;
 use App\SupabaseClient;
 
-Helpers::requirePost();
-$user = Helpers::requireAuth();
+$method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+if (!in_array($method, ['GET', 'POST'], true)) {
+    Helpers::json(['ok' => false, 'error' => 'Método inválido.'], 405);
+}
+
+$isGetRequest = $method === 'GET';
+$user = $isGetRequest ? Helpers::requireAuthWeb() : Helpers::requireAuth();
 
 $contentType = strtolower((string) ($_SERVER['CONTENT_TYPE'] ?? $_SERVER['HTTP_CONTENT_TYPE'] ?? ''));
 $accept = strtolower((string) ($_SERVER['HTTP_ACCEPT'] ?? ''));
-$isJsonRequest = str_contains($contentType, 'application/json') || str_contains($accept, 'application/json');
+$isJsonRequest = !$isGetRequest && (str_contains($contentType, 'application/json') || str_contains($accept, 'application/json'));
 $rawInput = file_get_contents('php://input');
 $payload = json_decode($rawInput ?: 'null', true);
 if (!is_array($payload)) {
@@ -30,6 +35,9 @@ if (!is_array($payload)) {
 $date = isset($payload['date']) ? trim((string) $payload['date']) : '';
 if ($date === '' && isset($_POST['date'])) {
     $date = trim((string) $_POST['date']);
+}
+if ($date === '' && isset($_GET['date'])) {
+    $date = trim((string) $_GET['date']);
 }
 
 $respondError = static function (string $message, int $status = 422) use ($isJsonRequest): void {
