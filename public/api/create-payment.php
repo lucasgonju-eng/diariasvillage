@@ -158,6 +158,7 @@ if ($date === $today) {
 $asaas = new AsaasClient(new HttpClient());
 $portalLink = Helpers::baseUrl() ?: 'https://village.einsteinhub.co';
 $successUrl = $portalLink . '/pagamento-retorno.php?diariaId=' . rawurlencode($diariaId);
+$habilitarCallbackAsaas = false; // iPhone/Safari: evita retorno automático instável durante o checkout.
 $isCallbackUrlValida = (bool) filter_var($successUrl, FILTER_VALIDATE_URL)
     && str_starts_with(strtolower($successUrl), 'https://')
     && stripos($successUrl, 'localhost') === false
@@ -233,7 +234,7 @@ $payment = $asaas->createPayment(
         (float) $amount,
         (string) $date,
         (string) $dailyType,
-        true
+        $habilitarCallbackAsaas
     )
 );
 
@@ -241,7 +242,7 @@ if (!$payment['ok']) {
     $errorMessage = $extractAsaasError($payment);
     $errorNorm = mb_strtolower($errorMessage, 'UTF-8');
     $callbackInvalido = str_contains($errorNorm, 'callback') && str_contains($errorNorm, 'inválida');
-    if ($callbackInvalido) {
+    if ($callbackInvalido && $habilitarCallbackAsaas) {
         $payment = $asaas->createPayment(
             $montarPayloadPagamento(
                 $guardianData['asaas_customer_id'],
@@ -282,7 +283,7 @@ if (!$payment['ok']) {
                     (float) $amount,
                     (string) $date,
                     (string) $dailyType,
-                    true
+                    $habilitarCallbackAsaas
                 )
             );
             if ($payment['ok']) {
@@ -291,7 +292,7 @@ if (!$payment['ok']) {
             $errorMessage = $extractAsaasError($payment);
             $errorNorm = mb_strtolower($errorMessage, 'UTF-8');
             $callbackInvalido = str_contains($errorNorm, 'callback') && str_contains($errorNorm, 'inválida');
-            if ($callbackInvalido) {
+            if ($callbackInvalido && $habilitarCallbackAsaas) {
                 $payment = $asaas->createPayment(
                     $montarPayloadPagamento(
                         $guardianData['asaas_customer_id'],
