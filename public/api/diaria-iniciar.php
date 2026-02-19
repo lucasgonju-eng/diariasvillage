@@ -19,38 +19,54 @@ use App\SupabaseClient;
 Helpers::requirePost();
 $user = Helpers::requireAuth();
 
-$payload = json_decode(file_get_contents('php://input'), true);
+$contentType = strtolower((string) ($_SERVER['CONTENT_TYPE'] ?? $_SERVER['HTTP_CONTENT_TYPE'] ?? ''));
+$accept = strtolower((string) ($_SERVER['HTTP_ACCEPT'] ?? ''));
+$isJsonRequest = str_contains($contentType, 'application/json') || str_contains($accept, 'application/json');
+$rawInput = file_get_contents('php://input');
+$payload = json_decode($rawInput ?: 'null', true);
+if (!is_array($payload)) {
+    $payload = [];
+}
 $date = isset($payload['date']) ? trim((string) $payload['date']) : '';
+if ($date === '' && isset($_POST['date'])) {
+    $date = trim((string) $_POST['date']);
+}
+
+$respondError = static function (string $message, int $status = 422) use ($isJsonRequest): void {
+    if ($isJsonRequest) {
+        Helpers::json(['ok' => false, 'error' => $message], $status);
+    }
+    $_SESSION['dashboard_error'] = $message;
+    header('Location: /dashboard.php');
+    exit;
+};
 
 if ($date === '') {
-    Helpers::json(['ok' => false, 'error' => 'Selecione a data da diária.'], 422);
+    $respondError('Selecione a data da diária.', 422);
 }
 
 $dt = \DateTimeImmutable::createFromFormat('Y-m-d', $date);
 if (!$dt instanceof \DateTimeImmutable || $dt->format('Y-m-d') !== $date) {
-    Helpers::json(['ok' => false, 'error' => 'Data inválida.'], 422);
+    $respondError('Data inválida.', 422);
 }
 
 $today = date('Y-m-d');
 $hour = (int) date('H');
 if ($date === $today && $hour >= 16) {
-    Helpers::json([
-        'ok' => false,
-        'error' => 'Compras para hoje encerradas após as 16h. Escolha uma data futura.',
-    ], 422);
+    $respondError('Compras para hoje encerradas após as 16h. Escolha uma data futura.', 422);
 }
 
 $client = new SupabaseClient(new HttpClient());
 $guardian = $client->select('guardians', 'select=*&id=eq.' . rawurlencode((string) $user['id']) . '&limit=1');
 if (!$guardian['ok'] || empty($guardian['data'][0])) {
-    Helpers::json(['ok' => false, 'error' => 'Responsável não encontrado.'], 404);
+    $respondError('Responsável não encontrado.', 404);
 }
 
 $guardianRow = $guardian['data'][0];
 $guardianId = (string) ($guardianRow['id'] ?? '');
 $studentId = (string) ($guardianRow['student_id'] ?? '');
 if ($guardianId === '' || $studentId === '') {
-    Helpers::json(['ok' => false, 'error' => 'Dados de responsável/aluno incompletos.'], 422);
+    $respondError('Dados de responsável/aluno incompletos.', 422);
 }
 
 $query = 'select=*'
@@ -72,7 +88,7 @@ if ($existing['ok'] && !empty($existing['data'][0])) {
     ]]);
 
     if (!$insert['ok'] || empty($insert['data'][0])) {
-        Helpers::json(['ok' => false, 'error' => 'Não foi possível iniciar a diária.'], 500);
+        $respondError('Não foi possível iniciar a diária.', 500);
     }
 
     $diaria = $insert['data'][0];
@@ -80,11 +96,17 @@ if ($existing['ok'] && !empty($existing['data'][0])) {
 
 $diariaId = (string) ($diaria['id'] ?? '');
 if ($diariaId === '') {
-    Helpers::json(['ok' => false, 'error' => 'Diária inválida.'], 500);
+    $respondError('Diária inválida.', 500);
 }
 
-Helpers::json([
-    'ok' => true,
-    'diaria_id' => $diariaId,
-    'redirect_url' => '/diaria-grade-oficina-modular.php?diariaId=' . rawurlencode($diariaId),
-]);
+$redirectUrl = '/diaria-grade-oficina-modular.php?diariaId=' . rawurlencode($diariaId);
+if ($isJsonRequest) {
+    Helpers::json([
+        'ok' => true,
+        'diaria_id' => $diariaId,
+        'redirect_url' => $redirectUrl,
+    ]);
+}
+
+header('Location: ' . $redirectUrl);
+exit;

@@ -17,6 +17,8 @@ $user = Helpers::requireAuthWeb();
 $today = date('Y-m-d');
 $hour = (int) date('H');
 $minDate = $hour >= 16 ? date('Y-m-d', strtotime('+1 day')) : $today;
+$dashboardError = isset($_SESSION['dashboard_error']) ? (string) $_SESSION['dashboard_error'] : '';
+unset($_SESSION['dashboard_error']);
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -68,16 +70,19 @@ $minDate = $hour >= 16 ? date('Y-m-d', strtotime('+1 day')) : $today;
             Carregando contagem regressiva da diária planejada...
           </div>
 
-          <form id="payment-form">
+          <form id="payment-form" method="post" action="/api/diaria-iniciar.php">
             <div class="grid-2">
               <div class="form-group">
                 <label>Data</label>
-                <input type="date" id="payment-date" value="<?php echo $minDate; ?>" min="<?php echo $minDate; ?>" required />
+                <input type="date" id="payment-date" name="date" value="<?php echo $minDate; ?>" min="<?php echo $minDate; ?>" required />
                 <div class="small">Após 16h, somente datas futuras.</div>
               </div>
             </div>
             <button class="btn btn-primary btn-block" type="submit">Ir para Grade de Oficina Modular</button>
             <div id="payment-message"></div>
+            <?php if ($dashboardError !== ''): ?>
+              <div class="error" style="margin-top:8px;"><?php echo htmlspecialchars($dashboardError, ENT_QUOTES, 'UTF-8'); ?></div>
+            <?php endif; ?>
           </form>
         </aside>
       </div>

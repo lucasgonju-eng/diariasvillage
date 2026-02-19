@@ -37,27 +37,44 @@ if (paymentForm) {
     event.preventDefault();
     paymentMessage.textContent = '';
 
-    const payload = {
-      date: document.querySelector('#payment-date').value,
-    };
+    try {
+      const payload = {
+        date: document.querySelector('#payment-date').value,
+      };
 
-    const res = await fetch('/api/diaria-iniciar.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+      const res = await fetch('/api/diaria-iniciar.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-    const data = await res.json();
-    if (!data.ok) {
-      paymentMessage.textContent = data.error || 'Falha ao criar pagamento.';
-      paymentMessage.className = 'error';
-      return;
-    }
+      const raw = await res.text();
+      let data = {};
+      try {
+        data = JSON.parse(raw);
+      } catch (e) {
+        data = {};
+      }
 
-    paymentMessage.textContent = 'Diária iniciada. Redirecionando para a grade...';
-    paymentMessage.className = 'success';
-    if (data.redirect_url) {
-      window.location.href = data.redirect_url;
+      if (!res.ok || !data.ok) {
+        if (data && data.error) {
+          paymentMessage.textContent = data.error;
+          paymentMessage.className = 'error';
+          return;
+        }
+        // Fallback robusto: se CDN/WAF devolver HTML, envia formulário padrão.
+        paymentForm.submit();
+        return;
+      }
+
+      paymentMessage.textContent = 'Diária iniciada. Redirecionando para a grade...';
+      paymentMessage.className = 'success';
+      if (data.redirect_url) {
+        window.location.href = data.redirect_url;
+      }
+    } catch (err) {
+      // Em falha de rede/script, mantém fluxo via submit tradicional.
+      paymentForm.submit();
     }
   });
 }
