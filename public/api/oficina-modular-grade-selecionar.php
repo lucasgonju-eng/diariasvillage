@@ -1,6 +1,15 @@
 <?php
 
-require_once dirname(__DIR__, 2) . '/src/Bootstrap.php';
+$bootstrapCandidates = [
+    __DIR__ . '/../src/Bootstrap.php',
+    dirname(__DIR__, 2) . '/src/Bootstrap.php',
+];
+foreach ($bootstrapCandidates as $bootstrapFile) {
+    if (is_file($bootstrapFile)) {
+        require_once $bootstrapFile;
+        break;
+    }
+}
 
 use App\Helpers;
 use App\Services\OficinaModularGradeService;
