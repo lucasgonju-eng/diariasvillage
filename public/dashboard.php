@@ -127,7 +127,7 @@ unset($_SESSION['dashboard_error']);
     </div>
   </footer>
 
-  <script src="/assets/js/dashboard.js?v=2"></script>
+  <script src="/assets/js/dashboard.js?v=20260219-1"></script>
   <script>
     (async function checkPendingPaymentAfterReturn() {
       let paymentId = '';
