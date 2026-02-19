@@ -24,7 +24,10 @@ jobs:
       - name: Preparar estrutura de deploy
         run: |
           mkdir -p deploy
+          shopt -s dotglob
           cp -r public/* deploy/
+          # Garante envio de dotfiles críticos (ex.: .htaccess)
+          cp -f public/.htaccess deploy/.htaccess
           cp -r src deploy/
           cp -r vendor deploy/
           cp .env.example deploy/
