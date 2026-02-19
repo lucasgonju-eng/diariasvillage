@@ -1436,12 +1436,8 @@ if (!empty($oficinasUi)) {
         } catch (e) {
           // Segue normalmente mesmo sem storage.
         }
-        const retornoUrl = r.data.retorno_url || `/pagamento-retorno.php?diariaId=${encodeURIComponent(diariaId)}&invoiceUrl=${encodeURIComponent(r.data.invoice_url)}`;
-        const popup = window.open(r.data.invoice_url, '_blank', 'noopener,noreferrer');
-        if (!popup) {
-          checkoutMessage.textContent = 'Pagamento criado. Seu navegador bloqueou a nova aba. Abrindo confirmação no SaaS...';
-        }
-        window.location.href = retornoUrl;
+        // iPhone/Safari: mantém fluxo estável abrindo o Asaas na mesma aba.
+        window.location.href = r.data.invoice_url;
         return;
       }
       checkoutMessage.textContent = 'Pagamento criado, mas não foi possível abrir o link do Asaas.';
