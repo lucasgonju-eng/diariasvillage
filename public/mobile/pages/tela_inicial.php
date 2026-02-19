@@ -1,70 +1,189 @@
-<!-- Tela Inicial - Diárias Village -->
-<div class="relative flex h-full min-h-screen w-full flex-col bg-background-light dark:bg-background-dark group/design-root overflow-x-hidden">
+<style>
+  .vi-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    min-height: 100dvh;
+    background: #fff;
+    padding: 0 24px;
+    padding-top: calc(48px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(32px + env(safe-area-inset-bottom, 0px));
+    overflow-x: hidden;
+    font-family: 'Lexend', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
 
-  <!-- Hero Section -->
-  <div class="flex-1 flex flex-col justify-center items-center px-6 w-full max-w-[480px] mx-auto">
+  /* ---- Top icon ---- */
+  .vi-icon-circle {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: #e8eaf6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 12px;
+    flex-shrink: 0;
+  }
+  .vi-icon-circle .material-symbols-outlined {
+    font-size: 36px;
+    color: #18217b;
+  }
 
-    <!-- Logo / Branding -->
-    <div class="mb-10 flex flex-col items-center">
-      <div class="w-24 h-24 bg-primary/10 dark:bg-primary/20 rounded-3xl flex items-center justify-center mb-8 shadow-lg shadow-primary/10">
-        <span class="material-symbols-outlined text-primary text-6xl">holiday_village</span>
-      </div>
-      <h1 class="text-primary text-[36px] font-bold leading-tight text-center tracking-tight">
-        Diárias Village
-      </h1>
-      <p class="text-slate-500 dark:text-slate-400 text-base font-normal leading-normal mt-3 text-center max-w-[320px]">
-        Workshops, oficinas e experiências incríveis para toda a família.
-      </p>
-    </div>
+  /* ---- Brand name ---- */
+  .vi-brand {
+    font-size: 18px;
+    font-weight: 700;
+    color: #18217b;
+    margin-bottom: 28px;
+    text-align: center;
+  }
 
-    <!-- CTA Buttons -->
-    <div class="w-full space-y-4 mt-4">
-      <button data-go="tela_login"
-        class="w-full bg-primary hover:bg-primary/90 text-white font-bold h-14 rounded-xl flex items-center justify-center shadow-lg shadow-primary/20 active:scale-[0.98] transition-all">
-        <span class="material-symbols-outlined mr-2">login</span>
-        <span>Entrar na minha conta</span>
-      </button>
+  /* ---- Hero illustration ---- */
+  .vi-hero {
+    width: 100%;
+    max-width: 360px;
+    border-radius: 20px;
+    overflow: hidden;
+    margin-bottom: 32px;
+    flex-shrink: 0;
+  }
+  .vi-hero img {
+    display: block;
+    width: 100%;
+    height: auto;
+    object-fit: cover;
+  }
 
-      <button data-go="tela_cadastro"
-        class="w-full bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-primary font-bold h-14 rounded-xl flex items-center justify-center border-2 border-primary/20 active:scale-[0.98] transition-all">
-        <span class="material-symbols-outlined mr-2">person_add</span>
-        <span>Criar conta</span>
-      </button>
-    </div>
+  /* ---- Title ---- */
+  .vi-title {
+    font-size: 28px;
+    font-weight: 800;
+    color: #1a2035;
+    text-align: center;
+    line-height: 1.2;
+    margin-bottom: 12px;
+  }
 
-    <!-- Feature Pills -->
-    <div class="flex flex-wrap justify-center gap-2 mt-10">
-      <span class="bg-primary/5 text-primary text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1">
-        <span class="material-symbols-outlined text-sm">palette</span> Oficinas
-      </span>
-      <span class="bg-primary/5 text-primary text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1">
-        <span class="material-symbols-outlined text-sm">sports_martial_arts</span> Esportes
-      </span>
-      <span class="bg-primary/5 text-primary text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1">
-        <span class="material-symbols-outlined text-sm">music_note</span> Música
-      </span>
-      <span class="bg-primary/5 text-primary text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1">
-        <span class="material-symbols-outlined text-sm">smart_toy</span> Tech
-      </span>
-    </div>
+  /* ---- Subtitle ---- */
+  .vi-subtitle {
+    font-size: 14px;
+    font-weight: 400;
+    color: #6b7280;
+    text-align: center;
+    line-height: 1.55;
+    max-width: 320px;
+    margin-bottom: 32px;
+  }
 
-    <!-- Continuar navegando (permanece dentro de /mobile) -->
-    <a href="/mobile/?page=grade_oficinas" class="mt-6 text-slate-400 hover:text-slate-600 text-sm font-medium transition-colors flex items-center gap-1">
-      <span>Continuar navegando</span>
-      <span class="material-symbols-outlined text-sm">arrow_forward</span>
-    </a>
+  /* ---- Buttons container ---- */
+  .vi-buttons {
+    width: 100%;
+    max-width: 360px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .vi-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 54px;
+    border-radius: 27px;
+    font-family: inherit;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+    -webkit-tap-highlight-color: transparent;
+    border: none;
+    outline: none;
+  }
+  .vi-btn:active {
+    transform: scale(0.97);
+  }
+
+  .vi-btn--primary {
+    background: #18217b;
+    color: #fff;
+    box-shadow: 0 4px 16px rgba(24, 33, 123, 0.25);
+  }
+  .vi-btn--primary:hover {
+    opacity: 0.92;
+  }
+
+  .vi-btn--secondary {
+    background: #fff;
+    color: #18217b;
+    border: 2px solid #d1d5db;
+  }
+  .vi-btn--secondary:hover {
+    border-color: #18217b;
+  }
+
+  /* ---- Spacer ---- */
+  .vi-spacer {
+    flex: 1;
+    min-height: 16px;
+  }
+
+  /* ---- Footer help ---- */
+  .vi-help {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 28px;
+    padding-bottom: 8px;
+  }
+  .vi-help span.material-symbols-outlined {
+    font-size: 18px;
+    color: #9ca3af;
+  }
+  .vi-help-text {
+    font-size: 13px;
+    font-weight: 500;
+    color: #9ca3af;
+  }
+</style>
+
+<div class="vi-wrap">
+  <!-- Top icon -->
+  <div class="vi-icon-circle">
+    <span class="material-symbols-outlined">school</span>
   </div>
 
+  <!-- Brand -->
+  <div class="vi-brand">Diárias Village</div>
+
+  <!-- Hero illustration -->
+  <div class="vi-hero">
+    <img src="/mobile/assets/img/tela_inicial_screen.png"
+         alt="Crianças se divertindo no Village"
+         width="360" height="280">
+  </div>
+
+  <!-- Title -->
+  <h1 class="vi-title">Bem-vindo ao<br>Diárias Village</h1>
+
+  <!-- Subtitle -->
+  <p class="vi-subtitle">Acompanhe o dia a dia do seu filho com a segurança e a praticidade que você merece.</p>
+
+  <!-- CTA Buttons -->
+  <div class="vi-buttons">
+    <button class="vi-btn vi-btn--primary" data-go="tela_cadastro">Primeiro Acesso</button>
+    <button class="vi-btn vi-btn--secondary" data-go="tela_login">Já tenho cadastro</button>
+  </div>
+
+  <!-- Spacer -->
+  <div class="vi-spacer"></div>
+
   <!-- Footer -->
-  <div class="pb-8 pt-6 text-center">
-    <div class="flex items-center justify-center gap-2 text-slate-400 text-xs">
-      <span class="material-symbols-outlined text-sm">verified_user</span>
-      <span>Ambiente seguro e criptografado</span>
-    </div>
-    <div class="mt-4 flex justify-center gap-1 opacity-30">
-      <div class="size-2 rounded-full bg-primary"></div>
-      <div class="size-2 rounded-full bg-primary"></div>
-      <div class="size-2 rounded-full bg-primary/40"></div>
-    </div>
+  <div class="vi-help">
+    <span class="material-symbols-outlined">help</span>
+    <span class="vi-help-text">Precisa de ajuda?</span>
   </div>
 </div>
