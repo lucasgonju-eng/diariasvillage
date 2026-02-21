@@ -39,8 +39,8 @@ $now = date('c');
   <div class="m-head">
     <div class="m-head-inner">
       <div class="m-topbar">
-        <a href="/profile.php">Perfil</a>
-        <a href="/logout.php">Sair</a>
+        <a href="/mobile/?r=perfil">Perfil</a>
+        <a href="/mobile/logout.php">Sair</a>
       </div>
       <h1>Bem-vindo!</h1>
       <p>Escolha a diária do dia com praticidade.</p>
@@ -58,13 +58,14 @@ $now = date('c');
       <p class="sub">Escolha a data e siga para a Grade de Oficina Modular.</p>
       <div class="m-countdown" id="m-cd" data-now="<?= htmlspecialchars($now) ?>">Carregando...</div>
 
-      <form id="m-dash" method="get" action="/api/diaria-iniciar.php">
+      <form id="m-dash">
         <div class="m-field">
           <label>Data</label>
           <input type="date" id="m-date" name="date" value="<?= $minDate ?>" min="<?= $minDate ?>" required>
           <div class="hint">Após 16h, somente datas futuras.</div>
         </div>
         <button class="m-btn m-btn-gold" type="submit">Ir para Grade de Oficina Modular</button>
+        <div id="m-dash-msg" class="m-msg" style="margin-top:12px;font-size:13px;font-weight:600;min-height:20px;text-align:center;color:var(--err,#b91c1c);display:none"></div>
       </form>
     </div>
 
@@ -86,16 +87,41 @@ $now = date('c');
 <script>
 (function(){
   var el=document.getElementById('m-cd');
-  if(!el)return;
-  var base=el.dataset.now?new Date(el.dataset.now):new Date();
-  function tick(){
-    var now=new Date(),t=new Date(base);t.setHours(10,0,0,0);
-    var d=t.getTime()-now.getTime();
-    if(d<=0){el.textContent='Diária emergencial em vigor a partir das 10h.';return}
-    var s=Math.floor(d/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=s%60;
-    var p=function(v){return String(v).padStart(2,'0')};
-    el.textContent='Diária planejada encerra em '+p(h)+':'+p(m)+':'+p(ss)+'.';
+  if(el){
+    var base=el.dataset.now?new Date(el.dataset.now):new Date();
+    function tick(){
+      var now=new Date(),t=new Date(base);t.setHours(10,0,0,0);
+      var d=t.getTime()-now.getTime();
+      if(d<=0){el.textContent='Diária emergencial em vigor a partir das 10h.';return}
+      var s=Math.floor(d/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=s%60;
+      var p=function(v){return String(v).padStart(2,'0')};
+      el.textContent='Diária planejada encerra em '+p(h)+':'+p(m)+':'+p(ss)+'.';
+    }
+    tick();setInterval(tick,1000);
   }
-  tick();setInterval(tick,1000);
+
+  var form=document.getElementById('m-dash'),msg=document.getElementById('m-dash-msg');
+  if(form) form.addEventListener('submit',async function(e){
+    e.preventDefault();
+    if(msg){msg.style.display='none';msg.textContent='';}
+    var dateInput=document.getElementById('m-date');
+    var dateVal=dateInput?dateInput.value.trim():'';
+    if(!dateVal){if(msg){msg.style.display='block';msg.textContent='Selecione a data.';}return;}
+    var btn=form.querySelector('button[type=submit]');
+    btn.disabled=true;btn.textContent='Aguarde...';
+    try{
+      var res=await fetch('/api/diaria-iniciar.php',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({date:dateVal})
+      });
+      var data=await res.json();
+      if(!data.ok){if(msg){msg.style.display='block';msg.textContent=data.error||'Não foi possível iniciar a diária.';}btn.disabled=false;btn.textContent='Ir para Grade de Oficina Modular';return;}
+      var id=data.diaria_id;
+      if(id) window.location.href='/mobile/?r=grade-oficina&diariaId='+encodeURIComponent(id);
+      else if(data.redirect_url) window.location.href=data.redirect_url;
+      else {btn.disabled=false;btn.textContent='Ir para Grade de Oficina Modular';}
+    }catch(err){if(msg){msg.style.display='block';msg.textContent='Erro de conexão. Tente novamente.';}btn.disabled=false;btn.textContent='Ir para Grade de Oficina Modular';}
+  });
 })();
 </script>

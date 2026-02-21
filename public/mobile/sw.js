@@ -1,4 +1,4 @@
-const CACHE_NAME = 'village-mobile-v4';
+const CACHE_NAME = 'village-mobile-v5';
 
 const PRECACHE_URLS = [
   '/mobile/',
@@ -31,9 +31,16 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch – network-first for navigation, cache-first for assets
+// Fetch – network-first for navigation, cache-first for assets, never cache API
 self.addEventListener('fetch', (event) => {
   const { request } = event;
+  const url = request.url || '';
+
+  // Never cache API requests (login, register, diaria-iniciar, etc.)
+  if (url.indexOf('/api/') !== -1) {
+    event.respondWith(fetch(request));
+    return;
+  }
 
   if (request.mode === 'navigate') {
     // Network-first for HTML pages
