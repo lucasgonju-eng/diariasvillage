@@ -33,6 +33,49 @@ jobs:
       - name: Instalar dependências
         run: composer install --no-dev --optimize-autoloader --ignore-platform-req=ext-gd
 
+      - name: Diagnóstico SSH (pré-check)
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT || 22 }}
+          SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+          SSH_TARGET_DIR: ${{ secrets.SSH_TARGET_DIR }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sshpass
+
+          set +e
+          OUT=$(sshpass -p "$SSH_PASSWORD" ssh \
+            -p "$SSH_PORT" \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
+            -o ConnectTimeout=10 \
+            "$SSH_USERNAME@$SSH_HOST" \
+            "echo SSH_OK && ls -ld \"$SSH_TARGET_DIR\"" 2>&1)
+          CODE=$?
+          set -e
+
+          if [ "$CODE" -eq 0 ]; then
+            echo "Diagnóstico SSH: conexão e autenticação OK."
+            echo "$OUT"
+            exit 0
+          fi
+
+          echo "Diagnóstico SSH falhou (exit $CODE)."
+          echo "$OUT"
+          if echo "$OUT" | grep -qi "Permission denied"; then
+            echo "Causa provável: usuário/senha SSH inválidos (ou senha SSH desatualizada)."
+          elif echo "$OUT" | grep -qi "Connection refused"; then
+            echo "Causa provável: porta SSH incorreta ou SSH desabilitado no servidor."
+          elif echo "$OUT" | grep -qi "timed out\|No route to host\|Name or service not known"; then
+            echo "Causa provável: host/IP incorreto ou bloqueio de rede/firewall."
+          elif echo "$OUT" | grep -qi "No such file or directory"; then
+            echo "Causa provável: SSH_TARGET_DIR inválido."
+          else
+            echo "Causa não classificada. Verifique host, porta, usuário, senha e target_dir."
+          fi
+          exit 1
+
       - name: Preparar estrutura de deploy
         run: |
           mkdir -p deploy
