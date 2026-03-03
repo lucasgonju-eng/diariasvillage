@@ -127,6 +127,13 @@ if ($guardians) {
     .admin-wrap{max-width:1120px;margin:0 auto;padding:28px 20px}
     .admin-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
     .admin-title{font-weight:800;letter-spacing:.08em;font-size:12px;color:#1a2133}
+    .admin-header .btn.btn-ghost{
+      color:#111827;
+      border-color:#CBD5E1;
+      background:#F8FAFC;
+      font-weight:700;
+    }
+    .admin-header .btn.btn-ghost:hover{filter:brightness(.98)}
     .admin-card{background:#fff;border-radius:16px;padding:18px;border:1px solid var(--line);box-shadow:var(--shadow-soft)}
     .admin-tabs{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
     .admin-tab{background:#EFF3FA;border-color:#D5DCE8;color:#1a2133}
@@ -175,6 +182,7 @@ if ($guardians) {
     <header class="admin-header">
       <div class="admin-title">DIÁRIAS VILLAGE • ADMIN</div>
       <div class="cta">
+        <button class="btn btn-primary btn-sm" type="button" data-tab="fluxo-caixa">Fluxo de Caixa</button>
         <a class="btn btn-danger btn-sm" href="/admin/settle-pendencia.php">Baixa manual</a>
         <a class="btn btn-ghost btn-sm" href="/admin/import.php">Importar alunos</a>
         <a class="btn btn-ghost btn-sm" href="/logout.php">Sair</a>
