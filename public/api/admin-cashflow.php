@@ -79,12 +79,20 @@ $billingTypeFilter = strtoupper(trim((string) ($_GET['billing_type'] ?? '')));
 $client = new SupabaseClient(new HttpClient());
 $paymentsResult = $client->select(
     'payments',
-    'select=id,amount,status,billing_type,daily_type,payment_date,created_at,paid_at,students(name,enrollment)&order=created_at.desc&limit=10000'
+    'select=id,student_id,amount,status,billing_type,daily_type,payment_date,created_at,paid_at&order=created_at.desc&limit=10000'
 );
+
+// Algumas bases não têm coluna enrollment em pendencia_de_cadastro.
 $pendenciaResult = $client->select(
     'pendencia_de_cadastro',
     'select=id,student_name,enrollment,payment_date,created_at,paid_at&order=created_at.desc&limit=5000'
 );
+if (!($pendenciaResult['ok'] ?? false)) {
+    $pendenciaResult = $client->select(
+        'pendencia_de_cadastro',
+        'select=id,student_name,payment_date,created_at,paid_at&order=created_at.desc&limit=5000'
+    );
+}
 
 if (!($paymentsResult['ok'] ?? false) && !($pendenciaResult['ok'] ?? false)) {
     $paymentsErr = is_string($paymentsResult['error'] ?? null) ? $paymentsResult['error'] : '';
@@ -105,12 +113,41 @@ if (!($paymentsResult['ok'] ?? false)) {
 if (!($pendenciaResult['ok'] ?? false)) {
     $warnings[] = 'Não foi possível carregar a tabela pendencia_de_cadastro.';
 }
+
+$studentsById = [];
+if (!empty($rows)) {
+    $studentIds = [];
+    foreach ($rows as $row) {
+        $sid = trim((string) ($row['student_id'] ?? ''));
+        if ($sid !== '') {
+            $studentIds[$sid] = true;
+        }
+    }
+    $ids = array_keys($studentIds);
+    if (!empty($ids)) {
+        $quoted = array_map(static fn($id) => '"' . str_replace('"', '', $id) . '"', $ids);
+        $studentsResult = $client->select(
+            'students',
+            'select=id,name,enrollment&id=in.(' . implode(',', $quoted) . ')&limit=10000'
+        );
+        if (($studentsResult['ok'] ?? false) && !empty($studentsResult['data'])) {
+            foreach ($studentsResult['data'] as $st) {
+                $sid = (string) ($st['id'] ?? '');
+                if ($sid !== '') {
+                    $studentsById[$sid] = $st;
+                }
+            }
+        } else {
+            $warnings[] = 'Não foi possível carregar nomes/matrículas da tabela students.';
+        }
+    }
+}
 $items = [];
 $totalAmount = 0.0;
 $totalPaidAmount = 0.0;
 
 foreach ($rows as $row) {
-    $student = $row['students'] ?? [];
+    $student = $studentsById[(string) ($row['student_id'] ?? '')] ?? [];
     $studentName = trim((string) ($student['name'] ?? '-'));
     $enrollment = trim((string) ($student['enrollment'] ?? '-'));
     $status = trim((string) ($row['status'] ?? '-'));
