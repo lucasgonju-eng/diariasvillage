@@ -54,6 +54,8 @@ const cashflowEnrollmentInput = document.querySelector('#cashflow-enrollment');
 const cashflowDayTypeInput = document.querySelector('#cashflow-day-type');
 const cashflowStatusInput = document.querySelector('#cashflow-status');
 const cashflowBillingTypeInput = document.querySelector('#cashflow-billing-type');
+const cashflowExcludeStudentInput = document.querySelector('#cashflow-exclude-student');
+const cashflowExcludeTermInput = document.querySelector('#cashflow-exclude-term');
 const cashflowSearchButton = document.querySelector('#cashflow-search');
 const cashflowClearButton = document.querySelector('#cashflow-clear');
 const cashflowMessage = document.querySelector('#cashflow-message');
@@ -142,7 +144,9 @@ async function loadCashflow() {
     !cashflowEnrollmentInput ||
     !cashflowDayTypeInput ||
     !cashflowStatusInput ||
-    !cashflowBillingTypeInput
+    !cashflowBillingTypeInput ||
+    !cashflowExcludeStudentInput ||
+    !cashflowExcludeTermInput
   ) {
     return;
   }
@@ -157,6 +161,10 @@ async function loadCashflow() {
   if (cashflowDayTypeInput.value) params.set('day_use_type', cashflowDayTypeInput.value);
   if (cashflowStatusInput.value) params.set('status', cashflowStatusInput.value);
   if (cashflowBillingTypeInput.value) params.set('billing_type', cashflowBillingTypeInput.value);
+  if (cashflowExcludeStudentInput.value.trim())
+    params.set('exclude_student', cashflowExcludeStudentInput.value.trim());
+  if (cashflowExcludeTermInput.value.trim())
+    params.set('exclude_term', cashflowExcludeTermInput.value.trim());
 
   cashflowSearchButton.setAttribute('disabled', 'disabled');
   setCashflowMessage('Carregando fluxo de caixa...');
@@ -909,6 +917,8 @@ if (cashflowClearButton) {
     if (cashflowDayTypeInput) cashflowDayTypeInput.value = '';
     if (cashflowStatusInput) cashflowStatusInput.value = '';
     if (cashflowBillingTypeInput) cashflowBillingTypeInput.value = '';
+    if (cashflowExcludeStudentInput) cashflowExcludeStudentInput.value = '';
+    if (cashflowExcludeTermInput) cashflowExcludeTermInput.value = '';
     loadCashflow();
   });
 }

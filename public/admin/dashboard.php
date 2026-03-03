@@ -707,6 +707,14 @@ if ($guardians) {
               <option value="DEBIT_CARD">Cartão débito</option>
             </select>
           </div>
+          <div class="form-group">
+            <label>Não mostrar aluno</label>
+            <input id="cashflow-exclude-student" type="text" placeholder="Ex.: João" />
+          </div>
+          <div class="form-group">
+            <label>Não mostrar termo</label>
+            <input id="cashflow-exclude-term" type="text" placeholder="Ex.: pendência, pix manual" />
+          </div>
           <div class="form-group" style="display:flex;align-items:flex-end;gap:8px;">
             <button id="cashflow-search" class="btn btn-primary btn-sm" type="button">Buscar</button>
             <button id="cashflow-clear" class="btn btn-ghost btn-sm" type="button">Limpar</button>
@@ -742,6 +750,6 @@ if ($guardians) {
     <div class="footer">Desenvolvido por Lucas Gonçalves Junior - 2026</div>
   </div>
 
-  <script src="/assets/js/admin-dashboard.js?v=22"></script>
+  <script src="/assets/js/admin-dashboard.js?v=23"></script>
 </body>
 </html>

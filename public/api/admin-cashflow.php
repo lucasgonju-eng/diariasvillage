@@ -84,6 +84,8 @@ $dayUseTypeFilter = strtolower(trim((string) ($_GET['day_use_type'] ?? '')));
 $studentFilter = normalize_lower((string) ($_GET['student_name'] ?? ''));
 $enrollmentFilter = normalize_lower((string) ($_GET['enrollment'] ?? ''));
 $billingTypeFilter = strtoupper(trim((string) ($_GET['billing_type'] ?? '')));
+$excludeStudentFilter = normalize_lower((string) ($_GET['exclude_student'] ?? ''));
+$excludeTermFilter = normalize_lower((string) ($_GET['exclude_term'] ?? ''));
 
 $client = new SupabaseClient(new HttpClient());
 $paymentsResult = $client->select(
@@ -183,6 +185,15 @@ foreach ($rows as $row) {
     if ($enrollmentFilter !== '' && !str_contains(normalize_lower($enrollment), $enrollmentFilter)) {
         continue;
     }
+    if ($excludeStudentFilter !== '' && str_contains(normalize_lower($studentName), $excludeStudentFilter)) {
+        continue;
+    }
+    if ($excludeTermFilter !== '') {
+        $haystack = normalize_lower($studentName . ' ' . $enrollment . ' ' . $dailyTypeLabel . ' ' . $status . ' ' . $billingType);
+        if (str_contains($haystack, $excludeTermFilter)) {
+            continue;
+        }
+    }
 
     $paymentDate = (string) ($row['payment_date'] ?? '');
     $paidAt = (string) ($row['paid_at'] ?? '');
@@ -241,6 +252,15 @@ foreach ($pendencias as $p) {
     }
     if ($enrollmentFilter !== '' && !str_contains(normalize_lower($enrollment), $enrollmentFilter)) {
         continue;
+    }
+    if ($excludeStudentFilter !== '' && str_contains(normalize_lower($studentName), $excludeStudentFilter)) {
+        continue;
+    }
+    if ($excludeTermFilter !== '') {
+        $haystack = normalize_lower($studentName . ' ' . $enrollment . ' ' . $dayUseType . ' ' . $status . ' ' . $billingType);
+        if (str_contains($haystack, $excludeTermFilter)) {
+            continue;
+        }
     }
 
     $items[] = [
