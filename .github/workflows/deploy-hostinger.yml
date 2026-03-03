@@ -8,6 +8,18 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Validar secrets de SSH
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+          SSH_TARGET_DIR: ${{ secrets.SSH_TARGET_DIR }}
+        run: |
+          test -n "$SSH_HOST" || (echo "Secret ausente: SSH_HOST" && exit 1)
+          test -n "$SSH_USERNAME" || (echo "Secret ausente: SSH_USERNAME" && exit 1)
+          test -n "$SSH_PASSWORD" || (echo "Secret ausente: SSH_PASSWORD" && exit 1)
+          test -n "$SSH_TARGET_DIR" || (echo "Secret ausente: SSH_TARGET_DIR" && exit 1)
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -45,11 +57,15 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           password: ${{ secrets.SSH_PASSWORD }}
-          port: ${{ secrets.SSH_PORT }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          envs: SSH_TARGET_DIR
+          script_stop: true
           script: |
+            TARGET_DIR="$SSH_TARGET_DIR"
+            TARGET_DIR="${TARGET_DIR%/}"
             pwd
             ls -la
-            ls -la ${{ secrets.SSH_TARGET_DIR }}
+            ls -la "$TARGET_DIR"
 
       - name: Deploy via SFTP (SSH)
         uses: appleboy/scp-action@v0.1.7
@@ -57,7 +73,7 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           password: ${{ secrets.SSH_PASSWORD }}
-          port: ${{ secrets.SSH_PORT }}
+          port: ${{ secrets.SSH_PORT || 22 }}
           source: "deploy"
           target: ${{ secrets.SSH_TARGET_DIR }}
           strip_components: 1
@@ -68,9 +84,11 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           password: ${{ secrets.SSH_PASSWORD }}
-          port: ${{ secrets.SSH_PORT }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          envs: SSH_TARGET_DIR
+          script_stop: true
           script: |
-            TARGET="${{ secrets.SSH_TARGET_DIR }}"
+            TARGET="$SSH_TARGET_DIR"
             TARGET="${TARGET%/}"
             PARENT="$(dirname "$TARGET")"
             if [ -f "$TARGET/.env" ]; then
