@@ -47,6 +47,22 @@ function to_date_key(?string $value): string
     return date('Y-m-d', $time);
 }
 
+function normalize_lower(string $value): string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return '';
+    }
+    if (function_exists('mb_strtolower')) {
+        try {
+            return mb_strtolower($value, 'UTF-8');
+        } catch (\Throwable $e) {
+            // Fallback para entradas com encoding inválido.
+        }
+    }
+    return strtolower($value);
+}
+
 $from = normalize_date($_GET['from'] ?? '') ?? date('Y') . '-01-05';
 $to = normalize_date($_GET['to'] ?? '') ?? date('Y-m-d');
 
@@ -56,8 +72,8 @@ if ($from > $to) {
 
 $statusFilter = strtolower(trim((string) ($_GET['status'] ?? '')));
 $dayUseTypeFilter = strtolower(trim((string) ($_GET['day_use_type'] ?? '')));
-$studentFilter = mb_strtolower(trim((string) ($_GET['student_name'] ?? '')), 'UTF-8');
-$enrollmentFilter = mb_strtolower(trim((string) ($_GET['enrollment'] ?? '')), 'UTF-8');
+$studentFilter = normalize_lower((string) ($_GET['student_name'] ?? ''));
+$enrollmentFilter = normalize_lower((string) ($_GET['enrollment'] ?? ''));
 $billingTypeFilter = strtoupper(trim((string) ($_GET['billing_type'] ?? '')));
 
 $client = new SupabaseClient(new HttpClient());
@@ -65,20 +81,30 @@ $paymentsResult = $client->select(
     'payments',
     'select=id,amount,status,billing_type,daily_type,payment_date,created_at,paid_at,students(name,enrollment)&order=created_at.desc&limit=10000'
 );
-if (!$paymentsResult['ok']) {
-    Helpers::json(['ok' => false, 'error' => 'Falha ao carregar fluxo de caixa.'], 500);
-}
-
 $pendenciaResult = $client->select(
     'pendencia_de_cadastro',
     'select=id,student_name,enrollment,payment_date,created_at,paid_at&order=created_at.desc&limit=5000'
 );
-if (!$pendenciaResult['ok']) {
-    Helpers::json(['ok' => false, 'error' => 'Falha ao carregar pendências para o fluxo de caixa.'], 500);
+
+if (!($paymentsResult['ok'] ?? false) && !($pendenciaResult['ok'] ?? false)) {
+    $paymentsErr = is_string($paymentsResult['error'] ?? null) ? $paymentsResult['error'] : '';
+    $pendenciasErr = is_string($pendenciaResult['error'] ?? null) ? $pendenciaResult['error'] : '';
+    Helpers::json([
+        'ok' => false,
+        'error' => 'Falha ao carregar fluxo de caixa.',
+        'details' => trim($paymentsErr . ' ' . $pendenciasErr) ?: null,
+    ], 500);
 }
 
-$rows = $paymentsResult['data'] ?? [];
-$pendencias = $pendenciaResult['data'] ?? [];
+$rows = ($paymentsResult['ok'] ?? false) ? ($paymentsResult['data'] ?? []) : [];
+$pendencias = ($pendenciaResult['ok'] ?? false) ? ($pendenciaResult['data'] ?? []) : [];
+$warnings = [];
+if (!($paymentsResult['ok'] ?? false)) {
+    $warnings[] = 'Não foi possível carregar a tabela payments.';
+}
+if (!($pendenciaResult['ok'] ?? false)) {
+    $warnings[] = 'Não foi possível carregar a tabela pendencia_de_cadastro.';
+}
 $items = [];
 $totalAmount = 0.0;
 $totalPaidAmount = 0.0;
@@ -105,10 +131,10 @@ foreach ($rows as $row) {
     if ($billingTypeFilter !== '' && strtoupper($billingType) !== $billingTypeFilter) {
         continue;
     }
-    if ($studentFilter !== '' && !str_contains(mb_strtolower($studentName, 'UTF-8'), $studentFilter)) {
+    if ($studentFilter !== '' && !str_contains(normalize_lower($studentName), $studentFilter)) {
         continue;
     }
-    if ($enrollmentFilter !== '' && !str_contains(mb_strtolower($enrollment, 'UTF-8'), $enrollmentFilter)) {
+    if ($enrollmentFilter !== '' && !str_contains(normalize_lower($enrollment), $enrollmentFilter)) {
         continue;
     }
 
@@ -164,10 +190,10 @@ foreach ($pendencias as $p) {
         // Pendência não é planejada/emergencial.
         continue;
     }
-    if ($studentFilter !== '' && !str_contains(mb_strtolower($studentName, 'UTF-8'), $studentFilter)) {
+    if ($studentFilter !== '' && !str_contains(normalize_lower($studentName), $studentFilter)) {
         continue;
     }
-    if ($enrollmentFilter !== '' && !str_contains(mb_strtolower($enrollment, 'UTF-8'), $enrollmentFilter)) {
+    if ($enrollmentFilter !== '' && !str_contains(normalize_lower($enrollment), $enrollmentFilter)) {
         continue;
     }
 
@@ -201,5 +227,6 @@ Helpers::json([
         'amount' => round($totalAmount, 2),
         'paid_amount' => round($totalPaidAmount, 2),
     ],
+    'warnings' => $warnings,
     'items' => $items,
 ]);
