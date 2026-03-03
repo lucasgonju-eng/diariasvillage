@@ -34,6 +34,19 @@ function normalize_day_use_type(string $dailyType): string
     return $base !== '' ? ucfirst($base) : '-';
 }
 
+function to_date_key(?string $value): string
+{
+    $raw = trim((string) $value);
+    if ($raw === '') {
+        return '';
+    }
+    $time = strtotime($raw);
+    if ($time === false) {
+        return '';
+    }
+    return date('Y-m-d', $time);
+}
+
 $from = normalize_date($_GET['from'] ?? '') ?? date('Y') . '-01-05';
 $to = normalize_date($_GET['to'] ?? '') ?? date('Y-m-d');
 
@@ -48,24 +61,24 @@ $enrollmentFilter = mb_strtolower(trim((string) ($_GET['enrollment'] ?? '')), 'U
 $billingTypeFilter = strtoupper(trim((string) ($_GET['billing_type'] ?? '')));
 
 $client = new SupabaseClient(new HttpClient());
-$query = http_build_query([
-    'select' => 'id,amount,status,billing_type,daily_type,payment_date,created_at,paid_at,students(name,enrollment)',
-    'payment_date' => 'gte.' . $from,
-    'payment_date_2' => 'lte.' . $to,
-    'order' => 'payment_date.desc',
-    'limit' => 5000,
-], '', '&', PHP_QUERY_RFC3986);
-
-// O PostgREST não aceita chave repetida com http_build_query sem [].
-// Ajuste manual para manter "payment_date" nos dois filtros.
-$query = str_replace('payment_date_2=', 'payment_date=', $query);
-
-$result = $client->select('payments', $query);
-if (!$result['ok']) {
+$paymentsResult = $client->select(
+    'payments',
+    'select=id,amount,status,billing_type,daily_type,payment_date,created_at,paid_at,students(name,enrollment)&order=created_at.desc&limit=10000'
+);
+if (!$paymentsResult['ok']) {
     Helpers::json(['ok' => false, 'error' => 'Falha ao carregar fluxo de caixa.'], 500);
 }
 
-$rows = $result['data'] ?? [];
+$pendenciaResult = $client->select(
+    'pendencia_de_cadastro',
+    'select=id,student_name,enrollment,payment_date,created_at,paid_at&order=created_at.desc&limit=5000'
+);
+if (!$pendenciaResult['ok']) {
+    Helpers::json(['ok' => false, 'error' => 'Falha ao carregar pendências para o fluxo de caixa.'], 500);
+}
+
+$rows = $paymentsResult['data'] ?? [];
+$pendencias = $pendenciaResult['data'] ?? [];
 $items = [];
 $totalAmount = 0.0;
 $totalPaidAmount = 0.0;
@@ -102,12 +115,15 @@ foreach ($rows as $row) {
     $paymentDate = (string) ($row['payment_date'] ?? '');
     $paidAt = (string) ($row['paid_at'] ?? '');
     $createdAt = (string) ($row['created_at'] ?? '');
-    $displayDate = $paymentDate !== '' ? $paymentDate : ($paidAt !== '' ? $paidAt : $createdAt);
+    $dateKey = to_date_key($paymentDate !== '' ? $paymentDate : ($paidAt !== '' ? $paidAt : $createdAt));
+    if ($dateKey === '' || $dateKey < $from || $dateKey > $to) {
+        continue;
+    }
 
     $items[] = [
         'id' => $row['id'] ?? null,
         'student_name' => $studentName !== '' ? $studentName : '-',
-        'date' => $displayDate,
+        'date' => $dateKey,
         'day_use_type' => $dailyTypeLabel,
         'enrollment' => $enrollment !== '' ? $enrollment : '-',
         'amount' => $amount,
@@ -121,6 +137,61 @@ foreach ($rows as $row) {
         $totalPaidAmount += $amount;
     }
 }
+
+foreach ($pendencias as $p) {
+    $studentName = trim((string) ($p['student_name'] ?? '-'));
+    $enrollment = trim((string) ($p['enrollment'] ?? '-'));
+    $paidAt = (string) ($p['paid_at'] ?? '');
+    $paymentDate = (string) ($p['payment_date'] ?? '');
+    $createdAt = (string) ($p['created_at'] ?? '');
+    $dateKey = to_date_key($paymentDate !== '' ? $paymentDate : ($paidAt !== '' ? $paidAt : $createdAt));
+    if ($dateKey === '' || $dateKey < $from || $dateKey > $to) {
+        continue;
+    }
+
+    $status = $paidAt !== '' ? 'paid' : 'pending';
+    $billingType = 'PIX';
+    $dayUseType = 'Pendência cadastro';
+    $amount = 77.00;
+
+    if ($statusFilter !== '' && $status !== $statusFilter) {
+        continue;
+    }
+    if ($billingTypeFilter !== '' && strtoupper($billingType) !== $billingTypeFilter) {
+        continue;
+    }
+    if ($dayUseTypeFilter !== '') {
+        // Pendência não é planejada/emergencial.
+        continue;
+    }
+    if ($studentFilter !== '' && !str_contains(mb_strtolower($studentName, 'UTF-8'), $studentFilter)) {
+        continue;
+    }
+    if ($enrollmentFilter !== '' && !str_contains(mb_strtolower($enrollment, 'UTF-8'), $enrollmentFilter)) {
+        continue;
+    }
+
+    $items[] = [
+        'id' => $p['id'] ?? null,
+        'student_name' => $studentName !== '' ? $studentName : '-',
+        'date' => $dateKey,
+        'day_use_type' => $dayUseType,
+        'enrollment' => $enrollment !== '' ? $enrollment : '-',
+        'amount' => $amount,
+        'status' => $status,
+        'billing_type' => $billingType,
+        'paid_at' => $paidAt,
+    ];
+
+    $totalAmount += $amount;
+    if ($status === 'paid') {
+        $totalPaidAmount += $amount;
+    }
+}
+
+usort($items, static function (array $a, array $b): int {
+    return strcmp((string) ($b['date'] ?? ''), (string) ($a['date'] ?? ''));
+});
 
 Helpers::json([
     'ok' => true,
