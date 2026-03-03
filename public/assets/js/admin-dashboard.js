@@ -7,6 +7,7 @@ const tabSemWhatsapp = document.querySelector('#tab-sem-whatsapp');
 const tabDuplicados = document.querySelector('#tab-duplicados');
 const tabPendencias = document.querySelector('#tab-pendencias');
 const tabResetSenha = document.querySelector('#tab-reset-senha');
+const tabFluxoCaixa = document.querySelector('#tab-fluxo-caixa');
 const studentInput = document.querySelector('#charge-student');
 const studentList = document.querySelector('#students-list');
 const chargeList = document.querySelector('#charge-list');
@@ -37,12 +38,148 @@ function setActiveTab(name) {
   tabDuplicados.classList.toggle('hidden', name !== 'duplicados');
   tabPendencias.classList.toggle('hidden', name !== 'pendencias');
   if (tabResetSenha) tabResetSenha.classList.toggle('hidden', name !== 'reset-senha');
+  if (tabFluxoCaixa) tabFluxoCaixa.classList.toggle('hidden', name !== 'fluxo-caixa');
   tabs.forEach((btn) => {
     const isActive = btn.dataset.tab === name;
     btn.classList.toggle('btn-primary', isActive);
     btn.classList.toggle('admin-tab', !isActive);
     btn.style.opacity = isActive ? '1' : '0.95';
   });
+}
+
+const cashflowFromInput = document.querySelector('#cashflow-from');
+const cashflowToInput = document.querySelector('#cashflow-to');
+const cashflowStudentInput = document.querySelector('#cashflow-student');
+const cashflowEnrollmentInput = document.querySelector('#cashflow-enrollment');
+const cashflowDayTypeInput = document.querySelector('#cashflow-day-type');
+const cashflowStatusInput = document.querySelector('#cashflow-status');
+const cashflowBillingTypeInput = document.querySelector('#cashflow-billing-type');
+const cashflowSearchButton = document.querySelector('#cashflow-search');
+const cashflowClearButton = document.querySelector('#cashflow-clear');
+const cashflowMessage = document.querySelector('#cashflow-message');
+const cashflowSummary = document.querySelector('#cashflow-summary');
+const cashflowTbody = document.querySelector('#cashflow-tbody');
+let cashflowLoaded = false;
+
+function getCashflowDefaultFromDate() {
+  const now = new Date();
+  const year = now.getFullYear();
+  return `${year}-01-05`;
+}
+
+function formatCurrency(value) {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+    Number(value || 0),
+  );
+}
+
+function formatDateBR(value) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString('pt-BR');
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function setCashflowMessage(text, isError = false) {
+  if (!cashflowMessage) return;
+  cashflowMessage.textContent = text;
+  cashflowMessage.className = `charge-message ${isError ? 'error' : ''}`.trim();
+}
+
+function renderCashflowRows(items) {
+  if (!cashflowTbody) return;
+  if (!items.length) {
+    cashflowTbody.innerHTML = '<tr><td colspan="7">Nenhum registro para os filtros selecionados.</td></tr>';
+    return;
+  }
+  cashflowTbody.innerHTML = items
+    .map(
+      (item) => `
+      <tr>
+        <td>${escapeHtml(item.student_name || '-')}</td>
+        <td>${formatDateBR(item.date)}</td>
+        <td>${escapeHtml(item.day_use_type || '-')}</td>
+        <td>${escapeHtml(item.enrollment || '-')}</td>
+        <td>${formatCurrency(item.amount)}</td>
+        <td>${escapeHtml(item.status || '-')}</td>
+        <td>${escapeHtml(item.billing_type || '-')}</td>
+      </tr>
+    `,
+    )
+    .join('');
+}
+
+function renderCashflowSummary(totals, period) {
+  if (!cashflowSummary) return;
+  if (!totals) {
+    cashflowSummary.innerHTML = '';
+    return;
+  }
+  cashflowSummary.innerHTML = `
+    <span class="cashflow-pill">Período: ${formatDateBR(period?.from)} até ${formatDateBR(period?.to)}</span>
+    <span class="cashflow-pill">Registros: ${totals.count || 0}</span>
+    <span class="cashflow-pill">Total geral: ${formatCurrency(totals.amount || 0)}</span>
+    <span class="cashflow-pill">Total pago: ${formatCurrency(totals.paid_amount || 0)}</span>
+  `;
+}
+
+async function loadCashflow() {
+  if (
+    !cashflowFromInput ||
+    !cashflowToInput ||
+    !cashflowSearchButton ||
+    !cashflowTbody ||
+    !cashflowStudentInput ||
+    !cashflowEnrollmentInput ||
+    !cashflowDayTypeInput ||
+    !cashflowStatusInput ||
+    !cashflowBillingTypeInput
+  ) {
+    return;
+  }
+
+  const params = new URLSearchParams({
+    from: cashflowFromInput.value,
+    to: cashflowToInput.value,
+  });
+  if (cashflowStudentInput.value.trim()) params.set('student_name', cashflowStudentInput.value.trim());
+  if (cashflowEnrollmentInput.value.trim())
+    params.set('enrollment', cashflowEnrollmentInput.value.trim());
+  if (cashflowDayTypeInput.value) params.set('day_use_type', cashflowDayTypeInput.value);
+  if (cashflowStatusInput.value) params.set('status', cashflowStatusInput.value);
+  if (cashflowBillingTypeInput.value) params.set('billing_type', cashflowBillingTypeInput.value);
+
+  cashflowSearchButton.setAttribute('disabled', 'disabled');
+  setCashflowMessage('Carregando fluxo de caixa...');
+  try {
+    const res = await fetch(`/api/admin-cashflow.php?${params.toString()}`);
+    const data = await res.json();
+    if (!data.ok) {
+      setCashflowMessage(data.error || 'Falha ao carregar fluxo de caixa.', true);
+      renderCashflowRows([]);
+      renderCashflowSummary(null, null);
+      return;
+    }
+    renderCashflowRows(data.items || []);
+    renderCashflowSummary(data.totals || null, data.period || null);
+    setCashflowMessage('');
+    cashflowLoaded = true;
+  } catch {
+    setCashflowMessage('Falha ao carregar fluxo de caixa.', true);
+    renderCashflowRows([]);
+    renderCashflowSummary(null, null);
+  } finally {
+    cashflowSearchButton.removeAttribute('disabled');
+  }
 }
 
 async function addChargeItem(studentName) {
@@ -224,7 +361,12 @@ function resetChargeForm() {
 }
 
 tabs.forEach((btn) => {
-  btn.addEventListener('click', () => setActiveTab(btn.dataset.tab));
+  btn.addEventListener('click', () => {
+    setActiveTab(btn.dataset.tab);
+    if (btn.dataset.tab === 'fluxo-caixa' && !cashflowLoaded) {
+      loadCashflow();
+    }
+  });
 });
 
 if (studentInput) {
@@ -745,6 +887,29 @@ if (resetSenhaBtn && resetCpfInput && resetSenhaNovaInput && resetSenhaConfirmIn
     } finally {
       resetSenhaBtn.removeAttribute('disabled');
     }
+  });
+}
+
+if (cashflowFromInput && cashflowToInput) {
+  const todayIso = new Date().toISOString().slice(0, 10);
+  if (!cashflowFromInput.value) cashflowFromInput.value = getCashflowDefaultFromDate();
+  if (!cashflowToInput.value) cashflowToInput.value = todayIso;
+}
+
+if (cashflowSearchButton) {
+  cashflowSearchButton.addEventListener('click', loadCashflow);
+}
+
+if (cashflowClearButton) {
+  cashflowClearButton.addEventListener('click', () => {
+    if (cashflowFromInput) cashflowFromInput.value = getCashflowDefaultFromDate();
+    if (cashflowToInput) cashflowToInput.value = new Date().toISOString().slice(0, 10);
+    if (cashflowStudentInput) cashflowStudentInput.value = '';
+    if (cashflowEnrollmentInput) cashflowEnrollmentInput.value = '';
+    if (cashflowDayTypeInput) cashflowDayTypeInput.value = '';
+    if (cashflowStatusInput) cashflowStatusInput.value = '';
+    if (cashflowBillingTypeInput) cashflowBillingTypeInput.value = '';
+    loadCashflow();
   });
 }
 

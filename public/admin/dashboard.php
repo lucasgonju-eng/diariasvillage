@@ -164,6 +164,9 @@ if ($guardians) {
     }
     .date-actions{display:flex;gap:6px}
     .charge-message{margin-top:12px;font-size:13px}
+    .cashflow-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:10px 0 14px}
+    .cashflow-summary{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 14px}
+    .cashflow-pill{background:#F3F6FB;border:1px solid #E2E8F5;border-radius:999px;padding:7px 12px;font-size:12px;color:#1a2133}
     .hidden{display:none}
   </style>
 </head>
@@ -187,6 +190,7 @@ if ($guardians) {
         <button class="btn btn-primary btn-sm" type="button" data-tab="pendencias">Pendências</button>
         <button class="btn btn-primary btn-sm" type="button" data-tab="duplicados">Duplicados</button>
         <button class="btn btn-primary btn-sm" type="button" data-tab="reset-senha">Resetar senha</button>
+        <button class="btn btn-primary btn-sm" type="button" data-tab="fluxo-caixa">Fluxo de Caixa</button>
         <button class="btn btn-primary btn-sm" type="button" data-tab="entries">Entradas confirmadas</button>
       </div>
 
@@ -645,11 +649,91 @@ if ($guardians) {
         </div>
         <div id="reset-senha-message" class="charge-message"></div>
       </section>
+
+      <section id="tab-fluxo-caixa" class="hidden">
+        <h2>Fluxo de Caixa</h2>
+        <p class="muted">Consolidação de pagamentos para conferência com planilha offline.</p>
+
+        <div class="cashflow-filters">
+          <div class="form-group">
+            <label>Data inicial</label>
+            <input id="cashflow-from" type="date" />
+          </div>
+          <div class="form-group">
+            <label>Data final</label>
+            <input id="cashflow-to" type="date" />
+          </div>
+          <div class="form-group">
+            <label>Aluno</label>
+            <input id="cashflow-student" type="text" placeholder="Nome do aluno" />
+          </div>
+          <div class="form-group">
+            <label>Matrícula</label>
+            <input id="cashflow-enrollment" type="text" placeholder="Número de matrícula" />
+          </div>
+          <div class="form-group">
+            <label>Tipo do day-use</label>
+            <select id="cashflow-day-type">
+              <option value="">Todos</option>
+              <option value="planejada">Planejada</option>
+              <option value="emergencial">Emergencial</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Status pagamento</label>
+            <select id="cashflow-status">
+              <option value="">Todos</option>
+              <option value="paid">Pago</option>
+              <option value="pending">Pendente</option>
+              <option value="overdue">Vencido</option>
+              <option value="canceled">Cancelado</option>
+              <option value="refunded">Estornado</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Forma pagamento</label>
+            <select id="cashflow-billing-type">
+              <option value="">Todas</option>
+              <option value="PIX">PIX</option>
+              <option value="PIX_MANUAL">PIX manual</option>
+              <option value="DEBIT_CARD">Cartão débito</option>
+            </select>
+          </div>
+          <div class="form-group" style="display:flex;align-items:flex-end;gap:8px;">
+            <button id="cashflow-search" class="btn btn-primary btn-sm" type="button">Buscar</button>
+            <button id="cashflow-clear" class="btn btn-ghost btn-sm" type="button">Limpar</button>
+          </div>
+        </div>
+
+        <div id="cashflow-message" class="charge-message"></div>
+        <div id="cashflow-summary" class="cashflow-summary"></div>
+
+        <div style="overflow-x:auto;">
+          <table class="admin-table">
+            <thead>
+              <tr style="text-align:left;">
+                <th>Aluno</th>
+                <th>Data</th>
+                <th>Tipo day-use</th>
+                <th>Matrícula</th>
+                <th>Valor pago</th>
+                <th>Status pagamento</th>
+                <th>Forma pagamento</th>
+              </tr>
+            </thead>
+            <tbody id="cashflow-tbody">
+              <tr>
+                <td colspan="7">Clique em "Buscar" para carregar.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
 
     <div class="footer">Desenvolvido por Lucas Gonçalves Junior - 2026</div>
   </div>
 
-  <script src="/assets/js/admin-dashboard.js?v=21"></script>
+  <script src="/assets/js/admin-dashboard.js?v=22"></script>
 </body>
 </html>
