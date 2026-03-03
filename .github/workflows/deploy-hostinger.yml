@@ -101,11 +101,14 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           password: ${{ secrets.SSH_PASSWORD }}
           port: ${{ secrets.SSH_PORT || 22 }}
-          envs: SSH_TARGET_DIR
           script_stop: true
           script: |
-            TARGET_DIR="$SSH_TARGET_DIR"
+            TARGET_DIR="${{ secrets.SSH_TARGET_DIR }}"
             TARGET_DIR="${TARGET_DIR%/}"
+            if [ -z "$TARGET_DIR" ]; then
+              echo "SSH_TARGET_DIR vazio no workflow."
+              exit 1
+            fi
             pwd
             ls -la
             ls -la "$TARGET_DIR"
@@ -128,11 +131,14 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           password: ${{ secrets.SSH_PASSWORD }}
           port: ${{ secrets.SSH_PORT || 22 }}
-          envs: SSH_TARGET_DIR
           script_stop: true
           script: |
-            TARGET="$SSH_TARGET_DIR"
+            TARGET="${{ secrets.SSH_TARGET_DIR }}"
             TARGET="${TARGET%/}"
+            if [ -z "$TARGET" ]; then
+              echo "SSH_TARGET_DIR vazio no workflow."
+              exit 1
+            fi
             PARENT="$(dirname "$TARGET")"
             if [ -f "$TARGET/.env" ]; then
               cp -f "$TARGET/.env" "$PARENT/.env"
