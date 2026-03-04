@@ -49,15 +49,26 @@ if (addGuardianForm) {
       parent_document: document.querySelector('#extra-parent-document').value.trim(),
     };
 
-    const res = await fetch('/api/profile-add-guardian.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-    if (!data.ok) {
+    let data = null;
+    try {
+      const res = await fetch('/api/profile-add-guardian.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const raw = await res.text();
+      data = raw ? JSON.parse(raw) : null;
+      if (!res.ok || !data || !data.ok) {
+        const message = data?.error || 'Não foi possível adicionar responsável.';
+        if (addGuardianMessage) {
+          addGuardianMessage.textContent = message;
+          addGuardianMessage.className = 'error';
+        }
+        return;
+      }
+    } catch (err) {
       if (addGuardianMessage) {
-        addGuardianMessage.textContent = data.error || 'Não foi possível adicionar responsável.';
+        addGuardianMessage.textContent = 'Erro inesperado ao adicionar responsável.';
         addGuardianMessage.className = 'error';
       }
       return;
