@@ -850,6 +850,42 @@ if ($guardians) {
     <div class="footer">Desenvolvido por Lucas Gonçalves Junior - 2026</div>
   </div>
 
-  <script src="/assets/js/admin-dashboard.js?v=31"></script>
+  <script>window.__adminDashboardBooted = false;</script>
+  <script src="/assets/js/admin-dashboard.js?v=32"></script>
+  <script>
+    (function () {
+      function activateTab(name) {
+        var mapping = {
+          entries: 'tab-entries',
+          charges: 'tab-charges',
+          inadimplentes: 'tab-inadimplentes',
+          recebidas: 'tab-recebidas',
+          'sem-whatsapp': 'tab-sem-whatsapp',
+          pendencias: 'tab-pendencias',
+          duplicados: 'tab-duplicados',
+          'reset-senha': 'tab-reset-senha',
+          'fluxo-caixa': 'tab-fluxo-caixa'
+        };
+        Object.keys(mapping).forEach(function (key) {
+          var section = document.getElementById(mapping[key]);
+          if (section) section.classList.toggle('hidden', key !== name);
+        });
+      }
+
+      setTimeout(function () {
+        if (window.__adminDashboardBooted) {
+          return;
+        }
+        console.error('[admin-dashboard] JS externo não inicializou; fallback inline ativado.');
+        var tabs = document.querySelectorAll('[data-tab]');
+        tabs.forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var tab = btn.getAttribute('data-tab') || 'entries';
+            activateTab(tab);
+          });
+        });
+      }, 700);
+    })();
+  </script>
 </body>
 </html>
