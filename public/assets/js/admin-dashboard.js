@@ -378,6 +378,30 @@ function showChargeMessage(text, isError = false) {
   chargeMessage.className = `charge-message ${isError ? 'error' : 'success'}`;
 }
 
+function formatIsoDateBr(value) {
+  if (!value) return value;
+  const parts = String(value).split('-');
+  if (parts.length !== 3) return value;
+  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+}
+
+function buildDuplicatesPopupMessage(duplicates) {
+  const lines = ['Atenção: encontramos possíveis coincidências de diária já registrada:'];
+  duplicates.slice(0, 15).forEach((dup) => {
+    const student = dup.student_name || '-';
+    const date = formatIsoDateBr(dup.date || '-');
+    const source = dup.source || '-';
+    const status = dup.status || '-';
+    lines.push(`- ${student} | ${date} | fonte: ${source} | status: ${status}`);
+  });
+  if (duplicates.length > 15) {
+    lines.push(`... e mais ${duplicates.length - 15} coincidência(s).`);
+  }
+  lines.push('');
+  lines.push('Deseja continuar mesmo assim?');
+  return lines.join('\n');
+}
+
 function resetChargeForm() {
   if (chargeList) {
     chargeList.innerHTML = '';
@@ -430,6 +454,25 @@ if (sendChargesButton) {
     showChargeMessage('');
 
     try {
+      const duplicateRes = await fetch('/api/admin-check-duplicate-dayuse.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ charges }),
+      });
+      const duplicateData = await duplicateRes.json();
+      const duplicates = Array.isArray(duplicateData?.duplicates) ? duplicateData.duplicates : [];
+      if (!duplicateRes.ok || !duplicateData?.ok) {
+        showChargeMessage(duplicateData?.error || 'Falha ao validar coincidências.', true);
+        return;
+      }
+      if (duplicates.length > 0) {
+        const wantsToContinue = window.confirm(buildDuplicatesPopupMessage(duplicates));
+        if (!wantsToContinue) {
+          showChargeMessage('Envio cancelado para revisão de coincidências.', true);
+          return;
+        }
+      }
+
       const res = await fetch('/api/admin-charge.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

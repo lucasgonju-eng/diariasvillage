@@ -799,6 +799,6 @@ if ($guardians) {
     <div class="footer">Desenvolvido por Lucas Gonçalves Junior - 2026</div>
   </div>
 
-  <script src="/assets/js/admin-dashboard.js?v=25"></script>
+  <script src="/assets/js/admin-dashboard.js?v=26"></script>
 </body>
 </html>
