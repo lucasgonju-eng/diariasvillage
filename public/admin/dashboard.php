@@ -44,10 +44,17 @@ $missingWhatsapp = $missingWhatsappResult['data'] ?? [];
 
 $pendenciasResult = $client->select(
     'pendencia_de_cadastro',
-    'select=id,student_name,guardian_name,guardian_cpf,guardian_email,created_at,paid_at,payment_date,access_code,enrollment&order=created_at.desc&limit=500'
+    'select=id,student_name,guardian_name,guardian_cpf,guardian_email,created_at,paid_at,payment_date,access_code,enrollment,asaas_payment_id,asaas_invoice_url&order=created_at.desc&limit=500'
 );
-$pendencias = $pendenciasResult['data'] ?? [];
-$pendenciasPagas = array_filter($pendencias, fn($p) => !empty($p['paid_at']));
+$pendenciasAll = $pendenciasResult['data'] ?? [];
+$pendenciasPagas = array_filter($pendenciasAll, fn($p) => !empty($p['paid_at']));
+$pendencias = array_values(array_filter($pendenciasAll, static function ($p): bool {
+    if (!empty($p['paid_at'])) {
+        return false;
+    }
+    $hasAsaasLink = !empty($p['asaas_payment_id']) || !empty($p['asaas_invoice_url']);
+    return $hasAsaasLink;
+}));
 $valorPendencia = 77.00;
 
 $studentsResult = $client->select('students', 'select=id,name,enrollment,created_at,active&limit=10000');
