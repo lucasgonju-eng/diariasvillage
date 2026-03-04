@@ -1,5 +1,14 @@
 <?php
-require_once dirname(__DIR__, 2) . '/src/Bootstrap.php';
+$bootstrapCandidates = [
+    __DIR__ . '/../src/Bootstrap.php',
+    dirname(__DIR__, 2) . '/src/Bootstrap.php',
+];
+foreach ($bootstrapCandidates as $bootstrapFile) {
+    if (is_file($bootstrapFile)) {
+        require_once $bootstrapFile;
+        break;
+    }
+}
 
 use App\Helpers;
 use App\HttpClient;
@@ -20,11 +29,13 @@ if ($studentName === '') {
 }
 
 $client = new SupabaseClient(new HttpClient());
-$studentResult = $client->select(
-    'students',
-    'select=id,name&name=eq.' . urlencode($studentName) . '&limit=1'
-);
+$studentResult = $client->select('students', 'select=id,name&name=eq.' . urlencode($studentName) . '&limit=1');
 $student = $studentResult['data'][0] ?? null;
+if (!$student) {
+    // Fallback tolerante para diferenças sutis de acentuação/espacos.
+    $studentResult = $client->select('students', 'select=id,name&name=ilike.' . urlencode('*' . $studentName . '*') . '&limit=1');
+    $student = $studentResult['data'][0] ?? null;
+}
 if (!$student) {
     Helpers::json(['ok' => false, 'error' => 'Aluno não encontrado.'], 404);
 }
