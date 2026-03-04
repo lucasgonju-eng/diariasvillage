@@ -43,6 +43,203 @@ function normalize_digits(string $value): string
     return preg_replace('/\D+/', '', $value) ?? '';
 }
 
+function normalize_text_key(string $value): string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return '';
+    }
+    if (function_exists('mb_strtoupper')) {
+        $value = mb_strtoupper($value, 'UTF-8');
+    } else {
+        $value = strtoupper($value);
+    }
+    $translit = iconv('UTF-8', 'ASCII//TRANSLIT', $value);
+    if ($translit !== false) {
+        $value = $translit;
+    }
+    $value = preg_replace('/[^A-Z0-9]+/', '', $value) ?? '';
+    return trim($value);
+}
+
+function normalize_email(string $value): string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return '';
+    }
+    if (function_exists('mb_strtolower')) {
+        return mb_strtolower($value, 'UTF-8');
+    }
+    return strtolower($value);
+}
+
+function to_iso_date(?string $value): string
+{
+    $raw = trim((string) $value);
+    if ($raw === '') {
+        return '';
+    }
+    $time = strtotime($raw);
+    if ($time === false) {
+        return '';
+    }
+    return date('Y-m-d', $time);
+}
+
+function make_key(string $value, string $date): string
+{
+    if ($value === '' || $date === '') {
+        return '';
+    }
+    return $value . '|' . $date;
+}
+
+function add_paid_reference(array &$index, string $key, array $reference): void
+{
+    if ($key === '') {
+        return;
+    }
+    if (!isset($index[$key])) {
+        $index[$key] = $reference;
+    }
+}
+
+function detect_duplicate_dayuse_pendencias(SupabaseClient $client): array
+{
+    $paidByStudentDay = [];
+    $paidByCpfDay = [];
+    $paidByEmailDay = [];
+
+    $paidPaymentsResult = $client->select(
+        'payments',
+        'select=id,payment_date,paid_at,students(name),guardians(parent_name,email,parent_document)'
+        . '&status=eq.paid&limit=10000'
+    );
+    $paidPayments = ($paidPaymentsResult['ok'] ?? false) && is_array($paidPaymentsResult['data'] ?? null)
+        ? $paidPaymentsResult['data']
+        : [];
+    foreach ($paidPayments as $row) {
+        $date = to_iso_date((string) ($row['payment_date'] ?? ($row['paid_at'] ?? '')));
+        if ($date === '') {
+            continue;
+        }
+        $studentName = trim((string) (($row['students']['name'] ?? '')));
+        $guardianName = trim((string) (($row['guardians']['parent_name'] ?? '')));
+        $guardianEmail = normalize_email((string) (($row['guardians']['email'] ?? '')));
+        $guardianCpf = normalize_digits((string) (($row['guardians']['parent_document'] ?? '')));
+        $reference = [
+            'source' => 'payments_paid',
+            'id' => trim((string) ($row['id'] ?? '')),
+            'student_name' => $studentName,
+            'guardian_name' => $guardianName,
+            'payment_date' => $date,
+            'paid_at' => to_iso_date((string) ($row['paid_at'] ?? '')),
+        ];
+        add_paid_reference($paidByStudentDay, make_key(normalize_text_key($studentName), $date), $reference);
+        add_paid_reference($paidByCpfDay, make_key($guardianCpf, $date), $reference);
+        add_paid_reference($paidByEmailDay, make_key($guardianEmail, $date), $reference);
+    }
+
+    $paidPendenciasResult = $client->select(
+        'pendencia_de_cadastro',
+        'select=id,student_name,guardian_name,guardian_email,guardian_cpf,payment_date,paid_at'
+        . '&paid_at=not.is.null&limit=10000'
+    );
+    $paidPendencias = ($paidPendenciasResult['ok'] ?? false) && is_array($paidPendenciasResult['data'] ?? null)
+        ? $paidPendenciasResult['data']
+        : [];
+    foreach ($paidPendencias as $row) {
+        $date = to_iso_date((string) ($row['payment_date'] ?? ($row['paid_at'] ?? '')));
+        if ($date === '') {
+            continue;
+        }
+        $studentName = trim((string) ($row['student_name'] ?? ''));
+        $guardianName = trim((string) ($row['guardian_name'] ?? ''));
+        $guardianEmail = normalize_email((string) ($row['guardian_email'] ?? ''));
+        $guardianCpf = normalize_digits((string) ($row['guardian_cpf'] ?? ''));
+        $reference = [
+            'source' => 'pendencia_paid',
+            'id' => trim((string) ($row['id'] ?? '')),
+            'student_name' => $studentName,
+            'guardian_name' => $guardianName,
+            'payment_date' => $date,
+            'paid_at' => to_iso_date((string) ($row['paid_at'] ?? '')),
+        ];
+        add_paid_reference($paidByStudentDay, make_key(normalize_text_key($studentName), $date), $reference);
+        add_paid_reference($paidByCpfDay, make_key($guardianCpf, $date), $reference);
+        add_paid_reference($paidByEmailDay, make_key($guardianEmail, $date), $reference);
+    }
+
+    $pendingResult = $client->select(
+        'pendencia_de_cadastro',
+        'select=id,student_name,guardian_name,guardian_email,guardian_cpf,payment_date,paid_at'
+        . '&paid_at=is.null&limit=10000'
+    );
+    $pendingRows = ($pendingResult['ok'] ?? false) && is_array($pendingResult['data'] ?? null)
+        ? $pendingResult['data']
+        : [];
+
+    $duplicates = [];
+    foreach ($pendingRows as $row) {
+        $pendenciaId = trim((string) ($row['id'] ?? ''));
+        if ($pendenciaId === '') {
+            continue;
+        }
+        $date = to_iso_date((string) ($row['payment_date'] ?? ''));
+        if ($date === '') {
+            continue;
+        }
+        $studentName = trim((string) ($row['student_name'] ?? ''));
+        $guardianName = trim((string) ($row['guardian_name'] ?? ''));
+        $guardianEmail = normalize_email((string) ($row['guardian_email'] ?? ''));
+        $guardianCpf = normalize_digits((string) ($row['guardian_cpf'] ?? ''));
+
+        $matchType = '';
+        $match = null;
+        $studentKey = make_key(normalize_text_key($studentName), $date);
+        if ($studentKey !== '' && isset($paidByStudentDay[$studentKey])) {
+            $matchType = 'student_day';
+            $match = $paidByStudentDay[$studentKey];
+        }
+        if ($match === null) {
+            $cpfKey = make_key($guardianCpf, $date);
+            if ($cpfKey !== '' && isset($paidByCpfDay[$cpfKey])) {
+                $matchType = 'cpf_day';
+                $match = $paidByCpfDay[$cpfKey];
+            }
+        }
+        if ($match === null) {
+            $emailKey = make_key($guardianEmail, $date);
+            if ($emailKey !== '' && isset($paidByEmailDay[$emailKey])) {
+                $matchType = 'email_day';
+                $match = $paidByEmailDay[$emailKey];
+            }
+        }
+        if ($match === null) {
+            continue;
+        }
+
+        $duplicates[$pendenciaId] = [
+            'pendencia_id' => $pendenciaId,
+            'student_name' => $studentName,
+            'guardian_name' => $guardianName,
+            'guardian_email' => $guardianEmail,
+            'guardian_cpf' => $guardianCpf,
+            'payment_date' => $date,
+            'matched_by' => $matchType,
+            'paid_source' => $match['source'] ?? '',
+            'paid_reference_id' => $match['id'] ?? '',
+            'paid_student_name' => $match['student_name'] ?? '',
+            'paid_guardian_name' => $match['guardian_name'] ?? '',
+            'paid_payment_date' => $match['payment_date'] ?? '',
+            'paid_at' => $match['paid_at'] ?? '',
+        ];
+    }
+
+    return array_values($duplicates);
+}
+
 function unique_payments_by_id(array $payments): array
 {
     $unique = [];
@@ -113,6 +310,12 @@ try {
     }
 
     Helpers::requirePost();
+    $payload = json_decode(file_get_contents('php://input'), true);
+    if (!is_array($payload)) {
+        $payload = [];
+    }
+    $previewDuplicateDayUse = !empty($payload['preview_duplicate_dayuse']);
+    $confirmRemoveDuplicateDayUse = !empty($payload['confirm_remove_duplicate_dayuse']);
 
     $client = new SupabaseClient(new HttpClient());
     $asaas = new AsaasClient(new HttpClient());
@@ -126,7 +329,40 @@ try {
         'pendencias_paid_updated' => 0,
         'pendencias_unlinked' => 0,
         'pendencias_removed_no_charge' => 0,
+        'duplicate_dayuse_detected' => 0,
+        'pendencias_removed_duplicate_dayuse' => 0,
+        'pendencias_remove_duplicate_failed' => 0,
     ];
+
+    $duplicateDayUseItems = detect_duplicate_dayuse_pendencias($client);
+    $summary['duplicate_dayuse_detected'] = count($duplicateDayUseItems);
+
+    if ($previewDuplicateDayUse) {
+        Helpers::json([
+            'ok' => true,
+            'preview' => true,
+            'requires_confirmation' => $summary['duplicate_dayuse_detected'] > 0,
+            'duplicate_dayuse' => [
+                'count' => $summary['duplicate_dayuse_detected'],
+                'items' => $duplicateDayUseItems,
+            ],
+        ]);
+    }
+
+    if ($confirmRemoveDuplicateDayUse && !empty($duplicateDayUseItems)) {
+        foreach ($duplicateDayUseItems as $duplicate) {
+            $pendenciaId = trim((string) ($duplicate['pendencia_id'] ?? ''));
+            if ($pendenciaId === '') {
+                continue;
+            }
+            $delete = $client->delete('pendencia_de_cadastro', 'id=eq.' . urlencode($pendenciaId));
+            if ($delete['ok'] ?? false) {
+                $summary['pendencias_removed_duplicate_dayuse']++;
+            } else {
+                $summary['pendencias_remove_duplicate_failed']++;
+            }
+        }
+    }
 
     $paymentsResult = $client->select(
         'payments',
@@ -331,6 +567,12 @@ try {
     Helpers::json([
         'ok' => true,
         'summary' => $summary,
+        'duplicate_dayuse' => [
+            'count' => $summary['duplicate_dayuse_detected'],
+            'removed' => $summary['pendencias_removed_duplicate_dayuse'],
+            'remove_failed' => $summary['pendencias_remove_duplicate_failed'],
+            'items' => $duplicateDayUseItems,
+        ],
     ]);
 } catch (\Throwable $e) {
     $logPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'error_log_custom.txt';
