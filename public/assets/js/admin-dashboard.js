@@ -1,4 +1,5 @@
 const tabs = document.querySelectorAll('[data-tab]');
+console.info('[admin-dashboard] bootstrap ok', { tabs: tabs.length });
 const tabEntries = document.querySelector('#tab-entries');
 const tabCharges = document.querySelector('#tab-charges');
 const tabInadimplentes = document.querySelector('#tab-inadimplentes');
