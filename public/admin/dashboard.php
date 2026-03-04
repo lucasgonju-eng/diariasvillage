@@ -51,6 +51,13 @@ $pendenciasResult = $client->select(
     'pendencia_de_cadastro',
     'select=id,student_name,guardian_name,guardian_cpf,guardian_email,created_at,paid_at,payment_date,access_code,enrollment,asaas_payment_id,asaas_invoice_url&order=created_at.desc&limit=500'
 );
+if (!($pendenciasResult['ok'] ?? false)) {
+    // Fallback para ambientes com schema antigo sem campos asaas_*.
+    $pendenciasResult = $client->select(
+        'pendencia_de_cadastro',
+        'select=id,student_name,guardian_name,guardian_cpf,guardian_email,created_at,paid_at,payment_date,access_code,enrollment&order=created_at.desc&limit=500'
+    );
+}
 $pendenciasAll = $pendenciasResult['data'] ?? [];
 $pendenciasPagas = array_filter($pendenciasAll, fn($p) => !empty($p['paid_at']));
 $pendencias = array_values(array_filter($pendenciasAll, static function ($p): bool {
