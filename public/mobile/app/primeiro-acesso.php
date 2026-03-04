@@ -81,6 +81,10 @@
             <label>E-mail</label>
             <input type="email" id="p-email" required>
           </div>
+          <div class="m-field">
+            <label>Data do day-use</label>
+            <input type="date" id="p-day-use-date" required>
+          </div>
           <button class="m-btn m-btn-outline" type="submit">Enviar pendência</button>
           <div id="m-pend-msg" class="m-msg"></div>
         </form>
@@ -140,7 +144,8 @@
           student_name:document.getElementById('p-student').value.trim(),
           guardian_name:document.getElementById('p-guardian').value.trim(),
           guardian_cpf:document.getElementById('p-cpf').value.trim(),
-          guardian_email:document.getElementById('p-email').value.trim()
+          guardian_email:document.getElementById('p-email').value.trim(),
+          payment_date:document.getElementById('p-day-use-date').value
         })
       });
       var data=await res.json();

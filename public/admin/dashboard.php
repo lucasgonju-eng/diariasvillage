@@ -603,7 +603,7 @@ if ($guardians) {
                   <?php
                     $created = $pendencia['created_at'] ? date('d/m/Y H:i', strtotime($pendencia['created_at'])) : '-';
                     $paidAt = $pendencia['paid_at'] ? date('d/m/Y H:i', strtotime($pendencia['paid_at'])) : '-';
-                    $dayUseDate = !empty($pendencia['payment_date']) ? date('d/m/Y', strtotime($pendencia['payment_date'])) : '-';
+                    $dayUseDate = !empty($pendencia['payment_date']) ? date('d/m/Y', strtotime($pendencia['payment_date'])) : 'Não informado';
                   ?>
                   <tr data-pendencia-id="<?php echo htmlspecialchars($pendencia['id'], ENT_QUOTES, 'UTF-8'); ?>">
                     <td><?php echo htmlspecialchars($pendencia['student_name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>

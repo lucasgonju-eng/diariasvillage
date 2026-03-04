@@ -145,15 +145,17 @@ if (pendingForm) {
       guardian_name: document.querySelector('#pending-guardian').value.trim(),
       guardian_cpf: document.querySelector('#pending-cpf').value.trim(),
       guardian_email: document.querySelector('#pending-email').value.trim(),
+      payment_date: document.querySelector('#pending-day-use-date')?.value || '',
     };
     if (
       !payload.student_name ||
       !payload.guardian_name ||
       !payload.guardian_cpf ||
-      !payload.guardian_email
+      !payload.guardian_email ||
+      !payload.payment_date
     ) {
       if (pendingMessage) {
-        pendingMessage.textContent = 'Preencha nome do aluno, responsável, CPF e e-mail.';
+        pendingMessage.textContent = 'Preencha nome do aluno, responsável, CPF, e-mail e data do day-use.';
         pendingMessage.className = 'error';
       }
       return;

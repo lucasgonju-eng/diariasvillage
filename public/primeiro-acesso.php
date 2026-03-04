@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/src/Bootstrap.php';
+require_once dirname(__DIR__) . '/src/Bootstrap.php';
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -97,6 +97,10 @@ require_once __DIR__ . '/src/Bootstrap.php';
               <label>E-mail do responsável</label>
               <input type="email" id="pending-email" required />
             </div>
+            <div class="form-group">
+              <label>Data do day-use</label>
+              <input type="date" id="pending-day-use-date" required />
+            </div>
             <button class="btn btn-primary btn-block" type="submit">Enviar pendência</button>
             <div id="pending-message"></div>
           </form>
@@ -159,6 +163,6 @@ require_once __DIR__ . '/src/Bootstrap.php';
     </div>
   </footer>
 
-  <script src="/assets/js/app.js?v=5"></script>
+  <script src="/assets/js/app.js?v=6"></script>
 </body>
 </html>

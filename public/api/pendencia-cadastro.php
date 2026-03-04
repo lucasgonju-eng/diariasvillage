@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../src/Bootstrap.php';
+require_once dirname(__DIR__, 2) . '/src/Bootstrap.php';
 
 use App\Helpers;
 use App\HttpClient;
@@ -13,9 +13,23 @@ $studentName = trim($payload['student_name'] ?? '');
 $guardianName = trim($payload['guardian_name'] ?? '');
 $guardianCpf = trim($payload['guardian_cpf'] ?? '');
 $guardianEmail = trim($payload['guardian_email'] ?? '');
+$paymentDateRaw = trim((string) ($payload['payment_date'] ?? ''));
+
+$paymentDate = '';
+if ($paymentDateRaw !== '') {
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $paymentDateRaw)) {
+        $paymentDate = $paymentDateRaw;
+    } elseif (preg_match('/^\d{2}\/\d{2}\/\d{4}$/', $paymentDateRaw)) {
+        [$day, $month, $year] = explode('/', $paymentDateRaw);
+        $paymentDate = sprintf('%04d-%02d-%02d', (int) $year, (int) $month, (int) $day);
+    }
+}
 
 if ($studentName === '' || $guardianName === '' || $guardianCpf === '' || $guardianEmail === '') {
     Helpers::json(['ok' => false, 'error' => 'Preencha nome do aluno, responsável, CPF e e-mail.'], 422);
+}
+if ($paymentDate === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $paymentDate)) {
+    Helpers::json(['ok' => false, 'error' => 'Informe a data do day-use.'], 422);
 }
 
 $cpfDigits = preg_replace('/\D+/', '', $guardianCpf) ?? '';
@@ -29,6 +43,7 @@ $insert = $client->insert('pendencia_de_cadastro', [[
     'guardian_name' => $guardianName,
     'guardian_cpf' => $cpfDigits,
     'guardian_email' => $guardianEmail ?: null,
+    'payment_date' => $paymentDate,
 ]]);
 
 if (!$insert['ok']) {
@@ -100,7 +115,8 @@ $template = <<<'HTML'
                     <div style="font-size:16px;font-weight:800;margin-bottom:10px;color:#0B1020;">Resumo do cadastro</div>
                   <div style="font-size:14px;line-height:1.7;color:#1B2333;">
                     Aluno: <b>{{nome_aluno}}</b><br>
-                    Responsável: <b>{{nome_responsavel}}</b>
+                    Responsável: <b>{{nome_responsavel}}</b><br>
+                    Data do day-use: <b>{{data_day_use}}</b>
                   </div>
                 </div>
                 <div style="margin-top:22px;">
@@ -137,6 +153,7 @@ HTML;
 $html = strtr($template, [
     '{{nome_aluno}}' => htmlspecialchars($studentName, ENT_QUOTES, 'UTF-8'),
     '{{nome_responsavel}}' => htmlspecialchars($guardianName, ENT_QUOTES, 'UTF-8'),
+    '{{data_day_use}}' => date('d/m/Y', strtotime($paymentDate)),
     '{{link_verificacao}}' => htmlspecialchars($verifyLink, ENT_QUOTES, 'UTF-8'),
 ]);
 
