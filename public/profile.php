@@ -105,6 +105,10 @@ $user = Helpers::requireAuthWeb();
             <button class="btn btn-primary btn-block" type="submit">Adicionar responsável</button>
             <div id="add-guardian-message"></div>
           </form>
+          <div style="margin-top:12px;">
+            <p class="muted" style="margin-bottom:8px;">Responsáveis cadastrados para este aluno</p>
+            <div id="guardians-list" class="muted">Carregando...</div>
+          </div>
         </aside>
       </div>
     </div>
