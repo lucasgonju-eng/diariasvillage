@@ -56,6 +56,26 @@ class AsaasClient
         return $this->http->request('GET', $url, $this->headers());
     }
 
+    public function findCustomersByCpfCnpj(string $cpfCnpj): array
+    {
+        $url = $this->baseUrl . '/customers?cpfCnpj=' . urlencode($cpfCnpj);
+        return $this->http->request('GET', $url, $this->headers());
+    }
+
+    public function findCustomersByEmail(string $email): array
+    {
+        $url = $this->baseUrl . '/customers?email=' . urlencode($email);
+        return $this->http->request('GET', $url, $this->headers());
+    }
+
+    public function listPaymentsByCustomer(string $customerId, int $limit = 100, int $offset = 0): array
+    {
+        $url = $this->baseUrl . '/payments?customer=' . urlencode($customerId)
+            . '&limit=' . max(1, min(100, $limit))
+            . '&offset=' . max(0, $offset);
+        return $this->http->request('GET', $url, $this->headers());
+    }
+
     private function headers(): array
     {
         return [

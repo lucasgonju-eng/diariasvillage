@@ -28,9 +28,37 @@ function asaas_status_is_paid(string $status): bool
     return in_array($status, ['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH', 'PAID'], true);
 }
 
+function asaas_status_is_open(string $status): bool
+{
+    return in_array($status, ['PENDING', 'OVERDUE', 'AWAITING_RISK_ANALYSIS'], true);
+}
+
 function asaas_status_is_canceled(string $status): bool
 {
     return in_array($status, ['CANCELED', 'DELETED', 'REFUNDED', 'REFUND_REQUESTED'], true);
+}
+
+function normalize_digits(string $value): string
+{
+    return preg_replace('/\D+/', '', $value) ?? '';
+}
+
+function unique_payments_by_id(array $payments): array
+{
+    $unique = [];
+    $seen = [];
+    foreach ($payments as $payment) {
+        if (!is_array($payment)) {
+            continue;
+        }
+        $id = trim((string) ($payment['id'] ?? ''));
+        if ($id === '' || isset($seen[$id])) {
+            continue;
+        }
+        $seen[$id] = true;
+        $unique[] = $payment;
+    }
+    return $unique;
 }
 
 try {
@@ -112,7 +140,8 @@ try {
 
     $pendenciasResult = $client->select(
         'pendencia_de_cadastro',
-        'select=id,paid_at,asaas_payment_id,asaas_invoice_url&or=(asaas_payment_id.not.is.null,asaas_invoice_url.not.is.null)&limit=5000'
+        'select=id,paid_at,asaas_payment_id,asaas_invoice_url,guardian_cpf,guardian_email,payment_date'
+        . '&limit=5000'
     );
     $pendencias = ($pendenciasResult['ok'] ?? false) && is_array($pendenciasResult['data'] ?? null)
         ? $pendenciasResult['data']
@@ -127,26 +156,116 @@ try {
         $pendenciaId = trim((string) ($pendencia['id'] ?? ''));
         $asaasId = trim((string) ($pendencia['asaas_payment_id'] ?? ''));
         $invoiceUrl = trim((string) ($pendencia['asaas_invoice_url'] ?? ''));
+        $guardianCpf = normalize_digits((string) ($pendencia['guardian_cpf'] ?? ''));
+        $guardianEmail = trim((string) ($pendencia['guardian_email'] ?? ''));
+        $paymentDateRaw = trim((string) ($pendencia['payment_date'] ?? ''));
+        $paymentDate = $paymentDateRaw !== '' ? date('Y-m-d', strtotime($paymentDateRaw)) : '';
         if ($pendenciaId === '') {
             continue;
         }
 
-        $asaasData = null;
+        $paymentsPool = [];
         if ($asaasId !== '') {
             $response = $asaas->getPayment($asaasId);
             if (($response['ok'] ?? false) && is_array($response['data'] ?? null)) {
-                $asaasData = $response['data'];
+                $paymentsPool[] = $response['data'];
             }
         }
-        if (!$asaasData && $invoiceUrl !== '') {
+        if ($invoiceUrl !== '') {
             $response = $asaas->findPaymentByInvoiceUrl($invoiceUrl);
             $list = ($response['ok'] ?? false) && is_array($response['data']['data'] ?? null)
                 ? $response['data']['data']
                 : [];
-            $asaasData = $list[0] ?? null;
+            $paymentsPool = array_merge($paymentsPool, $list);
         }
 
-        if (!$asaasData || !is_array($asaasData)) {
+        $customerIds = [];
+        if ($guardianCpf !== '') {
+            $customersResponse = $asaas->findCustomersByCpfCnpj($guardianCpf);
+            $customers = ($customersResponse['ok'] ?? false) && is_array($customersResponse['data']['data'] ?? null)
+                ? $customersResponse['data']['data']
+                : [];
+            foreach ($customers as $customer) {
+                $cid = trim((string) ($customer['id'] ?? ''));
+                if ($cid !== '') {
+                    $customerIds[$cid] = true;
+                }
+            }
+        }
+        if ($guardianEmail !== '') {
+            $customersResponse = $asaas->findCustomersByEmail($guardianEmail);
+            $customers = ($customersResponse['ok'] ?? false) && is_array($customersResponse['data']['data'] ?? null)
+                ? $customersResponse['data']['data']
+                : [];
+            foreach ($customers as $customer) {
+                $cid = trim((string) ($customer['id'] ?? ''));
+                if ($cid !== '') {
+                    $customerIds[$cid] = true;
+                }
+            }
+        }
+
+        foreach (array_keys($customerIds) as $customerId) {
+            $paymentsResponse = $asaas->listPaymentsByCustomer($customerId, 100, 0);
+            $list = ($paymentsResponse['ok'] ?? false) && is_array($paymentsResponse['data']['data'] ?? null)
+                ? $paymentsResponse['data']['data']
+                : [];
+            $paymentsPool = array_merge($paymentsPool, $list);
+        }
+
+        $paymentsPool = unique_payments_by_id($paymentsPool);
+
+        $openPayment = null;
+        $paidPayment = null;
+        foreach ($paymentsPool as $payment) {
+            $status = (string) ($payment['status'] ?? '');
+            $dueDateRaw = trim((string) ($payment['dueDate'] ?? ''));
+            $dueDate = $dueDateRaw !== '' ? date('Y-m-d', strtotime($dueDateRaw)) : '';
+
+            // Tenta casar primeiro pela data da pendência para evitar colisões.
+            $dateMatches = ($paymentDate !== '' && $dueDate !== '' && $paymentDate === $dueDate);
+            if (!empty($payment['id']) && $asaasId !== '' && (string) $payment['id'] === $asaasId) {
+                $dateMatches = true;
+            }
+
+            if (asaas_status_is_open($status)) {
+                if ($openPayment === null || $dateMatches) {
+                    $openPayment = $payment;
+                    if ($dateMatches) {
+                        break;
+                    }
+                }
+            }
+            if ($paidPayment === null && asaas_status_is_paid($status)) {
+                $paidPayment = $payment;
+            }
+        }
+
+        if ($openPayment !== null) {
+            $update = $client->update('pendencia_de_cadastro', 'id=eq.' . urlencode($pendenciaId), [
+                'asaas_payment_id' => $openPayment['id'] ?? null,
+                'asaas_invoice_url' => $openPayment['invoiceUrl'] ?? ($openPayment['bankSlipUrl'] ?? null),
+            ]);
+            if ($update['ok'] ?? false) {
+                // Mantém pendência aberta vinculada à cobrança em aberto/vencida.
+                continue;
+            }
+        }
+
+        if ($paidPayment !== null) {
+            $update = $client->update('pendencia_de_cadastro', 'id=eq.' . urlencode($pendenciaId), [
+                'paid_at' => date('c'),
+                'asaas_payment_id' => $paidPayment['id'] ?? $asaasId ?: null,
+                'asaas_invoice_url' => $paidPayment['invoiceUrl'] ?? ($paidPayment['bankSlipUrl'] ?? ($invoiceUrl ?: null)),
+            ]);
+            if ($update['ok'] ?? false) {
+                $summary['pendencias_paid_updated']++;
+            }
+            continue;
+        }
+
+        // Sem cobrança em aberto/vencida e sem cobrança paga no Asaas: desvincula localmente.
+        if (empty($paymentsPool)) {
             $update = $client->update('pendencia_de_cadastro', 'id=eq.' . urlencode($pendenciaId), [
                 'asaas_payment_id' => null,
                 'asaas_invoice_url' => null,
@@ -155,18 +274,6 @@ try {
                 $summary['pendencias_unlinked']++;
             }
             continue;
-        }
-
-        $asaasStatus = (string) ($asaasData['status'] ?? '');
-        if (asaas_status_is_paid($asaasStatus)) {
-            $update = $client->update('pendencia_de_cadastro', 'id=eq.' . urlencode($pendenciaId), [
-                'paid_at' => date('c'),
-                'asaas_payment_id' => $asaasData['id'] ?? $asaasId ?: null,
-                'asaas_invoice_url' => $asaasData['invoiceUrl'] ?? $invoiceUrl ?: null,
-            ]);
-            if ($update['ok'] ?? false) {
-                $summary['pendencias_paid_updated']++;
-            }
         }
     }
 
