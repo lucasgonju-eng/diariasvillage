@@ -18,6 +18,8 @@ const chargeMessage = document.querySelector('#charge-message');
 const sendSelectedPendingButton = document.querySelector('#send-selected-pending');
 const selectAllPendingInput = document.querySelector('#select-all-pending');
 const sendPendingMessage = document.querySelector('#send-pending-message');
+const syncRecebidasButton = document.querySelector('#sync-recebidas-btn');
+const syncRecebidasMessage = document.querySelector('#sync-recebidas-message');
 const viewUserStudentInput = document.querySelector('#admin-view-user-student');
 const viewUserStudentsList = document.querySelector('#admin-students-list');
 const viewUserButton = document.querySelector('#admin-view-user-btn');
@@ -592,6 +594,48 @@ if (sendSelectedPendingButton) {
     } finally {
       sendSelectedPendingButton.removeAttribute('disabled');
       sendSelectedPendingButton.textContent = originalText;
+    }
+  });
+}
+
+if (syncRecebidasButton) {
+  syncRecebidasButton.addEventListener('click', async () => {
+    syncRecebidasButton.setAttribute('disabled', 'disabled');
+    const originalText = syncRecebidasButton.textContent;
+    syncRecebidasButton.textContent = 'Atualizando...';
+    if (syncRecebidasMessage) {
+      syncRecebidasMessage.textContent = 'Buscando cobranças RECEIVED/CONFIRMED no Asaas...';
+      syncRecebidasMessage.className = 'charge-message';
+    }
+
+    try {
+      const res = await fetch('/api/admin-sync-recebidas.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        if (syncRecebidasMessage) {
+          syncRecebidasMessage.textContent = data?.error || 'Falha ao atualizar cobrancas recebidas.';
+          syncRecebidasMessage.className = 'charge-message error';
+        }
+        return;
+      }
+      const summary = data.summary || {};
+      if (syncRecebidasMessage) {
+        syncRecebidasMessage.textContent = `Atualização concluída. Payments promovidos para pago: ${summary.payments_promoted_paid || 0}. Pendências movidas para pagas: ${summary.pendencias_promoted_paid || 0}.`;
+        syncRecebidasMessage.className = 'charge-message success';
+      }
+      setTimeout(() => window.location.reload(), 900);
+    } catch {
+      if (syncRecebidasMessage) {
+        syncRecebidasMessage.textContent = 'Falha ao atualizar cobrancas recebidas.';
+        syncRecebidasMessage.className = 'charge-message error';
+      }
+    } finally {
+      syncRecebidasButton.removeAttribute('disabled');
+      syncRecebidasButton.textContent = originalText;
     }
   });
 }

@@ -454,6 +454,10 @@ if ($guardians) {
       <section id="tab-recebidas" class="<?php echo $activeTab === 'recebidas' ? '' : 'hidden'; ?>">
         <h2>Cobranças recebidas</h2>
         <p class="muted">Cobranças pagas e regularizadas.</p>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+          <button id="sync-recebidas-btn" class="btn btn-primary btn-sm" type="button">Atualizar recebidas no Asaas</button>
+          <div id="sync-recebidas-message" class="charge-message"></div>
+        </div>
 
         <div style="overflow-x:auto;">
           <table class="admin-table">
@@ -863,7 +867,7 @@ if ($guardians) {
   </div>
 
   <script>window.__adminDashboardBooted = false;</script>
-  <script src="/assets/js/admin-dashboard.js?v=33"></script>
+  <script src="/assets/js/admin-dashboard.js?v=34"></script>
   <script>
     (function () {
       function activateTab(name) {
