@@ -647,9 +647,11 @@ if (sendChargesButton) {
         if (failures.length) {
           showChargeMessage('Algumas pendências não foram salvas. Verifique os dados.', true);
         } else {
-          showChargeMessage('Pendências salvas no SaaS (sem envio).');
+          showChargeMessage('Pendências salvas no SaaS (sem envio). Abrindo Inadimplentes...');
           resetChargeForm();
-          window.location.reload();
+          setTimeout(() => {
+            window.location.href = '/admin/dashboard.php?tab=inadimplentes';
+          }, 350);
         }
       }
     } catch (err) {

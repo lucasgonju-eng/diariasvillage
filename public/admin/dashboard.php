@@ -65,6 +65,46 @@ $pendencias = array_values(array_filter($pendenciasAll, static function ($p): bo
 }));
 $valorPendencia = 77.00;
 
+$normalizeSortName = static function (string $name): string {
+    $name = trim($name);
+    if ($name === '') {
+        return '';
+    }
+    if (function_exists('mb_strtoupper')) {
+        $name = mb_strtoupper($name, 'UTF-8');
+    } else {
+        $name = strtoupper($name);
+    }
+    $translit = iconv('UTF-8', 'ASCII//TRANSLIT', $name);
+    if ($translit !== false) {
+        $name = $translit;
+    }
+    $name = preg_replace('/[^A-Z0-9 ]+/', '', $name) ?? '';
+    return trim($name);
+};
+
+$sortByStudentName = static function (array &$items, callable $resolver) use ($normalizeSortName): void {
+    usort($items, static function ($a, $b) use ($resolver, $normalizeSortName): int {
+        $aName = $normalizeSortName((string) $resolver($a));
+        $bName = $normalizeSortName((string) $resolver($b));
+        $cmp = strcmp($aName, $bName);
+        if ($cmp !== 0) {
+            return $cmp;
+        }
+        $aDate = strtotime((string) ($a['created_at'] ?? $a['paid_at'] ?? $a['payment_date'] ?? '')) ?: 0;
+        $bDate = strtotime((string) ($b['created_at'] ?? $b['paid_at'] ?? $b['payment_date'] ?? '')) ?: 0;
+        return $bDate <=> $aDate;
+    });
+};
+
+$sortByStudentName($payments, static fn($row) => (string) (($row['students']['name'] ?? '') ?: ''));
+$sortByStudentName($manualPending, static fn($row) => (string) (($row['students']['name'] ?? '') ?: ''));
+$sortByStudentName($queuedPending, static fn($row) => (string) (($row['students']['name'] ?? '') ?: ''));
+$sortByStudentName($manualPaid, static fn($row) => (string) (($row['students']['name'] ?? '') ?: ''));
+$sortByStudentName($missingWhatsapp, static fn($row) => (string) (($row['students']['name'] ?? '') ?: ''));
+$sortByStudentName($pendenciasPagas, static fn($row) => (string) ($row['student_name'] ?? ''));
+$sortByStudentName($pendencias, static fn($row) => (string) ($row['student_name'] ?? ''));
+
 $studentsResult = $client->select('students', 'select=id,name,enrollment,created_at,active&limit=10000');
 $students = $studentsResult['data'] ?? [];
 $duplicateGroups = [];
@@ -166,6 +206,40 @@ if (is_file($exclusionsLogPath)) {
         ];
         $count++;
     }
+}
+if (!empty($duplicateGroups)) {
+    usort($duplicateGroups, static function (array $a, array $b) use ($normalizeSortName): int {
+        $aName = $normalizeSortName((string) (($a[0]['name'] ?? '') ?: ''));
+        $bName = $normalizeSortName((string) (($b[0]['name'] ?? '') ?: ''));
+        return strcmp($aName, $bName);
+    });
+}
+if (!empty($duplicateEnrollmentGroups)) {
+    usort($duplicateEnrollmentGroups, static function (array $a, array $b) use ($normalizeSortName): int {
+        $aName = $normalizeSortName((string) (($a[0]['name'] ?? '') ?: ''));
+        $bName = $normalizeSortName((string) (($b[0]['name'] ?? '') ?: ''));
+        return strcmp($aName, $bName);
+    });
+}
+if (!empty($cpfDuplicateGroups)) {
+    usort($cpfDuplicateGroups, static function (array $a, array $b) use ($normalizeSortName): int {
+        $aName = $normalizeSortName((string) (($a[0]['students']['name'] ?? '') ?: ''));
+        $bName = $normalizeSortName((string) (($b[0]['students']['name'] ?? '') ?: ''));
+        return strcmp($aName, $bName);
+    });
+}
+if (!empty($exclusionsLog)) {
+    usort($exclusionsLog, static function (array $a, array $b) use ($normalizeSortName): int {
+        $aName = $normalizeSortName((string) ($a['student_name'] ?? ''));
+        $bName = $normalizeSortName((string) ($b['student_name'] ?? ''));
+        $cmp = strcmp($aName, $bName);
+        if ($cmp !== 0) {
+            return $cmp;
+        }
+        $aDate = strtotime((string) ($a['deleted_at'] ?? '')) ?: 0;
+        $bDate = strtotime((string) ($b['deleted_at'] ?? '')) ?: 0;
+        return $bDate <=> $aDate;
+    });
 }
 ?>
 <!DOCTYPE html>
@@ -1044,7 +1118,7 @@ if (is_file($exclusionsLogPath)) {
   </div>
 
   <script>window.__adminDashboardBooted = false;</script>
-  <script src="/assets/js/admin-dashboard.js?v=40"></script>
+  <script src="/assets/js/admin-dashboard.js?v=41"></script>
   <script>
     (function () {
       function activateTab(name) {

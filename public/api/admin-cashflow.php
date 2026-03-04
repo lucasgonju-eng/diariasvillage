@@ -321,6 +321,12 @@ foreach ($pendencias as $p) {
 }
 
 usort($items, static function (array $a, array $b): int {
+    $aName = normalize_lower((string) ($a['student_name'] ?? ''));
+    $bName = normalize_lower((string) ($b['student_name'] ?? ''));
+    $cmpName = strcmp($aName, $bName);
+    if ($cmpName !== 0) {
+        return $cmpName;
+    }
     return strcmp((string) ($b['date'] ?? ''), (string) ($a['date'] ?? ''));
 });
 
