@@ -81,6 +81,30 @@ $user = Helpers::requireAuthWeb();
             <button class="btn btn-primary btn-block" type="submit">Salvar</button>
             <div id="profile-message"></div>
           </form>
+
+          <hr style="border:none;border-top:1px solid #E6E9F2;margin:16px 0;">
+          <h3 style="margin-top:0;">Adicionar mais um responsável</h3>
+          <p class="muted">Cadastre outro responsável para o mesmo aluno.</p>
+          <form id="add-guardian-form">
+            <div class="form-group">
+              <label>Nome do responsável</label>
+              <input id="extra-parent-name" required />
+            </div>
+            <div class="form-group">
+              <label>E-mail do responsável</label>
+              <input type="email" id="extra-parent-email" required />
+            </div>
+            <div class="form-group">
+              <label>Telefone</label>
+              <input id="extra-parent-phone" />
+            </div>
+            <div class="form-group">
+              <label>CPF/CNPJ</label>
+              <input id="extra-parent-document" />
+            </div>
+            <button class="btn btn-primary btn-block" type="submit">Adicionar responsável</button>
+            <div id="add-guardian-message"></div>
+          </form>
         </aside>
       </div>
     </div>

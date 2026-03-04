@@ -1,5 +1,7 @@
 const profileForm = document.querySelector('#profile-form');
 const profileMessage = document.querySelector('#profile-message');
+const addGuardianForm = document.querySelector('#add-guardian-form');
+const addGuardianMessage = document.querySelector('#add-guardian-message');
 
 if (profileForm) {
   profileForm.addEventListener('submit', async (event) => {
@@ -29,5 +31,42 @@ if (profileForm) {
 
     profileMessage.textContent = 'Dados atualizados com sucesso.';
     profileMessage.className = 'success';
+  });
+}
+
+if (addGuardianForm) {
+  addGuardianForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (addGuardianMessage) {
+      addGuardianMessage.textContent = '';
+      addGuardianMessage.className = '';
+    }
+
+    const payload = {
+      parent_name: document.querySelector('#extra-parent-name').value.trim(),
+      email: document.querySelector('#extra-parent-email').value.trim(),
+      parent_phone: document.querySelector('#extra-parent-phone').value.trim(),
+      parent_document: document.querySelector('#extra-parent-document').value.trim(),
+    };
+
+    const res = await fetch('/api/profile-add-guardian.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      if (addGuardianMessage) {
+        addGuardianMessage.textContent = data.error || 'Não foi possível adicionar responsável.';
+        addGuardianMessage.className = 'error';
+      }
+      return;
+    }
+
+    if (addGuardianMessage) {
+      addGuardianMessage.textContent = 'Responsável adicionado com sucesso.';
+      addGuardianMessage.className = 'success';
+    }
+    addGuardianForm.reset();
   });
 }
