@@ -125,6 +125,6 @@ $user = Helpers::requireAuthWeb();
     </div>
   </footer>
 
-  <script src="/assets/js/profile.js"></script>
+  <script src="/assets/js/profile.js?v=2"></script>
 </body>
 </html>
