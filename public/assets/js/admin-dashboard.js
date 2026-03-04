@@ -1075,24 +1075,36 @@ pendenciaSettleButtons.forEach((button) => {
 });
 
 function buildSyncDuplicateDayUsePopupMessage(duplicates) {
+  const sourceLabel = (source) => {
+    if (source === 'payments_paid') return 'Cobrança paga (payments)';
+    if (source === 'pendencia_paid') return 'Pendência já paga';
+    return source || '-';
+  };
   const lines = [
     'Atenção: encontramos pendências duplicadas no SAAS para o MESMO dia de day-use.',
-    'Essas pendências já possuem uma cobrança paga para o mesmo aluno/data.',
+    'Essas pendências já possuem uma cobrança paga para o mesmo aluno/data do day-use.',
     '',
-    'Pendências que serão removidas:',
+    'Revise abaixo antes de confirmar a remoção:',
   ];
   duplicates.slice(0, 12).forEach((item) => {
     const student = item.student_name || '-';
     const guardian = item.guardian_name || '-';
     const date = formatIsoDateBr(item.payment_date || '-');
-    const paidSource = item.paid_source || '-';
-    lines.push(`- ${student} | Responsável: ${guardian} | Dia: ${date} | Pago em: ${paidSource}`);
+    const paidSource = sourceLabel(item.paid_source);
+    const paidDate = formatIsoDateBr(item.paid_payment_date || item.payment_date || '-');
+    const paidAt = formatDateTimeBR(item.paid_at || '-');
+    const paidAmount = formatCurrency(item.paid_amount || 0);
+    const paidBilling = item.paid_billing_type || '-';
+    const paidAsaasId = item.paid_asaas_payment_id || '-';
+    lines.push(`- Pendência: ${student} | Responsável: ${guardian} | Day-use: ${date}`);
+    lines.push(`  Pagamento encontrado: ${paidSource} | Dia: ${paidDate} | Valor: ${paidAmount}`);
+    lines.push(`  Forma: ${paidBilling} | Asaas: ${paidAsaasId} | Pago em: ${paidAt}`);
   });
   if (duplicates.length > 12) {
     lines.push(`... e mais ${duplicates.length - 12} ocorrência(s).`);
   }
   lines.push('');
-  lines.push('Deseja remover essas pendências duplicadas e continuar a atualização?');
+  lines.push('Deseja retirar essas pendências duplicadas da aba Pendências e continuar a atualização?');
   return lines.join('\n');
 }
 

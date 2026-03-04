@@ -585,6 +585,7 @@ if ($guardians) {
                 <th>Responsável</th>
                 <th>CPF</th>
                 <th>E-mail</th>
+                <th>Data do day-use</th>
                 <th>Registrado em</th>
                 <th>Status Asaas</th>
                 <th>Pago em</th>
@@ -595,19 +596,21 @@ if ($guardians) {
             <tbody>
               <?php if (empty($pendencias)): ?>
                 <tr>
-                  <td colspan="9">Nenhuma pendência registrada.</td>
+                  <td colspan="10">Nenhuma pendência registrada.</td>
                 </tr>
               <?php else: ?>
                 <?php foreach ($pendencias as $pendencia): ?>
                   <?php
                     $created = $pendencia['created_at'] ? date('d/m/Y H:i', strtotime($pendencia['created_at'])) : '-';
                     $paidAt = $pendencia['paid_at'] ? date('d/m/Y H:i', strtotime($pendencia['paid_at'])) : '-';
+                    $dayUseDate = !empty($pendencia['payment_date']) ? date('d/m/Y', strtotime($pendencia['payment_date'])) : '-';
                   ?>
                   <tr data-pendencia-id="<?php echo htmlspecialchars($pendencia['id'], ENT_QUOTES, 'UTF-8'); ?>">
                     <td><?php echo htmlspecialchars($pendencia['student_name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo htmlspecialchars($pendencia['guardian_name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo htmlspecialchars($pendencia['guardian_cpf'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo htmlspecialchars($pendencia['guardian_email'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars($dayUseDate, ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo $created; ?></td>
                     <td data-col="asaas-status">-</td>
                     <td data-col="paid-at"><?php echo $paidAt; ?></td>
@@ -944,7 +947,7 @@ if ($guardians) {
   </div>
 
   <script>window.__adminDashboardBooted = false;</script>
-  <script src="/assets/js/admin-dashboard.js?v=36"></script>
+  <script src="/assets/js/admin-dashboard.js?v=37"></script>
   <script>
     (function () {
       function activateTab(name) {

@@ -113,7 +113,7 @@ function detect_duplicate_dayuse_pendencias(SupabaseClient $client): array
 
     $paidPaymentsResult = $client->select(
         'payments',
-        'select=id,payment_date,paid_at,students(name),guardians(parent_name,email,parent_document)'
+        'select=id,payment_date,paid_at,amount,billing_type,daily_type,asaas_payment_id,students(name),guardians(parent_name,email,parent_document)'
         . '&status=eq.paid&limit=10000'
     );
     $paidPayments = ($paidPaymentsResult['ok'] ?? false) && is_array($paidPaymentsResult['data'] ?? null)
@@ -134,7 +134,11 @@ function detect_duplicate_dayuse_pendencias(SupabaseClient $client): array
             'student_name' => $studentName,
             'guardian_name' => $guardianName,
             'payment_date' => $date,
-            'paid_at' => to_iso_date((string) ($row['paid_at'] ?? '')),
+            'paid_at' => trim((string) ($row['paid_at'] ?? '')),
+            'paid_amount' => (float) ($row['amount'] ?? 0),
+            'paid_billing_type' => trim((string) ($row['billing_type'] ?? '')),
+            'paid_daily_type' => trim((string) ($row['daily_type'] ?? '')),
+            'paid_asaas_payment_id' => trim((string) ($row['asaas_payment_id'] ?? '')),
         ];
         add_paid_reference($paidByStudentDay, make_key(normalize_text_key($studentName), $date), $reference);
         add_paid_reference($paidByCpfDay, make_key($guardianCpf, $date), $reference);
@@ -143,7 +147,7 @@ function detect_duplicate_dayuse_pendencias(SupabaseClient $client): array
 
     $paidPendenciasResult = $client->select(
         'pendencia_de_cadastro',
-        'select=id,student_name,guardian_name,guardian_email,guardian_cpf,payment_date,paid_at'
+        'select=id,student_name,guardian_name,guardian_email,guardian_cpf,payment_date,paid_at,asaas_payment_id'
         . '&paid_at=not.is.null&limit=10000'
     );
     $paidPendencias = ($paidPendenciasResult['ok'] ?? false) && is_array($paidPendenciasResult['data'] ?? null)
@@ -164,7 +168,11 @@ function detect_duplicate_dayuse_pendencias(SupabaseClient $client): array
             'student_name' => $studentName,
             'guardian_name' => $guardianName,
             'payment_date' => $date,
-            'paid_at' => to_iso_date((string) ($row['paid_at'] ?? '')),
+            'paid_at' => trim((string) ($row['paid_at'] ?? '')),
+            'paid_amount' => 77.00,
+            'paid_billing_type' => 'PIX',
+            'paid_daily_type' => 'pendencia',
+            'paid_asaas_payment_id' => trim((string) ($row['asaas_payment_id'] ?? '')),
         ];
         add_paid_reference($paidByStudentDay, make_key(normalize_text_key($studentName), $date), $reference);
         add_paid_reference($paidByCpfDay, make_key($guardianCpf, $date), $reference);
@@ -234,6 +242,10 @@ function detect_duplicate_dayuse_pendencias(SupabaseClient $client): array
             'paid_guardian_name' => $match['guardian_name'] ?? '',
             'paid_payment_date' => $match['payment_date'] ?? '',
             'paid_at' => $match['paid_at'] ?? '',
+            'paid_amount' => (float) ($match['paid_amount'] ?? 0),
+            'paid_billing_type' => $match['paid_billing_type'] ?? '',
+            'paid_daily_type' => $match['paid_daily_type'] ?? '',
+            'paid_asaas_payment_id' => $match['paid_asaas_payment_id'] ?? '',
         ];
     }
 
