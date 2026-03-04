@@ -31,7 +31,7 @@ $queuedPending = $queuedPendingResult['data'] ?? [];
 
 $allUnpaidResult = $client->select(
     'payments',
-    'select=*,students(name,enrollment),guardians(parent_name,email,parent_phone)&status=neq.paid&order=created_at.desc&limit=5000'
+    'select=*,students(name,enrollment),guardians(parent_name,email,parent_phone)&status=neq.paid&order=created_at.desc&limit=20000'
 );
 $allUnpaidRows = $allUnpaidResult['data'] ?? [];
 $manualPending = [];
@@ -115,6 +115,7 @@ $sortByStudentName($manualPaid, static fn($row) => (string) (($row['students']['
 $sortByStudentName($missingWhatsapp, static fn($row) => (string) (($row['students']['name'] ?? '') ?: ''));
 $sortByStudentName($pendenciasPagas, static fn($row) => (string) ($row['student_name'] ?? ''));
 $sortByStudentName($pendencias, static fn($row) => (string) ($row['student_name'] ?? ''));
+$inadimplentesPendencias = $pendencias;
 
 $studentsResult = $client->select('students', 'select=id,name,enrollment,created_at,active&limit=10000');
 $students = $studentsResult['data'] ?? [];
@@ -516,7 +517,7 @@ if (!empty($exclusionsLog)) {
               </tr>
             </thead>
             <tbody>
-              <?php if (empty($queuedPending) && empty($manualPending)): ?>
+              <?php if (empty($queuedPending) && empty($manualPending) && empty($inadimplentesPendencias)): ?>
                 <tr>
                   <td colspan="9">Nenhuma cobrança pendente.</td>
                 </tr>
@@ -598,6 +599,26 @@ if (!empty($exclusionsLog)) {
                       >
                         Excluir
                       </button>
+                    </td>
+                  </tr>
+                <?php endforeach; ?>
+                <?php foreach ($inadimplentesPendencias as $pendencia): ?>
+                  <?php
+                    $created = $pendencia['created_at'] ? date('d/m/Y H:i', strtotime($pendencia['created_at'])) : '-';
+                    $dayUseDate = !empty($pendencia['payment_date']) ? date('d/m/Y', strtotime($pendencia['payment_date'])) : 'Não informado';
+                    $amount = number_format((float) $valorPendencia, 2, ',', '.');
+                  ?>
+                  <tr>
+                    <td>-</td>
+                    <td><?php echo htmlspecialchars((string) ($pendencia['student_name'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars((string) ($pendencia['guardian_name'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars((string) ($pendencia['guardian_email'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars($dayUseDate, ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td>R$ <?php echo $amount; ?></td>
+                    <td>Pendência de cadastro (não paga)</td>
+                    <td><?php echo $created; ?></td>
+                    <td>
+                      <a class="btn btn-danger btn-sm" href="/admin/dashboard.php?tab=pendencias">Abrir pendências</a>
                     </td>
                   </tr>
                 <?php endforeach; ?>
