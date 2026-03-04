@@ -72,6 +72,34 @@ function normalize_lower(string $value): string
     return strtolower($value);
 }
 
+function parse_filter_terms(string $raw): array
+{
+    $normalized = str_replace(["\r\n", "\n", "\r", ';', '+'], ',', $raw);
+    $parts = array_map('trim', explode(',', $normalized));
+    $terms = [];
+    foreach ($parts as $part) {
+        $value = normalize_lower($part);
+        if ($value !== '') {
+            $terms[] = $value;
+        }
+    }
+    return array_values(array_unique($terms));
+}
+
+function matches_any_term(string $haystack, array $terms): bool
+{
+    if (empty($terms)) {
+        return false;
+    }
+    $text = normalize_lower($haystack);
+    foreach ($terms as $term) {
+        if ($term !== '' && str_contains($text, $term)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 $from = normalize_date($_GET['from'] ?? '') ?? date('Y') . '-01-05';
 $to = normalize_date($_GET['to'] ?? '') ?? date('Y-m-d');
 
@@ -84,8 +112,8 @@ $dayUseTypeFilter = strtolower(trim((string) ($_GET['day_use_type'] ?? '')));
 $studentFilter = normalize_lower((string) ($_GET['student_name'] ?? ''));
 $enrollmentFilter = normalize_lower((string) ($_GET['enrollment'] ?? ''));
 $billingTypeFilter = strtoupper(trim((string) ($_GET['billing_type'] ?? '')));
-$excludeStudentFilter = normalize_lower((string) ($_GET['exclude_student'] ?? ''));
-$excludeTermFilter = normalize_lower((string) ($_GET['exclude_term'] ?? ''));
+$excludeStudentTerms = parse_filter_terms((string) ($_GET['exclude_student'] ?? ''));
+$excludeGenericTerms = parse_filter_terms((string) ($_GET['exclude_term'] ?? ''));
 
 $client = new SupabaseClient(new HttpClient());
 $paymentsResult = $client->select(
@@ -185,14 +213,12 @@ foreach ($rows as $row) {
     if ($enrollmentFilter !== '' && !str_contains(normalize_lower($enrollment), $enrollmentFilter)) {
         continue;
     }
-    if ($excludeStudentFilter !== '' && str_contains(normalize_lower($studentName), $excludeStudentFilter)) {
+    if (matches_any_term($studentName, $excludeStudentTerms)) {
         continue;
     }
-    if ($excludeTermFilter !== '') {
-        $haystack = normalize_lower($studentName . ' ' . $enrollment . ' ' . $dailyTypeLabel . ' ' . $status . ' ' . $billingType);
-        if (str_contains($haystack, $excludeTermFilter)) {
-            continue;
-        }
+    $haystack = $studentName . ' ' . $enrollment . ' ' . $dailyTypeLabel . ' ' . $status . ' ' . $billingType;
+    if (matches_any_term($haystack, $excludeGenericTerms)) {
+        continue;
     }
 
     $paymentDate = (string) ($row['payment_date'] ?? '');
@@ -253,14 +279,12 @@ foreach ($pendencias as $p) {
     if ($enrollmentFilter !== '' && !str_contains(normalize_lower($enrollment), $enrollmentFilter)) {
         continue;
     }
-    if ($excludeStudentFilter !== '' && str_contains(normalize_lower($studentName), $excludeStudentFilter)) {
+    if (matches_any_term($studentName, $excludeStudentTerms)) {
         continue;
     }
-    if ($excludeTermFilter !== '') {
-        $haystack = normalize_lower($studentName . ' ' . $enrollment . ' ' . $dayUseType . ' ' . $status . ' ' . $billingType);
-        if (str_contains($haystack, $excludeTermFilter)) {
-            continue;
-        }
+    $haystack = $studentName . ' ' . $enrollment . ' ' . $dayUseType . ' ' . $status . ' ' . $billingType;
+    if (matches_any_term($haystack, $excludeGenericTerms)) {
+        continue;
     }
 
     $items[] = [

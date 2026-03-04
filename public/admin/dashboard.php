@@ -709,11 +709,11 @@ if ($guardians) {
           </div>
           <div class="form-group">
             <label>Não mostrar aluno</label>
-            <input id="cashflow-exclude-student" type="text" placeholder="Ex.: João" />
+            <input id="cashflow-exclude-student" type="text" placeholder="Ex.: Maria + João (ou vírgula)" />
           </div>
           <div class="form-group">
             <label>Não mostrar termo</label>
-            <input id="cashflow-exclude-term" type="text" placeholder="Ex.: pendência, pix manual" />
+            <input id="cashflow-exclude-term" type="text" placeholder="Ex.: pendência + pix manual" />
           </div>
           <div class="form-group" style="display:flex;align-items:flex-end;gap:8px;">
             <button id="cashflow-search" class="btn btn-primary btn-sm" type="button">Buscar</button>
