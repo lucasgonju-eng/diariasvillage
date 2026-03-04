@@ -61,6 +61,26 @@ function unique_payments_by_id(array $payments): array
     return $unique;
 }
 
+function payment_matches_pendencia(array $payment, string $asaasId, string $invoiceUrl, string $paymentDate): bool
+{
+    $paymentId = trim((string) ($payment['id'] ?? ''));
+    $paymentInvoice = trim((string) ($payment['invoiceUrl'] ?? ($payment['bankSlipUrl'] ?? '')));
+    if ($asaasId !== '' && $paymentId !== '' && $paymentId === $asaasId) {
+        return true;
+    }
+    if ($invoiceUrl !== '' && $paymentInvoice !== '' && $paymentInvoice === $invoiceUrl) {
+        return true;
+    }
+    if ($paymentDate !== '') {
+        $dueDateRaw = trim((string) ($payment['dueDate'] ?? ''));
+        $dueDate = $dueDateRaw !== '' ? date('Y-m-d', strtotime($dueDateRaw)) : '';
+        if ($dueDate !== '' && $dueDate === $paymentDate) {
+            return true;
+        }
+    }
+    return false;
+}
+
 try {
     if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
         Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
@@ -219,21 +239,14 @@ try {
         $paidPayment = null;
         foreach ($paymentsPool as $payment) {
             $status = (string) ($payment['status'] ?? '');
-            $dueDateRaw = trim((string) ($payment['dueDate'] ?? ''));
-            $dueDate = $dueDateRaw !== '' ? date('Y-m-d', strtotime($dueDateRaw)) : '';
-
-            // Tenta casar primeiro pela data da pendência para evitar colisões.
-            $dateMatches = ($paymentDate !== '' && $dueDate !== '' && $paymentDate === $dueDate);
-            if (!empty($payment['id']) && $asaasId !== '' && (string) $payment['id'] === $asaasId) {
-                $dateMatches = true;
+            $matchesPendencia = payment_matches_pendencia($payment, $asaasId, $invoiceUrl, $paymentDate);
+            if (!$matchesPendencia) {
+                continue;
             }
 
             if (asaas_status_is_open($status)) {
-                if ($openPayment === null || $dateMatches) {
+                if ($openPayment === null) {
                     $openPayment = $payment;
-                    if ($dateMatches) {
-                        break;
-                    }
                 }
             }
             if ($paidPayment === null && asaas_status_is_paid($status)) {
@@ -264,17 +277,15 @@ try {
             continue;
         }
 
-        // Sem cobrança em aberto/vencida e sem cobrança paga no Asaas: desvincula localmente.
-        if (empty($paymentsPool)) {
-            $update = $client->update('pendencia_de_cadastro', 'id=eq.' . urlencode($pendenciaId), [
-                'asaas_payment_id' => null,
-                'asaas_invoice_url' => null,
-            ]);
-            if ($update['ok'] ?? false) {
-                $summary['pendencias_unlinked']++;
-            }
-            continue;
+        // Sem cobrança correspondente em aberto/vencida e sem correspondente paga: desvincula.
+        $update = $client->update('pendencia_de_cadastro', 'id=eq.' . urlencode($pendenciaId), [
+            'asaas_payment_id' => null,
+            'asaas_invoice_url' => null,
+        ]);
+        if ($update['ok'] ?? false) {
+            $summary['pendencias_unlinked']++;
         }
+        continue;
     }
 
     Helpers::json([
