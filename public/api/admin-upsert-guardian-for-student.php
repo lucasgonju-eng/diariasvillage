@@ -29,6 +29,7 @@ $parentName = trim((string) ($payload['parent_name'] ?? ''));
 $email = trim((string) ($payload['email'] ?? ''));
 $phone = trim((string) ($payload['parent_phone'] ?? ''));
 $document = preg_replace('/\D+/', '', (string) ($payload['parent_document'] ?? '')) ?? '';
+$forceCreate = (bool) ($payload['force_create'] ?? false);
 
 if ($studentName === '' || $parentName === '') {
     Helpers::json(['ok' => false, 'error' => 'Informe aluno e nome do responsável.'], 422);
@@ -61,6 +62,12 @@ if ($emailGuardian && (string) ($emailGuardian['student_id'] ?? '') !== $student
         'error' => 'Este e-mail já está vinculado a outro aluno. Use outro e-mail para este responsável.',
     ], 409);
 }
+if ($forceCreate && $emailGuardian) {
+    Helpers::json([
+        'ok' => false,
+        'error' => 'Este e-mail já está em uso. Para criar mais um responsável, use outro e-mail.',
+    ], 409);
+}
 
 $guardianResult = $client->select(
     'guardians',
@@ -75,7 +82,7 @@ $payloadDb = [
     'email' => $email,
 ];
 
-if ($guardian) {
+if ($guardian && !$forceCreate) {
     $update = $client->update('guardians', 'id=eq.' . urlencode((string) $guardian['id']), $payloadDb);
     if (!($update['ok'] ?? false) || empty($update['data'][0])) {
         Helpers::json(['ok' => false, 'error' => 'Falha ao atualizar responsável.'], 500);

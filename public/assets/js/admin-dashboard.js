@@ -16,12 +16,14 @@ const chargeMessage = document.querySelector('#charge-message');
 const viewUserStudentInput = document.querySelector('#admin-view-user-student');
 const viewUserStudentsList = document.querySelector('#admin-students-list');
 const viewUserButton = document.querySelector('#admin-view-user-btn');
+const addGuardianButton = document.querySelector('#admin-add-guardian-btn');
 const viewUserForm = document.querySelector('#admin-view-user-form');
 const viewUserStudentNameInput = document.querySelector('#view-user-student-name');
 const viewUserParentNameInput = document.querySelector('#view-user-parent-name');
 const viewUserParentEmailInput = document.querySelector('#view-user-parent-email');
 const viewUserParentPhoneInput = document.querySelector('#view-user-parent-phone');
 const viewUserParentDocumentInput = document.querySelector('#view-user-parent-document');
+const viewUserForceCreateInput = document.querySelector('#view-user-force-create');
 const viewUserSaveGuardianButton = document.querySelector('#view-user-save-guardian');
 const viewUserCancelGuardianButton = document.querySelector('#view-user-cancel-guardian');
 const viewUserFormMessage = document.querySelector('#view-user-form-message');
@@ -942,7 +944,9 @@ if (cashflowClearButton) {
 }
 
 if (viewUserButton && viewUserStudentInput) {
-  const showViewUserForm = (studentName) => {
+  let viewUserSaveMode = 'open_user';
+  const showViewUserForm = (studentName, mode = 'open_user') => {
+    viewUserSaveMode = mode;
     if (!viewUserForm) return;
     viewUserForm.classList.remove('hidden');
     if (viewUserStudentNameInput) viewUserStudentNameInput.value = studentName || '';
@@ -950,9 +954,11 @@ if (viewUserButton && viewUserStudentInput) {
     if (viewUserParentEmailInput) viewUserParentEmailInput.value = '';
     if (viewUserParentPhoneInput) viewUserParentPhoneInput.value = '';
     if (viewUserParentDocumentInput) viewUserParentDocumentInput.value = '';
+    if (viewUserForceCreateInput) viewUserForceCreateInput.checked = mode === 'create_more';
     if (viewUserFormMessage) {
-      viewUserFormMessage.textContent =
-        'Este aluno ainda não tem responsável. Preencha os dados para cadastrar automaticamente.';
+      viewUserFormMessage.textContent = mode === 'create_more'
+        ? 'Cadastre um novo responsável para o aluno selecionado.'
+        : 'Este aluno ainda não tem responsável. Preencha os dados para cadastrar automaticamente.';
       viewUserFormMessage.className = 'charge-message';
     }
   };
@@ -988,7 +994,7 @@ if (viewUserButton && viewUserStudentInput) {
       const data = await res.json();
       if (!data.ok) {
         if (data.code === 'GUARDIAN_NOT_FOUND') {
-          showViewUserForm(data.student?.name || studentName);
+            showViewUserForm(data.student?.name || studentName, 'open_user');
           return;
         }
         alert(data.error || 'Falha ao abrir visão de usuário.');
@@ -1010,6 +1016,21 @@ if (viewUserButton && viewUserStudentInput) {
   if (viewUserCancelGuardianButton) {
     viewUserCancelGuardianButton.addEventListener('click', () => {
       hideViewUserForm();
+    });
+  }
+
+  if (addGuardianButton) {
+    addGuardianButton.addEventListener('click', () => {
+      const studentName = viewUserStudentInput.value.trim();
+      if (!studentName) {
+        alert('Selecione um aluno para cadastrar responsável.');
+        return;
+      }
+      if (!studentNames.has(studentName)) {
+        alert('Aluno não encontrado na lista.');
+        return;
+      }
+      showViewUserForm(studentName, 'create_more');
     });
   }
 
@@ -1050,6 +1071,7 @@ if (viewUserButton && viewUserStudentInput) {
             email,
             parent_phone: parentPhone,
             parent_document: parentDocument,
+            force_create: !!(viewUserForceCreateInput && viewUserForceCreateInput.checked),
           }),
         });
         const data = await res.json();
@@ -1062,13 +1084,22 @@ if (viewUserButton && viewUserStudentInput) {
         }
 
         if (viewUserFormMessage) {
-          viewUserFormMessage.textContent =
-            'Responsável salvo. Abrindo visão do usuário em nova aba...';
+          viewUserFormMessage.textContent = viewUserSaveMode === 'open_user'
+            ? 'Responsável salvo. Abrindo visão do usuário em nova aba...'
+            : 'Responsável salvo com sucesso. Você pode cadastrar outro.';
           viewUserFormMessage.className = 'charge-message success';
         }
         if (viewUserStudentInput) viewUserStudentInput.value = studentName;
-        hideViewUserForm();
-        viewUserButton.click();
+        if (viewUserSaveMode === 'open_user') {
+          hideViewUserForm();
+          viewUserButton.click();
+        } else {
+          if (viewUserParentNameInput) viewUserParentNameInput.value = '';
+          if (viewUserParentEmailInput) viewUserParentEmailInput.value = '';
+          if (viewUserParentPhoneInput) viewUserParentPhoneInput.value = '';
+          if (viewUserParentDocumentInput) viewUserParentDocumentInput.value = '';
+          if (viewUserForceCreateInput) viewUserForceCreateInput.checked = true;
+        }
       } catch {
         if (viewUserFormMessage) {
           viewUserFormMessage.textContent = 'Falha ao salvar responsável.';

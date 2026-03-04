@@ -191,6 +191,7 @@ if ($guardians) {
             <input id="admin-view-user-student" list="admin-students-list" placeholder="Ver como aluno" autocomplete="off" />
             <datalist id="admin-students-list"></datalist>
             <button id="admin-view-user-btn" class="btn btn-ghost btn-sm" type="button">Ver como usuário</button>
+            <button id="admin-add-guardian-btn" class="btn btn-ghost btn-sm" type="button">Criar mais um responsável</button>
           </div>
         <?php endif; ?>
         <button class="btn btn-primary btn-sm" type="button" data-tab="fluxo-caixa">Fluxo de Caixa</button>
@@ -221,6 +222,12 @@ if ($guardians) {
           <div class="form-group">
             <label>CPF/CNPJ</label>
             <input id="view-user-parent-document" type="text" placeholder="Somente números" />
+          </div>
+          <div class="form-group" style="display:flex;align-items:flex-end;">
+            <label style="display:flex;gap:8px;align-items:center;">
+              <input id="view-user-force-create" type="checkbox" />
+              Salvar como novo responsável
+            </label>
           </div>
           <div class="form-group" style="display:flex;align-items:flex-end;gap:8px;">
             <button id="view-user-save-guardian" class="btn btn-danger btn-sm" type="button">Salvar responsável</button>
