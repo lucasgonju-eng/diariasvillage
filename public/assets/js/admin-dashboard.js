@@ -13,6 +13,9 @@ const studentList = document.querySelector('#students-list');
 const chargeList = document.querySelector('#charge-list');
 const sendChargesButton = document.querySelector('#send-charges');
 const chargeMessage = document.querySelector('#charge-message');
+const sendSelectedPendingButton = document.querySelector('#send-selected-pending');
+const selectAllPendingInput = document.querySelector('#select-all-pending');
+const sendPendingMessage = document.querySelector('#send-pending-message');
 const viewUserStudentInput = document.querySelector('#admin-view-user-student');
 const viewUserStudentsList = document.querySelector('#admin-students-list');
 const viewUserButton = document.querySelector('#admin-view-user-btn');
@@ -521,9 +524,9 @@ if (sendChargesButton) {
       } else {
         const failures = data.results.filter((item) => !item.ok);
         if (failures.length) {
-          showChargeMessage('Algumas cobranças falharam. Verifique os dados.', true);
+          showChargeMessage('Algumas pendências não foram salvas. Verifique os dados.', true);
         } else {
-          showChargeMessage('Cobrança feita!');
+          showChargeMessage('Pendências salvas no SaaS (sem envio).');
           resetChargeForm();
           window.location.reload();
         }
@@ -532,7 +535,61 @@ if (sendChargesButton) {
       showChargeMessage('Falha ao enviar cobranças.', true);
     } finally {
       sendChargesButton.disabled = false;
-      sendChargesButton.textContent = 'Enviar cobranças';
+      sendChargesButton.textContent = 'Salvar pendências (sem enviar)';
+    }
+  });
+}
+
+function showSendPendingMessage(text, isError = false) {
+  if (!sendPendingMessage) return;
+  sendPendingMessage.textContent = text;
+  sendPendingMessage.className = `charge-message ${isError ? 'error' : 'success'}`;
+}
+
+if (selectAllPendingInput) {
+  selectAllPendingInput.addEventListener('change', () => {
+    const checked = !!selectAllPendingInput.checked;
+    document.querySelectorAll('.pending-send-checkbox').forEach((checkbox) => {
+      if (checkbox instanceof HTMLInputElement) checkbox.checked = checked;
+    });
+  });
+}
+
+if (sendSelectedPendingButton) {
+  sendSelectedPendingButton.addEventListener('click', async () => {
+    const selected = [...document.querySelectorAll('.pending-send-checkbox')]
+      .filter((el) => el instanceof HTMLInputElement && el.checked)
+      .map((el) => el.value)
+      .filter(Boolean);
+
+    if (!selected.length) {
+      showSendPendingMessage('Selecione ao menos uma cobrança pendente da fila.', true);
+      return;
+    }
+
+    sendSelectedPendingButton.setAttribute('disabled', 'disabled');
+    const originalText = sendSelectedPendingButton.textContent;
+    sendSelectedPendingButton.textContent = 'Enviando...';
+    showSendPendingMessage('');
+
+    try {
+      const res = await fetch('/api/admin-send-pending-charges.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payment_ids: selected }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        showSendPendingMessage(data?.error || 'Falha ao enviar cobranças pendentes.', true);
+        return;
+      }
+      showSendPendingMessage('Cobranças pendentes enviadas com sucesso.');
+      window.location.reload();
+    } catch {
+      showSendPendingMessage('Falha ao enviar cobranças pendentes.', true);
+    } finally {
+      sendSelectedPendingButton.removeAttribute('disabled');
+      sendSelectedPendingButton.textContent = originalText;
     }
   });
 }

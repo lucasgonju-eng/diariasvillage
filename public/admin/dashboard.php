@@ -24,6 +24,12 @@ $manualPendingResult = $client->select(
 );
 $manualPending = $manualPendingResult['data'] ?? [];
 
+$queuedPendingResult = $client->select(
+    'payments',
+    'select=*,students(name,enrollment),guardians(parent_name,email,parent_phone)&billing_type=eq.PIX_MANUAL_QUEUE&status=eq.queued&order=created_at.desc&limit=500'
+);
+$queuedPending = $queuedPendingResult['data'] ?? [];
+
 $manualPaidResult = $client->select(
     'payments',
     'select=*,students(name,enrollment),guardians(parent_name,email,parent_phone)&billing_type=eq.PIX_MANUAL&status=eq.paid&order=paid_at.desc&limit=200'
@@ -336,7 +342,7 @@ if ($guardians) {
 
       <section id="tab-charges" class="hidden">
         <h2>Cobrança</h2>
-        <p class="muted">Selecione alunos e informe os dados do responsável para enviar as cobranças em massa.</p>
+        <p class="muted">Selecione alunos e informe os dados do responsável para salvar pendências localmente (sem enviar).</p>
 
         <div class="form-group">
           <label>Aluno</label>
@@ -346,32 +352,64 @@ if ($guardians) {
 
         <div id="charge-list" class="charge-list"></div>
 
-        <button class="btn btn-primary" id="send-charges" type="button">Enviar cobranças</button>
+        <button class="btn btn-primary" id="send-charges" type="button">Salvar pendências (sem enviar)</button>
         <div id="charge-message" class="charge-message"></div>
       </section>
 
       <section id="tab-inadimplentes" class="hidden">
         <h2>Inadimplentes</h2>
-        <p class="muted">Cobranças pendentes de alunos que frequentaram sem pagamento.</p>
+        <p class="muted">Selecione as pendências em fila para enviar em massa quando finalizar sua revisão.</p>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+          <button id="send-selected-pending" class="btn btn-primary btn-sm" type="button">Enviar cobranças pendentes</button>
+          <label style="display:flex;gap:6px;align-items:center;font-size:13px;">
+            <input id="select-all-pending" type="checkbox" />
+            Selecionar todas da fila
+          </label>
+        </div>
+        <div id="send-pending-message" class="charge-message"></div>
 
         <div style="overflow-x:auto;">
           <table class="admin-table">
             <thead>
               <tr style="text-align:left;">
+                <th>Enviar</th>
                 <th>Aluno</th>
                 <th>Responsável</th>
                 <th>E-mail</th>
                 <th>Datas do day-use</th>
                 <th>Valor</th>
+                <th>Status</th>
                 <th>Criado em</th>
               </tr>
             </thead>
             <tbody>
-              <?php if (empty($manualPending)): ?>
+              <?php if (empty($queuedPending) && empty($manualPending)): ?>
                 <tr>
-                  <td colspan="6">Nenhuma cobrança pendente.</td>
+                  <td colspan="8">Nenhuma cobrança pendente.</td>
                 </tr>
               <?php else: ?>
+                <?php foreach ($queuedPending as $payment): ?>
+                  <?php
+                    $student = $payment['students'] ?? [];
+                    $guardian = $payment['guardians'] ?? [];
+                    $amount = number_format((float) $payment['amount'], 2, ',', '.');
+                    $created = $payment['created_at'] ? date('d/m/Y H:i', strtotime($payment['created_at'])) : '-';
+                    $dailyParts = explode('|', $payment['daily_type'] ?? '', 2);
+                    $datesLabel = $dailyParts[1] ?? date('d/m/Y', strtotime($payment['payment_date']));
+                  ?>
+                  <tr>
+                    <td>
+                      <input class="pending-send-checkbox" type="checkbox" value="<?php echo htmlspecialchars($payment['id'] ?? '', ENT_QUOTES, 'UTF-8'); ?>" />
+                    </td>
+                    <td><?php echo htmlspecialchars($student['name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars($guardian['parent_name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars($guardian['email'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars($datesLabel, ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td>R$ <?php echo $amount; ?></td>
+                    <td>Na fila (não enviada)</td>
+                    <td><?php echo $created; ?></td>
+                  </tr>
+                <?php endforeach; ?>
                 <?php foreach ($manualPending as $payment): ?>
                   <?php
                     $student = $payment['students'] ?? [];
@@ -382,11 +420,13 @@ if ($guardians) {
                     $datesLabel = $dailyParts[1] ?? date('d/m/Y', strtotime($payment['payment_date']));
                   ?>
                   <tr>
+                    <td>-</td>
                     <td><?php echo htmlspecialchars($student['name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo htmlspecialchars($guardian['parent_name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo htmlspecialchars($guardian['email'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo htmlspecialchars($datesLabel, ENT_QUOTES, 'UTF-8'); ?></td>
                     <td>R$ <?php echo $amount; ?></td>
+                    <td>Enviada (aguardando pagamento)</td>
                     <td><?php echo $created; ?></td>
                   </tr>
                 <?php endforeach; ?>
@@ -805,6 +845,6 @@ if ($guardians) {
     <div class="footer">Desenvolvido por Lucas Gonçalves Junior - 2026</div>
   </div>
 
-  <script src="/assets/js/admin-dashboard.js?v=27"></script>
+  <script src="/assets/js/admin-dashboard.js?v=28"></script>
 </body>
 </html>
