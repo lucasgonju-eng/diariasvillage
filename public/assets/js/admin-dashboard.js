@@ -13,6 +13,9 @@ const studentList = document.querySelector('#students-list');
 const chargeList = document.querySelector('#charge-list');
 const sendChargesButton = document.querySelector('#send-charges');
 const chargeMessage = document.querySelector('#charge-message');
+const viewUserStudentInput = document.querySelector('#admin-view-user-student');
+const viewUserStudentsList = document.querySelector('#admin-students-list');
+const viewUserButton = document.querySelector('#admin-view-user-btn');
 
 const selectedStudents = new Set();
 const guardianCache = new Map();
@@ -316,16 +319,22 @@ async function addChargeItem(studentName) {
 }
 
 async function loadStudents() {
-  if (!studentList) return;
+  if (!studentList && !viewUserStudentsList) return;
   const res = await fetch('/api/students.php');
   const data = await res.json();
   if (!data.ok) return;
-  studentList.innerHTML = '';
+  if (studentList) studentList.innerHTML = '';
+  if (viewUserStudentsList) viewUserStudentsList.innerHTML = '';
   studentNames.clear();
   data.students.forEach((student) => {
     const option = document.createElement('option');
     option.value = student.name;
-    studentList.appendChild(option);
+    if (studentList) studentList.appendChild(option);
+    if (viewUserStudentsList) {
+      const optionView = document.createElement('option');
+      optionView.value = student.name;
+      viewUserStudentsList.appendChild(optionView);
+    }
     studentNames.add(student.name);
   });
 }
@@ -920,6 +929,46 @@ if (cashflowClearButton) {
     if (cashflowExcludeStudentInput) cashflowExcludeStudentInput.value = '';
     if (cashflowExcludeTermInput) cashflowExcludeTermInput.value = '';
     loadCashflow();
+  });
+}
+
+if (viewUserButton && viewUserStudentInput) {
+  viewUserButton.addEventListener('click', async () => {
+    const studentName = viewUserStudentInput.value.trim();
+    if (!studentName) {
+      alert('Selecione um aluno para abrir o modo usuário.');
+      return;
+    }
+    if (!studentNames.has(studentName)) {
+      alert('Aluno não encontrado na lista.');
+      return;
+    }
+
+    viewUserButton.setAttribute('disabled', 'disabled');
+    const originalText = viewUserButton.textContent;
+    viewUserButton.textContent = 'Abrindo...';
+    try {
+      const res = await fetch('/api/admin-view-as-user.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ student_name: studentName }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        alert(data.error || 'Falha ao abrir visão de usuário.');
+        return;
+      }
+      const url = data.url || '/dashboard.php';
+      const win = window.open(url, '_blank', 'noopener');
+      if (!win) {
+        window.location.href = url;
+      }
+    } catch {
+      alert('Falha ao abrir visão de usuário.');
+    } finally {
+      viewUserButton.removeAttribute('disabled');
+      viewUserButton.textContent = originalText;
+    }
   });
 }
 

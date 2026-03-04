@@ -9,6 +9,7 @@ if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated']
     header('Location: /admin/');
     exit;
 }
+$canViewAsUser = (($_SESSION['admin_user'] ?? '') === 'admin');
 
 $client = new SupabaseClient(new HttpClient());
 $paymentsResult = $client->select(
@@ -174,6 +175,8 @@ if ($guardians) {
     .cashflow-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:10px 0 14px}
     .cashflow-summary{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 14px}
     .cashflow-pill{background:#F3F6FB;border:1px solid #E2E8F5;border-radius:999px;padding:7px 12px;font-size:12px;color:#1a2133}
+    .admin-view-user{display:flex;gap:8px;align-items:center}
+    .admin-view-user input{width:220px}
     .hidden{display:none}
   </style>
 </head>
@@ -182,6 +185,13 @@ if ($guardians) {
     <header class="admin-header">
       <div class="admin-title">DIÁRIAS VILLAGE • ADMIN</div>
       <div class="cta">
+        <?php if ($canViewAsUser): ?>
+          <div class="admin-view-user">
+            <input id="admin-view-user-student" list="admin-students-list" placeholder="Ver como aluno" autocomplete="off" />
+            <datalist id="admin-students-list"></datalist>
+            <button id="admin-view-user-btn" class="btn btn-ghost btn-sm" type="button">Ver como usuário</button>
+          </div>
+        <?php endif; ?>
         <button class="btn btn-primary btn-sm" type="button" data-tab="fluxo-caixa">Fluxo de Caixa</button>
         <a class="btn btn-danger btn-sm" href="/admin/settle-pendencia.php">Baixa manual</a>
         <a class="btn btn-ghost btn-sm" href="/admin/import.php">Importar alunos</a>
@@ -750,6 +760,6 @@ if ($guardians) {
     <div class="footer">Desenvolvido por Lucas Gonçalves Junior - 2026</div>
   </div>
 
-  <script src="/assets/js/admin-dashboard.js?v=23"></script>
+  <script src="/assets/js/admin-dashboard.js?v=24"></script>
 </body>
 </html>
