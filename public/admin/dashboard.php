@@ -49,11 +49,7 @@ $pendenciasResult = $client->select(
 $pendenciasAll = $pendenciasResult['data'] ?? [];
 $pendenciasPagas = array_filter($pendenciasAll, fn($p) => !empty($p['paid_at']));
 $pendencias = array_values(array_filter($pendenciasAll, static function ($p): bool {
-    if (!empty($p['paid_at'])) {
-        return false;
-    }
-    $hasAsaasLink = !empty($p['asaas_payment_id']) || !empty($p['asaas_invoice_url']);
-    return $hasAsaasLink;
+    return empty($p['paid_at']);
 }));
 $valorPendencia = 77.00;
 

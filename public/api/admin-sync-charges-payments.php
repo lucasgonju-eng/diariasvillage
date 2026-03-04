@@ -81,6 +81,32 @@ function payment_matches_pendencia(array $payment, string $asaasId, string $invo
     return false;
 }
 
+function payment_date_matches(array $payment, string $paymentDate): bool
+{
+    if ($paymentDate === '') {
+        return true;
+    }
+    $dueDateRaw = trim((string) ($payment['dueDate'] ?? ''));
+    $dueDate = $dueDateRaw !== '' ? date('Y-m-d', strtotime($dueDateRaw)) : '';
+    return $dueDate !== '' && $dueDate === $paymentDate;
+}
+
+function pick_best_payment(array $payments, string $paymentDate, bool $preferPaidAt): ?array
+{
+    if (empty($payments)) {
+        return null;
+    }
+    $withDateMatch = array_values(array_filter($payments, static fn($p) => payment_date_matches((array) $p, $paymentDate)));
+    $pool = !empty($withDateMatch) ? $withDateMatch : $payments;
+    usort($pool, static function ($a, $b) use ($preferPaidAt): int {
+        $key = $preferPaidAt ? 'clientPaymentDate' : 'dateCreated';
+        $aDate = strtotime((string) ($a[$key] ?? '')) ?: strtotime((string) ($a['dateCreated'] ?? '')) ?: 0;
+        $bDate = strtotime((string) ($b[$key] ?? '')) ?: strtotime((string) ($b['dateCreated'] ?? '')) ?: 0;
+        return $bDate <=> $aDate;
+    });
+    return $pool[0] ?? null;
+}
+
 try {
     if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
         Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
@@ -235,25 +261,31 @@ try {
 
         $paymentsPool = unique_payments_by_id($paymentsPool);
 
-        $openPayment = null;
-        $paidPayment = null;
+        $openCandidates = [];
+        $paidCandidates = [];
         foreach ($paymentsPool as $payment) {
             $status = (string) ($payment['status'] ?? '');
-            $matchesPendencia = payment_matches_pendencia($payment, $asaasId, $invoiceUrl, $paymentDate);
-            if (!$matchesPendencia) {
-                continue;
-            }
-
             if (asaas_status_is_open($status)) {
-                if ($openPayment === null) {
-                    $openPayment = $payment;
+                if (
+                    payment_matches_pendencia($payment, $asaasId, $invoiceUrl, $paymentDate)
+                    || payment_date_matches($payment, $paymentDate)
+                    || ($paymentDate === '' && ($asaasId !== '' || $invoiceUrl !== ''))
+                ) {
+                    $openCandidates[] = $payment;
                 }
             }
-            if ($paidPayment === null && asaas_status_is_paid($status)) {
-                $paidPayment = $payment;
+            if (asaas_status_is_paid($status)) {
+                if (
+                    payment_matches_pendencia($payment, $asaasId, $invoiceUrl, $paymentDate)
+                    || payment_date_matches($payment, $paymentDate)
+                    || ($paymentDate === '' && ($guardianCpf !== '' || $guardianEmail !== ''))
+                ) {
+                    $paidCandidates[] = $payment;
+                }
             }
         }
 
+        $openPayment = pick_best_payment($openCandidates, $paymentDate, false);
         if ($openPayment !== null) {
             $update = $client->update('pendencia_de_cadastro', 'id=eq.' . urlencode($pendenciaId), [
                 'asaas_payment_id' => $openPayment['id'] ?? null,
@@ -265,6 +297,7 @@ try {
             }
         }
 
+        $paidPayment = pick_best_payment($paidCandidates, $paymentDate, true);
         if ($paidPayment !== null) {
             $update = $client->update('pendencia_de_cadastro', 'id=eq.' . urlencode($pendenciaId), [
                 'paid_at' => date('c'),
@@ -277,13 +310,16 @@ try {
             continue;
         }
 
-        // Sem cobrança correspondente em aberto/vencida e sem correspondente paga: desvincula.
-        $update = $client->update('pendencia_de_cadastro', 'id=eq.' . urlencode($pendenciaId), [
-            'asaas_payment_id' => null,
-            'asaas_invoice_url' => null,
-        ]);
-        if ($update['ok'] ?? false) {
-            $summary['pendencias_unlinked']++;
+        $hadLink = ($asaasId !== '' || $invoiceUrl !== '');
+        if ($hadLink) {
+            // Sem cobrança correspondente em aberto/vencida e sem correspondente paga: desvincula vínculo antigo.
+            $update = $client->update('pendencia_de_cadastro', 'id=eq.' . urlencode($pendenciaId), [
+                'asaas_payment_id' => null,
+                'asaas_invoice_url' => null,
+            ]);
+            if ($update['ok'] ?? false) {
+                $summary['pendencias_unlinked']++;
+            }
         }
         continue;
     }
