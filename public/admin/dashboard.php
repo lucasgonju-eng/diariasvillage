@@ -589,14 +589,13 @@ if ($guardians) {
                 <th>Registrado em</th>
                 <th>Status Asaas</th>
                 <th>Pago em</th>
-                <th>Cobrança Asaas</th>
-                <th>Ações</th>
+                <th>Excluir pendência</th>
               </tr>
             </thead>
             <tbody>
               <?php if (empty($pendencias)): ?>
                 <tr>
-                  <td colspan="10">Nenhuma pendência registrada.</td>
+                  <td colspan="9">Nenhuma pendência registrada.</td>
                 </tr>
               <?php else: ?>
                 <?php foreach ($pendencias as $pendencia): ?>
@@ -614,27 +613,16 @@ if ($guardians) {
                     <td><?php echo $created; ?></td>
                     <td data-col="asaas-status">-</td>
                     <td data-col="paid-at"><?php echo $paidAt; ?></td>
-                    <td data-col="asaas-link">
-                      <input class="input-sm" type="text" placeholder="Ex: 742559970, pay_... ou link" />
-                      <button class="btn btn-danger btn-sm js-link-asaas" type="button">Vincular</button>
-                    </td>
-                    <td data-col="action">
+                    <td>
                       <?php if (!empty($pendencia['paid_at'])): ?>
                         -
                       <?php else: ?>
                         <button
-                          class="btn btn-danger btn-sm js-check-pendencia"
+                          class="btn btn-danger btn-sm js-delete-pendencia"
                           type="button"
                           data-id="<?php echo htmlspecialchars($pendencia['id'], ENT_QUOTES, 'UTF-8'); ?>"
                         >
-                          Checar de novo
-                        </button>
-                        <button
-                          class="btn btn-danger btn-sm js-settle-pendencia"
-                          type="button"
-                          data-id="<?php echo htmlspecialchars($pendencia['id'], ENT_QUOTES, 'UTF-8'); ?>"
-                        >
-                          Dar baixa
+                          Excluir
                         </button>
                       <?php endif; ?>
                     </td>
@@ -947,7 +935,7 @@ if ($guardians) {
   </div>
 
   <script>window.__adminDashboardBooted = false;</script>
-  <script src="/assets/js/admin-dashboard.js?v=37"></script>
+  <script src="/assets/js/admin-dashboard.js?v=38"></script>
   <script>
     (function () {
       function activateTab(name) {

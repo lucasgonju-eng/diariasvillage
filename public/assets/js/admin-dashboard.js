@@ -759,6 +759,7 @@ const pendenciaAsaasInput = document.querySelector('#pendencia-asaas-id');
 const pendenciaAsaasButton = document.querySelector('#check-pendencia-asaas');
 const pendenciaLinkButtons = document.querySelectorAll('.js-link-asaas');
 const pendenciaSettleButtons = document.querySelectorAll('.js-settle-pendencia');
+const pendenciaDeleteButtons = document.querySelectorAll('.js-delete-pendencia');
 const syncChargesPaymentsButton = document.querySelector('#sync-charges-payments-btn');
 const syncChargesPaymentsMessage = document.querySelector('#sync-charges-payments-message');
 
@@ -1066,6 +1067,65 @@ pendenciaSettleButtons.forEach((button) => {
     } catch {
       if (pendenciaMessage) {
         pendenciaMessage.textContent = 'Falha ao dar baixa.';
+        pendenciaMessage.className = 'charge-message error';
+      }
+    } finally {
+      button.removeAttribute('disabled');
+    }
+  });
+});
+
+pendenciaDeleteButtons.forEach((button) => {
+  button.addEventListener('click', async () => {
+    if (!(button instanceof HTMLElement)) return;
+    const pendenciaId = button.dataset.id;
+    const row = button.closest('tr');
+    if (!pendenciaId || !row) return;
+
+    const student = row.children?.[0]?.textContent?.trim() || 'Aluno';
+    const guardian = row.children?.[1]?.textContent?.trim() || 'Responsável';
+    const dayUseDate = row.children?.[4]?.textContent?.trim() || '-';
+
+    const chooseReason = window.confirm(
+      `Excluir pendência?\n\nAluno: ${student}\nResponsável: ${guardian}\nData do day-use: ${dayUseDate}\n\nOpção: DIÁRIA NÃO USADA`,
+    );
+    if (!chooseReason) return;
+
+    const confirmDelete = window.confirm(
+      'CONFIRMAR EXCLUSÃO DA PENDÊNCIA?\n\nLEMBRETE: EXCLUA TAMBÉM A COBRANÇA NO ASAAS.',
+    );
+    if (!confirmDelete) return;
+
+    button.setAttribute('disabled', 'disabled');
+    if (pendenciaMessage) {
+      pendenciaMessage.textContent = 'Excluindo pendência...';
+      pendenciaMessage.className = 'charge-message';
+    }
+
+    try {
+      const res = await fetch('/api/admin-delete-pendencia.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: pendenciaId, reason: 'DIARIA_NAO_USADA' }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        if (pendenciaMessage) {
+          pendenciaMessage.textContent = data?.error || 'Falha ao excluir pendência.';
+          pendenciaMessage.className = 'charge-message error';
+        }
+        return;
+      }
+
+      row.remove();
+      if (pendenciaMessage) {
+        pendenciaMessage.textContent = 'Pendência excluída. LEMBRETE: EXCLUA TAMBÉM A COBRANÇA NO ASAAS.';
+        pendenciaMessage.className = 'charge-message success';
+      }
+      window.alert('PENDÊNCIA EXCLUÍDA.\nLEMBRETE: EXCLUA TAMBÉM A COBRANÇA NO ASAAS.');
+    } catch {
+      if (pendenciaMessage) {
+        pendenciaMessage.textContent = 'Falha ao excluir pendência.';
         pendenciaMessage.className = 'charge-message error';
       }
     } finally {
