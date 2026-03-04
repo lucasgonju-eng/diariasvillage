@@ -177,6 +177,7 @@ if ($guardians) {
     .cashflow-pill{background:#F3F6FB;border:1px solid #E2E8F5;border-radius:999px;padding:7px 12px;font-size:12px;color:#1a2133}
     .admin-view-user{display:flex;gap:8px;align-items:center}
     .admin-view-user input{width:220px}
+    .view-user-form{margin:12px 0;padding:12px;border-radius:12px;background:#FFF7ED;border:1px solid #FED7AA}
     .hidden{display:none}
   </style>
 </head>
@@ -198,6 +199,37 @@ if ($guardians) {
         <a class="btn btn-ghost btn-sm" href="/logout.php">Sair</a>
       </div>
     </header>
+    <?php if ($canViewAsUser): ?>
+      <div id="admin-view-user-form" class="view-user-form hidden">
+        <div class="charge-fields">
+          <div class="form-group">
+            <label>Aluno</label>
+            <input id="view-user-student-name" type="text" readonly />
+          </div>
+          <div class="form-group">
+            <label>Nome do responsável</label>
+            <input id="view-user-parent-name" type="text" placeholder="Nome completo" />
+          </div>
+          <div class="form-group">
+            <label>E-mail do responsável</label>
+            <input id="view-user-parent-email" type="email" placeholder="email@exemplo.com" />
+          </div>
+          <div class="form-group">
+            <label>Telefone</label>
+            <input id="view-user-parent-phone" type="text" placeholder="(DDD) 99999-9999" />
+          </div>
+          <div class="form-group">
+            <label>CPF/CNPJ</label>
+            <input id="view-user-parent-document" type="text" placeholder="Somente números" />
+          </div>
+          <div class="form-group" style="display:flex;align-items:flex-end;gap:8px;">
+            <button id="view-user-save-guardian" class="btn btn-danger btn-sm" type="button">Salvar responsável</button>
+            <button id="view-user-cancel-guardian" class="btn btn-ghost btn-sm" type="button">Cancelar</button>
+          </div>
+        </div>
+        <div id="view-user-form-message" class="charge-message"></div>
+      </div>
+    <?php endif; ?>
 
     <div class="admin-card">
       <div class="admin-tabs">
@@ -760,6 +792,6 @@ if ($guardians) {
     <div class="footer">Desenvolvido por Lucas Gonçalves Junior - 2026</div>
   </div>
 
-  <script src="/assets/js/admin-dashboard.js?v=24"></script>
+  <script src="/assets/js/admin-dashboard.js?v=25"></script>
 </body>
 </html>

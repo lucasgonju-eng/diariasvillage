@@ -16,6 +16,15 @@ const chargeMessage = document.querySelector('#charge-message');
 const viewUserStudentInput = document.querySelector('#admin-view-user-student');
 const viewUserStudentsList = document.querySelector('#admin-students-list');
 const viewUserButton = document.querySelector('#admin-view-user-btn');
+const viewUserForm = document.querySelector('#admin-view-user-form');
+const viewUserStudentNameInput = document.querySelector('#view-user-student-name');
+const viewUserParentNameInput = document.querySelector('#view-user-parent-name');
+const viewUserParentEmailInput = document.querySelector('#view-user-parent-email');
+const viewUserParentPhoneInput = document.querySelector('#view-user-parent-phone');
+const viewUserParentDocumentInput = document.querySelector('#view-user-parent-document');
+const viewUserSaveGuardianButton = document.querySelector('#view-user-save-guardian');
+const viewUserCancelGuardianButton = document.querySelector('#view-user-cancel-guardian');
+const viewUserFormMessage = document.querySelector('#view-user-form-message');
 
 const selectedStudents = new Set();
 const guardianCache = new Map();
@@ -933,6 +942,29 @@ if (cashflowClearButton) {
 }
 
 if (viewUserButton && viewUserStudentInput) {
+  const showViewUserForm = (studentName) => {
+    if (!viewUserForm) return;
+    viewUserForm.classList.remove('hidden');
+    if (viewUserStudentNameInput) viewUserStudentNameInput.value = studentName || '';
+    if (viewUserParentNameInput) viewUserParentNameInput.value = '';
+    if (viewUserParentEmailInput) viewUserParentEmailInput.value = '';
+    if (viewUserParentPhoneInput) viewUserParentPhoneInput.value = '';
+    if (viewUserParentDocumentInput) viewUserParentDocumentInput.value = '';
+    if (viewUserFormMessage) {
+      viewUserFormMessage.textContent =
+        'Este aluno ainda não tem responsável. Preencha os dados para cadastrar automaticamente.';
+      viewUserFormMessage.className = 'charge-message';
+    }
+  };
+  const hideViewUserForm = () => {
+    if (!viewUserForm) return;
+    viewUserForm.classList.add('hidden');
+    if (viewUserFormMessage) {
+      viewUserFormMessage.textContent = '';
+      viewUserFormMessage.className = 'charge-message';
+    }
+  };
+
   viewUserButton.addEventListener('click', async () => {
     const studentName = viewUserStudentInput.value.trim();
     if (!studentName) {
@@ -955,6 +987,10 @@ if (viewUserButton && viewUserStudentInput) {
       });
       const data = await res.json();
       if (!data.ok) {
+        if (data.code === 'GUARDIAN_NOT_FOUND') {
+          showViewUserForm(data.student?.name || studentName);
+          return;
+        }
         alert(data.error || 'Falha ao abrir visão de usuário.');
         return;
       }
@@ -970,6 +1006,80 @@ if (viewUserButton && viewUserStudentInput) {
       viewUserButton.textContent = originalText;
     }
   });
+
+  if (viewUserCancelGuardianButton) {
+    viewUserCancelGuardianButton.addEventListener('click', () => {
+      hideViewUserForm();
+    });
+  }
+
+  if (viewUserSaveGuardianButton) {
+    viewUserSaveGuardianButton.addEventListener('click', async () => {
+      const studentName =
+        (viewUserStudentNameInput && viewUserStudentNameInput.value.trim()) ||
+        (viewUserStudentInput && viewUserStudentInput.value.trim()) ||
+        '';
+      const parentName = (viewUserParentNameInput && viewUserParentNameInput.value.trim()) || '';
+      const email = (viewUserParentEmailInput && viewUserParentEmailInput.value.trim()) || '';
+      const parentPhone = (viewUserParentPhoneInput && viewUserParentPhoneInput.value.trim()) || '';
+      const parentDocument =
+        (viewUserParentDocumentInput && viewUserParentDocumentInput.value.trim()) || '';
+
+      if (!studentName || !parentName) {
+        if (viewUserFormMessage) {
+          viewUserFormMessage.textContent = 'Informe aluno e nome do responsável.';
+          viewUserFormMessage.className = 'charge-message error';
+        }
+        return;
+      }
+
+      viewUserSaveGuardianButton.setAttribute('disabled', 'disabled');
+      const originalText = viewUserSaveGuardianButton.textContent;
+      viewUserSaveGuardianButton.textContent = 'Salvando...';
+      if (viewUserFormMessage) {
+        viewUserFormMessage.textContent = 'Salvando responsável no banco...';
+        viewUserFormMessage.className = 'charge-message';
+      }
+      try {
+        const res = await fetch('/api/admin-upsert-guardian-for-student.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            student_name: studentName,
+            parent_name: parentName,
+            email,
+            parent_phone: parentPhone,
+            parent_document: parentDocument,
+          }),
+        });
+        const data = await res.json();
+        if (!data.ok) {
+          if (viewUserFormMessage) {
+            viewUserFormMessage.textContent = data.error || 'Falha ao salvar responsável.';
+            viewUserFormMessage.className = 'charge-message error';
+          }
+          return;
+        }
+
+        if (viewUserFormMessage) {
+          viewUserFormMessage.textContent =
+            'Responsável salvo. Abrindo visão do usuário em nova aba...';
+          viewUserFormMessage.className = 'charge-message success';
+        }
+        if (viewUserStudentInput) viewUserStudentInput.value = studentName;
+        hideViewUserForm();
+        viewUserButton.click();
+      } catch {
+        if (viewUserFormMessage) {
+          viewUserFormMessage.textContent = 'Falha ao salvar responsável.';
+          viewUserFormMessage.className = 'charge-message error';
+        }
+      } finally {
+        viewUserSaveGuardianButton.removeAttribute('disabled');
+        viewUserSaveGuardianButton.textContent = originalText;
+      }
+    });
+  }
 }
 
 setActiveTab('charges');

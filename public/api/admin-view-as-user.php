@@ -46,7 +46,15 @@ $guardianResult = $client->select(
 );
 $guardian = $guardianResult['data'][0] ?? null;
 if (!$guardian) {
-    Helpers::json(['ok' => false, 'error' => 'Responsável não encontrado para este aluno.'], 404);
+    Helpers::json([
+        'ok' => false,
+        'error' => 'Responsável não encontrado para este aluno.',
+        'code' => 'GUARDIAN_NOT_FOUND',
+        'student' => [
+            'id' => (string) ($student['id'] ?? ''),
+            'name' => (string) ($student['name'] ?? ''),
+        ],
+    ], 404);
 }
 
 $_SESSION['user'] = $guardian;
