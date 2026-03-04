@@ -25,136 +25,202 @@ function parseDayUseDate(string $date): ?string
     return sprintf('%04d-%02d-%02d', $year, $month, $day);
 }
 
+function apiErrorMessage(array $response, string $fallback): string
+{
+    $error = trim((string) ($response['error'] ?? ''));
+    if ($error !== '') {
+        return $error;
+    }
+    $data = $response['data'] ?? null;
+    if (is_array($data)) {
+        $message = trim((string) ($data['message'] ?? ''));
+        if ($message !== '') {
+            return $message;
+        }
+        $errors = $data['errors'] ?? null;
+        if (is_array($errors) && !empty($errors[0]['description'])) {
+            return trim((string) $errors[0]['description']);
+        }
+    }
+    return $fallback;
+}
+
 if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
     Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
 }
 
-Helpers::requirePost();
-$payload = json_decode(file_get_contents('php://input'), true);
-$charges = $payload['charges'] ?? [];
-
-if (!is_array($charges) || !$charges) {
-    Helpers::json(['ok' => false, 'error' => 'Nenhuma cobrança informada.'], 422);
-}
-
-$client = new SupabaseClient(new HttpClient());
-$results = [];
-$today = date('Y-m-d');
-
-foreach ($charges as $charge) {
-    $studentName = trim((string) ($charge['student_name'] ?? ''));
-    $guardianName = trim((string) ($charge['guardian_name'] ?? ''));
-    $guardianEmail = trim((string) ($charge['guardian_email'] ?? ''));
-    $guardianWhatsapp = trim((string) ($charge['guardian_whatsapp'] ?? ''));
-    $guardianDocument = trim((string) ($charge['guardian_document'] ?? ''));
-    $dayUseDates = $charge['day_use_dates'] ?? [];
-    if (!is_array($dayUseDates)) {
-        $dayUseDates = [$dayUseDates];
+try {
+    Helpers::requirePost();
+    $payload = json_decode(file_get_contents('php://input'), true);
+    if (!is_array($payload)) {
+        $payload = [];
     }
-    $dayUseDates = array_values(array_filter(array_map('trim', $dayUseDates)));
+    $charges = $payload['charges'] ?? [];
 
-    if ($studentName === '' || $guardianName === '' || $guardianEmail === '') {
-        $results[] = [
-            'student_name' => $studentName ?: '(sem nome)',
-            'ok' => false,
-            'error' => 'Nome e e-mail do responsável são obrigatórios.',
-        ];
-        continue;
-    }
-    if (!$dayUseDates) {
-        $results[] = [
-            'student_name' => $studentName,
-            'ok' => false,
-            'error' => 'Informe ao menos uma data de day-use.',
-        ];
-        continue;
-    }
-    if (!filter_var($guardianEmail, FILTER_VALIDATE_EMAIL)) {
-        $results[] = [
-            'student_name' => $studentName,
-            'ok' => false,
-            'error' => 'E-mail inválido.',
-        ];
-        continue;
+    if (!is_array($charges) || !$charges) {
+        Helpers::json(['ok' => false, 'error' => 'Nenhuma cobrança informada.'], 422);
     }
 
-    $studentResult = $client->select('students', 'select=id,name&name=eq.' . urlencode($studentName) . '&limit=1');
-    $studentRow = $studentResult['data'][0] ?? null;
-    if (!$studentRow) {
-        $results[] = [
-            'student_name' => $studentName,
-            'ok' => false,
-            'error' => 'Aluno não encontrado no cadastro.',
-        ];
-        continue;
-    }
+    $client = new SupabaseClient(new HttpClient());
+    $results = [];
+    $today = date('Y-m-d');
 
-    $documentDigits = preg_replace('/\D+/', '', $guardianDocument) ?? '';
-    $guardianResult = $client->select('guardians', 'select=*&email=eq.' . urlencode($guardianEmail) . '&limit=1');
-    $guardianRow = $guardianResult['data'][0] ?? null;
-    if (!$guardianRow) {
-        $passwordHash = password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT);
-        $insertGuardian = $client->insert('guardians', [[
+    foreach ($charges as $charge) {
+        $studentName = trim((string) ($charge['student_name'] ?? ''));
+        $guardianName = trim((string) ($charge['guardian_name'] ?? ''));
+        $guardianEmail = trim((string) ($charge['guardian_email'] ?? ''));
+        $guardianWhatsapp = trim((string) ($charge['guardian_whatsapp'] ?? ''));
+        $guardianDocument = trim((string) ($charge['guardian_document'] ?? ''));
+        $dayUseDates = $charge['day_use_dates'] ?? [];
+        if (!is_array($dayUseDates)) {
+            $dayUseDates = [$dayUseDates];
+        }
+        $dayUseDates = array_values(array_filter(array_map('trim', $dayUseDates)));
+
+        if ($studentName === '' || $guardianName === '' || $guardianEmail === '') {
+            $results[] = [
+                'student_name' => $studentName ?: '(sem nome)',
+                'ok' => false,
+                'error' => 'Nome e e-mail do responsável são obrigatórios.',
+            ];
+            continue;
+        }
+        if (!$dayUseDates) {
+            $results[] = [
+                'student_name' => $studentName,
+                'ok' => false,
+                'error' => 'Informe ao menos uma data de day-use.',
+            ];
+            continue;
+        }
+        if (!filter_var($guardianEmail, FILTER_VALIDATE_EMAIL)) {
+            $results[] = [
+                'student_name' => $studentName,
+                'ok' => false,
+                'error' => 'E-mail inválido.',
+            ];
+            continue;
+        }
+
+        $studentResult = $client->select('students', 'select=id,name&name=eq.' . urlencode($studentName) . '&limit=1');
+        if (!($studentResult['ok'] ?? false)) {
+            $results[] = [
+                'student_name' => $studentName,
+                'ok' => false,
+                'error' => apiErrorMessage($studentResult, 'Falha ao buscar aluno.'),
+            ];
+            continue;
+        }
+        $studentRow = $studentResult['data'][0] ?? null;
+        if (!$studentRow || empty($studentRow['id'])) {
+            $results[] = [
+                'student_name' => $studentName,
+                'ok' => false,
+                'error' => 'Aluno não encontrado no cadastro.',
+            ];
+            continue;
+        }
+
+        $documentDigits = preg_replace('/\D+/', '', $guardianDocument) ?? '';
+        $guardianResult = $client->select('guardians', 'select=*&email=eq.' . urlencode($guardianEmail) . '&limit=1');
+        if (!($guardianResult['ok'] ?? false)) {
+            $results[] = [
+                'student_name' => $studentName,
+                'ok' => false,
+                'error' => apiErrorMessage($guardianResult, 'Falha ao buscar responsável.'),
+            ];
+            continue;
+        }
+        $guardianRow = $guardianResult['data'][0] ?? null;
+        if (!$guardianRow) {
+            $passwordHash = password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT);
+            $insertGuardian = $client->insert('guardians', [[
+                'student_id' => $studentRow['id'],
+                'email' => $guardianEmail,
+                'password_hash' => $passwordHash,
+                'parent_name' => $guardianName,
+                'parent_phone' => $guardianWhatsapp !== '' ? $guardianWhatsapp : null,
+                'parent_document' => $documentDigits !== '' ? $documentDigits : null,
+            ]]);
+            if (!($insertGuardian['ok'] ?? false)) {
+                $results[] = [
+                    'student_name' => $studentName,
+                    'ok' => false,
+                    'error' => apiErrorMessage($insertGuardian, 'Falha ao criar responsável.'),
+                ];
+                continue;
+            }
+            $guardianRow = $insertGuardian['data'][0] ?? null;
+        } else {
+            $updateGuardian = $client->update('guardians', 'id=eq.' . urlencode((string) $guardianRow['id']), [
+                'parent_name' => $guardianName,
+                'parent_phone' => $guardianWhatsapp !== '' ? $guardianWhatsapp : null,
+                'parent_document' => $documentDigits !== '' ? $documentDigits : null,
+            ]);
+            if (!($updateGuardian['ok'] ?? false)) {
+                $results[] = [
+                    'student_name' => $studentName,
+                    'ok' => false,
+                    'error' => apiErrorMessage($updateGuardian, 'Falha ao atualizar responsável.'),
+                ];
+                continue;
+            }
+        }
+
+        if (!$guardianRow || empty($guardianRow['id'])) {
+            $results[] = [
+                'student_name' => $studentName,
+                'ok' => false,
+                'error' => 'Falha ao preparar responsável.',
+            ];
+            continue;
+        }
+
+        $daysCount = count($dayUseDates);
+        $amount = 97.00 * $daysCount;
+        $dailyType = 'emergencial|' . implode(', ', $dayUseDates);
+        $firstDate = parseDayUseDate($dayUseDates[0] ?? '');
+        $paymentDateValue = $firstDate ?: $today;
+
+        // Apenas salva localmente em fila para aparecer na aba Inadimplentes.
+        $insertPayment = $client->insert('payments', [[
+            'guardian_id' => $guardianRow['id'],
             'student_id' => $studentRow['id'],
-            'email' => $guardianEmail,
-            'password_hash' => $passwordHash,
-            'parent_name' => $guardianName,
-            'parent_phone' => $guardianWhatsapp !== '' ? $guardianWhatsapp : null,
-            'parent_document' => $documentDigits !== '' ? $documentDigits : null,
+            'payment_date' => $paymentDateValue,
+            'daily_type' => $dailyType,
+            'amount' => $amount,
+            'status' => 'queued',
+            'billing_type' => 'PIX_MANUAL_QUEUE',
+            'asaas_payment_id' => null,
         ]]);
-        $guardianRow = $insertGuardian['data'][0] ?? null;
-    } else {
-        $client->update('guardians', 'id=eq.' . urlencode((string) $guardianRow['id']), [
-            'parent_name' => $guardianName,
-            'parent_phone' => $guardianWhatsapp !== '' ? $guardianWhatsapp : null,
-            'parent_document' => $documentDigits !== '' ? $documentDigits : null,
-        ]);
-    }
+        $paymentRow = $insertPayment['data'][0] ?? null;
+        if (!($insertPayment['ok'] ?? false) || !$paymentRow) {
+            $results[] = [
+                'student_name' => $studentName,
+                'ok' => false,
+                'error' => apiErrorMessage($insertPayment, 'Falha ao salvar cobrança local.'),
+            ];
+            continue;
+        }
 
-    if (!$guardianRow || empty($guardianRow['id'])) {
         $results[] = [
             'student_name' => $studentName,
-            'ok' => false,
-            'error' => 'Falha ao preparar responsável.',
+            'ok' => true,
+            'payment_id' => (string) ($paymentRow['id'] ?? ''),
+            'queued' => true,
         ];
-        continue;
     }
 
-    $daysCount = count($dayUseDates);
-    $amount = 97.00 * $daysCount;
-    $dailyType = 'emergencial|' . implode(', ', $dayUseDates);
-    $firstDate = parseDayUseDate($dayUseDates[0] ?? '');
-    $paymentDateValue = $firstDate ?: $today;
-
-    $insertPayment = $client->insert('payments', [[
-        'guardian_id' => $guardianRow['id'],
-        'student_id' => $studentRow['id'],
-        'payment_date' => $paymentDateValue,
-        'daily_type' => $dailyType,
-        'amount' => $amount,
-        'status' => 'queued',
-        'billing_type' => 'PIX_MANUAL_QUEUE',
-        'asaas_payment_id' => null,
-    ]]);
-    $paymentRow = $insertPayment['data'][0] ?? null;
-    if (!$paymentRow) {
-        $results[] = [
-            'student_name' => $studentName,
-            'ok' => false,
-            'error' => 'Falha ao salvar pendência local.',
-        ];
-        continue;
-    }
-
-    $results[] = [
-        'student_name' => $studentName,
-        'ok' => true,
-        'payment_id' => (string) ($paymentRow['id'] ?? ''),
-        'queued' => true,
-    ];
+    $failures = array_values(array_filter($results, static fn($item) => !$item['ok']));
+    $allOk = !$failures;
+    $error = $failures ? ($failures[0]['error'] ?? 'Falha ao salvar pendências.') : null;
+    Helpers::json(['ok' => $allOk, 'error' => $error, 'results' => $results]);
+} catch (\Throwable $e) {
+    $logPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'error_log_custom.txt';
+    @file_put_contents($logPath, '[admin-charge] ' . $e->getMessage() . PHP_EOL, FILE_APPEND);
+    Helpers::json([
+        'ok' => false,
+        'error' => 'Falha interna ao salvar cobranças.',
+        'details' => $e->getMessage(),
+    ], 500);
 }
-
-$failures = array_values(array_filter($results, static fn($item) => !$item['ok']));
-$allOk = !$failures;
-$error = $failures ? ($failures[0]['error'] ?? 'Falha ao salvar pendências.') : null;
-Helpers::json(['ok' => $allOk, 'error' => $error, 'results' => $results]);

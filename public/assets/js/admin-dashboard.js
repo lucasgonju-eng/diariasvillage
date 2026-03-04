@@ -639,11 +639,18 @@ if (sendChargesButton) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ charges }),
       });
-      const data = await res.json();
-      if (!data.ok) {
-        showChargeMessage(data.error || 'Falha ao enviar cobranças.', true);
+      let data = null;
+      try {
+        data = await res.json();
+      } catch {
+        data = null;
+      }
+      if (!data?.ok) {
+        const statusInfo = !res.ok ? ` (HTTP ${res.status})` : '';
+        showChargeMessage((data?.error || 'Falha ao enviar cobranças.') + statusInfo, true);
       } else {
-        const failures = data.results.filter((item) => !item.ok);
+        const results = Array.isArray(data.results) ? data.results : [];
+        const failures = results.filter((item) => !item.ok);
         if (failures.length) {
           showChargeMessage('Algumas pendências não foram salvas. Verifique os dados.', true);
         } else {
