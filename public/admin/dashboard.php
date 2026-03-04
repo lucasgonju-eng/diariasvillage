@@ -535,8 +535,10 @@ if ($guardians) {
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
           <h2 style="margin:0;">Pendências de cadastro</h2>
           <a href="/admin/settle-pendencia.php" class="btn btn-danger btn-sm">Baixa manual (página dedicada)</a>
+          <button id="sync-charges-payments-btn" class="btn btn-primary btn-sm" type="button">Atualizar cobranças e pagamentos</button>
         </div>
         <p class="muted">Solicitações registradas para ajuste manual no cadastro.</p>
+        <div id="sync-charges-payments-message" class="charge-message"></div>
         <div class="charge-fields" style="margin-bottom:12px;">
           <div class="form-group">
             <label>CPF para rechecagem</label>
@@ -554,10 +556,6 @@ if ($guardians) {
           </div>
         </div>
         <div id="pendencia-message" class="charge-message"></div>
-        <div style="margin:8px 0 12px;">
-          <button id="sync-charges-payments-btn" class="btn btn-ghost btn-sm" type="button">Atualizar cobranças e pagamentos</button>
-          <div id="sync-charges-payments-message" class="charge-message"></div>
-        </div>
 
         <div style="overflow-x:auto;">
           <table class="admin-table">
@@ -849,6 +847,6 @@ if ($guardians) {
     <div class="footer">Desenvolvido por Lucas Gonçalves Junior - 2026</div>
   </div>
 
-  <script src="/assets/js/admin-dashboard.js?v=29"></script>
+  <script src="/assets/js/admin-dashboard.js?v=30"></script>
 </body>
 </html>
