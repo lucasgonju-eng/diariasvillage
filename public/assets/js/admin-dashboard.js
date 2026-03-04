@@ -947,7 +947,7 @@ if (syncChargesPaymentsButton) {
 
       const summary = data.summary || {};
       if (syncChargesPaymentsMessage) {
-        syncChargesPaymentsMessage.textContent = `Sincronização concluída. Payments verificados: ${summary.payments_checked || 0}, atualizados para pago: ${summary.payments_paid_updated || 0}, cancelados: ${summary.payments_canceled_updated || 0}, não encontrados: ${summary.payments_not_found || 0}. Pendências verificadas: ${summary.pendencias_checked || 0}, pagas: ${summary.pendencias_paid_updated || 0}, desvinculadas: ${summary.pendencias_unlinked || 0}.`;
+        syncChargesPaymentsMessage.textContent = `Sincronização concluída. Payments verificados: ${summary.payments_checked || 0}, atualizados para pago: ${summary.payments_paid_updated || 0}, cancelados: ${summary.payments_canceled_updated || 0}, não encontrados: ${summary.payments_not_found || 0}. Pendências verificadas: ${summary.pendencias_checked || 0}, pagas: ${summary.pendencias_paid_updated || 0}, removidas sem cobrança no Asaas: ${summary.pendencias_removed_no_charge || 0}, desvinculadas: ${summary.pendencias_unlinked || 0}.`;
         syncChargesPaymentsMessage.className = 'charge-message success';
       }
       setTimeout(() => window.location.reload(), 1000);

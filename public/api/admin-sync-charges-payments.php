@@ -125,6 +125,7 @@ try {
         'pendencias_checked' => 0,
         'pendencias_paid_updated' => 0,
         'pendencias_unlinked' => 0,
+        'pendencias_removed_no_charge' => 0,
     ];
 
     $paymentsResult = $client->select(
@@ -310,9 +311,12 @@ try {
             continue;
         }
 
-        $hadLink = ($asaasId !== '' || $invoiceUrl !== '');
-        if ($hadLink) {
-            // Sem cobrança correspondente em aberto/vencida e sem correspondente paga: desvincula vínculo antigo.
+        // Sem cobrança correspondente no Asaas (nem aberta/vencida, nem paga): remove da lista local de pendências.
+        $delete = $client->delete('pendencia_de_cadastro', 'id=eq.' . urlencode($pendenciaId));
+        if ($delete['ok'] ?? false) {
+            $summary['pendencias_removed_no_charge']++;
+        } else {
+            // Fallback: ao menos desvincula se não conseguiu remover.
             $update = $client->update('pendencia_de_cadastro', 'id=eq.' . urlencode($pendenciaId), [
                 'asaas_payment_id' => null,
                 'asaas_invoice_url' => null,
