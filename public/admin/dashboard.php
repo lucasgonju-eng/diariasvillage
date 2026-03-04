@@ -145,6 +145,12 @@ if ($guardians) {
     .charge-list{display:grid;gap:12px;margin-top:12px}
     .charge-item{background:#F6F8FC;border:1px solid #E6E9F2;border-radius:14px;padding:14px}
     .charge-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+    .charge-header .btn.btn-ghost{
+      color:#111827;
+      border-color:#CBD5E1;
+      background:#F8FAFC;
+      font-weight:700;
+    }
     .charge-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
     .date-list{display:grid;gap:8px}
     .date-row{display:flex;gap:8px;align-items:center}
@@ -799,6 +805,6 @@ if ($guardians) {
     <div class="footer">Desenvolvido por Lucas Gonçalves Junior - 2026</div>
   </div>
 
-  <script src="/assets/js/admin-dashboard.js?v=26"></script>
+  <script src="/assets/js/admin-dashboard.js?v=27"></script>
 </body>
 </html>
