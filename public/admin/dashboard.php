@@ -554,6 +554,10 @@ if ($guardians) {
           </div>
         </div>
         <div id="pendencia-message" class="charge-message"></div>
+        <div style="margin:8px 0 12px;">
+          <button id="sync-charges-payments-btn" class="btn btn-ghost btn-sm" type="button">Atualizar cobranças e pagamentos</button>
+          <div id="sync-charges-payments-message" class="charge-message"></div>
+        </div>
 
         <div style="overflow-x:auto;">
           <table class="admin-table">
@@ -845,6 +849,6 @@ if ($guardians) {
     <div class="footer">Desenvolvido por Lucas Gonçalves Junior - 2026</div>
   </div>
 
-  <script src="/assets/js/admin-dashboard.js?v=28"></script>
+  <script src="/assets/js/admin-dashboard.js?v=29"></script>
 </body>
 </html>

@@ -603,6 +603,8 @@ const pendenciaAsaasInput = document.querySelector('#pendencia-asaas-id');
 const pendenciaAsaasButton = document.querySelector('#check-pendencia-asaas');
 const pendenciaLinkButtons = document.querySelectorAll('.js-link-asaas');
 const pendenciaSettleButtons = document.querySelectorAll('.js-settle-pendencia');
+const syncChargesPaymentsButton = document.querySelector('#sync-charges-payments-btn');
+const syncChargesPaymentsMessage = document.querySelector('#sync-charges-payments-message');
 
 function normalizeCpf(value) {
   return value.replace(/\D/g, '').slice(0, 11);
@@ -915,6 +917,49 @@ pendenciaSettleButtons.forEach((button) => {
     }
   });
 });
+
+if (syncChargesPaymentsButton) {
+  syncChargesPaymentsButton.addEventListener('click', async () => {
+    syncChargesPaymentsButton.setAttribute('disabled', 'disabled');
+    const originalText = syncChargesPaymentsButton.textContent;
+    syncChargesPaymentsButton.textContent = 'Sincronizando...';
+    if (syncChargesPaymentsMessage) {
+      syncChargesPaymentsMessage.textContent = 'Executando varredura de cobranças/pagamentos no Asaas...';
+      syncChargesPaymentsMessage.className = 'charge-message';
+    }
+
+    try {
+      const res = await fetch('/api/admin-sync-charges-payments.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        if (syncChargesPaymentsMessage) {
+          syncChargesPaymentsMessage.textContent = data?.error || 'Falha ao sincronizar cobranças e pagamentos.';
+          syncChargesPaymentsMessage.className = 'charge-message error';
+        }
+        return;
+      }
+
+      const summary = data.summary || {};
+      if (syncChargesPaymentsMessage) {
+        syncChargesPaymentsMessage.textContent = `Sincronização concluída. Payments verificados: ${summary.payments_checked || 0}, atualizados para pago: ${summary.payments_paid_updated || 0}, cancelados: ${summary.payments_canceled_updated || 0}, não encontrados: ${summary.payments_not_found || 0}. Pendências verificadas: ${summary.pendencias_checked || 0}, pagas: ${summary.pendencias_paid_updated || 0}, desvinculadas: ${summary.pendencias_unlinked || 0}.`;
+        syncChargesPaymentsMessage.className = 'charge-message success';
+      }
+      setTimeout(() => window.location.reload(), 1000);
+    } catch {
+      if (syncChargesPaymentsMessage) {
+        syncChargesPaymentsMessage.textContent = 'Falha ao sincronizar cobranças e pagamentos.';
+        syncChargesPaymentsMessage.className = 'charge-message error';
+      }
+    } finally {
+      syncChargesPaymentsButton.removeAttribute('disabled');
+      syncChargesPaymentsButton.textContent = originalText;
+    }
+  });
+}
 
 const mergeButtons = document.querySelectorAll('.js-merge-duplicates');
 mergeButtons.forEach((button) => {
