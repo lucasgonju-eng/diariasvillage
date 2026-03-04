@@ -45,6 +45,7 @@ unset($_SESSION['dashboard_error']);
         </div>
 
         <div class="cta">
+          <a class="btn btn-ghost btn-sm" href="/financeiro.php">Financeiro</a>
           <a class="btn btn-ghost btn-sm" href="/profile.php">Perfil</a>
           <a class="btn btn-ghost btn-sm" href="/logout.php">Sair</a>
         </div>

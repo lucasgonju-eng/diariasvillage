@@ -31,6 +31,7 @@ $user = Helpers::requireAuthWeb();
 
         <div class="cta">
           <a class="btn btn-ghost btn-sm" href="/dashboard.php">Dashboard</a>
+          <a class="btn btn-ghost btn-sm" href="/financeiro.php">Financeiro</a>
           <a class="btn btn-ghost btn-sm" href="/logout.php">Sair</a>
         </div>
       </div>

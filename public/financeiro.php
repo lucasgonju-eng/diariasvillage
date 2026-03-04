@@ -1,0 +1,259 @@
+<?php
+$bootstrapCandidates = [
+    __DIR__ . '/src/Bootstrap.php',
+    dirname(__DIR__) . '/src/Bootstrap.php',
+];
+foreach ($bootstrapCandidates as $bootstrapFile) {
+    if (is_file($bootstrapFile)) {
+        require_once $bootstrapFile;
+        break;
+    }
+}
+date_default_timezone_set('America/Sao_Paulo');
+
+use App\Helpers;
+use App\HttpClient;
+use App\SupabaseClient;
+
+function parse_day_type(string $raw): string
+{
+    $base = strtolower(trim(explode('|', $raw, 2)[0] ?? ''));
+    if ($base === 'emergencial') {
+        return 'Emergencial';
+    }
+    return 'Planejada';
+}
+
+function date_key(?string $value): string
+{
+    $raw = trim((string) $value);
+    if ($raw === '') {
+        return '';
+    }
+    $time = strtotime($raw);
+    if ($time === false) {
+        return '';
+    }
+    return date('Y-m-d', $time);
+}
+
+function money(float $value): string
+{
+    return 'R$ ' . number_format($value, 2, ',', '.');
+}
+
+$user = Helpers::requireAuthWeb();
+$client = new SupabaseClient(new HttpClient());
+
+$paymentsResult = $client->select(
+    'payments',
+    'select=id,student_id,payment_date,daily_type,amount,status,paid_at,created_at&guardian_id=eq.'
+    . urlencode((string) ($user['id'] ?? ''))
+    . '&order=payment_date.desc&limit=1000'
+);
+
+$payments = ($paymentsResult['ok'] ?? false) ? ($paymentsResult['data'] ?? []) : [];
+$studentsById = [];
+$studentIds = [];
+foreach ($payments as $payment) {
+    $sid = trim((string) ($payment['student_id'] ?? ''));
+    if ($sid !== '') {
+        $studentIds[$sid] = true;
+    }
+}
+if (!empty($studentIds)) {
+    $quoted = array_map(static fn($id) => '"' . str_replace('"', '', $id) . '"', array_keys($studentIds));
+    $studentsResult = $client->select(
+        'students',
+        'select=id,name,enrollment&id=in.(' . implode(',', $quoted) . ')&limit=1000'
+    );
+    if (($studentsResult['ok'] ?? false) && !empty($studentsResult['data'])) {
+        foreach ($studentsResult['data'] as $student) {
+            $sid = (string) ($student['id'] ?? '');
+            if ($sid !== '') {
+                $studentsById[$sid] = $student;
+            }
+        }
+    }
+}
+
+$cutoffDate = '2026-03-15';
+$rows = [];
+$totalBase = 0.0;
+$totalEffective = 0.0;
+foreach ($payments as $payment) {
+    $student = $studentsById[(string) ($payment['student_id'] ?? '')] ?? [];
+    $studentName = trim((string) ($student['name'] ?? 'Aluno'));
+    $dayUseDate = date_key((string) ($payment['payment_date'] ?? ''));
+    if ($dayUseDate === '') {
+        $dayUseDate = date_key((string) ($payment['paid_at'] ?? ''));
+    }
+    if ($dayUseDate === '') {
+        $dayUseDate = date_key((string) ($payment['created_at'] ?? ''));
+    }
+    $typeLabel = parse_day_type((string) ($payment['daily_type'] ?? 'planejada'));
+    $baseAmount = $typeLabel === 'Emergencial' ? 97.00 : 77.00;
+    $storedAmount = (float) ($payment['amount'] ?? 0);
+    if ($storedAmount > 0 && $storedAmount > 97.01) {
+        $baseAmount = $storedAmount;
+    }
+
+    $effectiveAmount = $baseAmount;
+    if ($dayUseDate !== '' && $dayUseDate <= $cutoffDate && $baseAmount <= 97.01) {
+        $effectiveAmount = 77.00;
+    }
+
+    $totalBase += $baseAmount;
+    $totalEffective += $effectiveAmount;
+
+    $statusRaw = strtolower((string) ($payment['status'] ?? 'pending'));
+    $statusLabel = $statusRaw === 'paid' ? 'Pago' : 'Pendente';
+    $rows[] = [
+        'student_name' => $studentName,
+        'date' => $dayUseDate,
+        'type' => $typeLabel,
+        'base_amount' => $baseAmount,
+        'effective_amount' => $effectiveAmount,
+        'status' => $statusLabel,
+    ];
+}
+
+usort($rows, static function (array $a, array $b): int {
+    return strcmp((string) ($b['date'] ?? ''), (string) ($a['date'] ?? ''));
+});
+
+$economy = max(0, $totalBase - $totalEffective);
+?>
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Financeiro - Diárias Village</title>
+  <meta name="description" content="Histórico financeiro das diárias utilizadas." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/style.css?v=5" />
+  <style>
+    .finance-table{width:100%;border-collapse:collapse}
+    .finance-table th,.finance-table td{padding:10px 8px;border-top:1px solid #e8edf6;text-align:left}
+    .finance-kpis{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
+    .finance-pill{display:inline-block;padding:8px 12px;border-radius:999px;border:1px solid #e2e8f0;background:#f8fafc;font-size:13px}
+    .discount-note{margin-top:10px;padding:12px 14px;border-radius:12px;background:#fff7db;border:1px solid #f4d37a;color:#5e4700;font-size:14px;line-height:1.5}
+  </style>
+</head>
+<body>
+  <header class="hero" id="top">
+    <div class="container">
+      <div class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <div class="brand-text">
+            <div class="brand-title">DIÁRIAS VILLAGE</div>
+            <div class="brand-sub">Painel financeiro</div>
+          </div>
+        </div>
+        <div class="cta">
+          <a class="btn btn-ghost btn-sm" href="/dashboard.php">Dashboard</a>
+          <a class="btn btn-ghost btn-sm" href="/profile.php">Perfil</a>
+          <a class="btn btn-ghost btn-sm" href="/logout.php">Sair</a>
+        </div>
+      </div>
+
+      <div class="hero-grid">
+        <div class="hero-left">
+          <div class="pill">Financeiro</div>
+          <h1>Resumo das diárias utilizadas.</h1>
+          <p class="lead">Acompanhe o histórico de day-use e os valores cobrados.</p>
+          <div class="microchips" role="list">
+            <span class="microchip" role="listitem">Planejada: R$ 77,00</span>
+            <span class="microchip" role="listitem">Emergencial: R$ 97,00</span>
+            <span class="microchip" role="listitem">Regras de transição aplicadas</span>
+          </div>
+        </div>
+
+        <aside class="hero-card" aria-label="Resumo financeiro">
+          <h3>Totais do período</h3>
+          <p class="muted">Histórico total desta conta.</p>
+          <div class="finance-kpis">
+            <span class="finance-pill">Diárias: <?php echo count($rows); ?></span>
+            <span class="finance-pill">Total base: <?php echo money($totalBase); ?></span>
+            <span class="finance-pill">Total final: <?php echo money($totalEffective); ?></span>
+          </div>
+          <div class="discount-note">
+            <strong>Desconto de transição de sistema</strong> - Todas as diárias até o dia 15 de março de 2026 serão de R$77,00.
+            Você economizou <strong><?php echo money($economy); ?></strong>.
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <svg class="wave" viewBox="0 0 1440 120" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M0,64 C240,120 480,120 720,72 C960,24 1200,24 1440,72 L1440,120 L0,120 Z"></path>
+    </svg>
+  </header>
+
+  <main>
+    <section class="section section-alt">
+      <div class="container">
+        <div class="section-head">
+          <h2>Histórico financeiro</h2>
+          <p class="muted">Data, tipo e valor aplicado em cada day-use utilizado.</p>
+        </div>
+
+        <div style="overflow-x:auto;background:#fff;border:1px solid #e6ebf3;border-radius:14px;padding:8px;">
+          <table class="finance-table">
+            <thead>
+              <tr>
+                <th>Aluno</th>
+                <th>Data do day-use</th>
+                <th>Tipo</th>
+                <th>Valor base</th>
+                <th>Valor final</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php if (empty($rows)): ?>
+                <tr>
+                  <td colspan="6">Nenhuma diária encontrada para esta conta.</td>
+                </tr>
+              <?php else: ?>
+                <?php foreach ($rows as $row): ?>
+                  <?php
+                    $dateLabel = $row['date'] !== '' ? date('d/m/Y', strtotime($row['date'])) : '-';
+                    $base = money((float) $row['base_amount']);
+                    $final = money((float) $row['effective_amount']);
+                    $hasDiscount = ((float) $row['effective_amount']) < ((float) $row['base_amount']);
+                  ?>
+                  <tr>
+                    <td><?php echo htmlspecialchars($row['student_name'], ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars($dateLabel, ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars($row['type'], ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars($base, ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td>
+                      <?php echo htmlspecialchars($final, ENT_QUOTES, 'UTF-8'); ?>
+                      <?php if ($hasDiscount): ?>
+                        <span class="small" style="color:#1f6f38;">(com desconto)</span>
+                      <?php endif; ?>
+                    </td>
+                    <td><?php echo htmlspecialchars($row['status'], ENT_QUOTES, 'UTF-8'); ?></td>
+                  </tr>
+                <?php endforeach; ?>
+              <?php endif; ?>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      Desenvolvido por Lucas Gonçalves Junior - 2026
+      <a class="tinyLink" href="/admin/" aria-label="Acesso administrativo">Admin</a>
+    </div>
+  </footer>
+</body>
+</html>

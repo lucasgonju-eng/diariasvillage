@@ -43,6 +43,17 @@ function normalize_day_use_type(string $dailyType): string
     return $base !== '' ? ucfirst($base) : '-';
 }
 
+function resolve_base_amount(string $typeLabel, float $storedAmount): float
+{
+    if ($storedAmount > 97.01) {
+        return $storedAmount;
+    }
+    if ($typeLabel === 'Emergencial') {
+        return 97.00;
+    }
+    return 77.00;
+}
+
 function to_date_key(?string $value): string
 {
     $raw = trim((string) $value);
@@ -114,6 +125,7 @@ $enrollmentFilter = normalize_lower((string) ($_GET['enrollment'] ?? ''));
 $billingTypeFilter = strtoupper(trim((string) ($_GET['billing_type'] ?? '')));
 $excludeStudentTerms = parse_filter_terms((string) ($_GET['exclude_student'] ?? ''));
 $excludeGenericTerms = parse_filter_terms((string) ($_GET['exclude_term'] ?? ''));
+$transitionCutoff = '2026-03-15';
 
 $client = new SupabaseClient(new HttpClient());
 $paymentsResult = $client->select(
@@ -192,7 +204,7 @@ foreach ($rows as $row) {
     $status = trim((string) ($row['status'] ?? '-'));
     $dailyTypeRaw = trim((string) ($row['daily_type'] ?? ''));
     $dailyTypeLabel = normalize_day_use_type($dailyTypeRaw);
-    $amount = (float) ($row['amount'] ?? 0);
+    $storedAmount = (float) ($row['amount'] ?? 0);
     $billingType = trim((string) ($row['billing_type'] ?? '-'));
 
     if ($statusFilter !== '' && strtolower($status) !== $statusFilter) {
@@ -228,6 +240,8 @@ foreach ($rows as $row) {
     if ($dateKey === '' || $dateKey < $from || $dateKey > $to) {
         continue;
     }
+    $baseAmount = resolve_base_amount($dailyTypeLabel, $storedAmount);
+    $effectiveAmount = ($dateKey <= $transitionCutoff && $baseAmount <= 97.01) ? 77.00 : $baseAmount;
 
     $items[] = [
         'id' => $row['id'] ?? null,
@@ -235,15 +249,16 @@ foreach ($rows as $row) {
         'date' => $dateKey,
         'day_use_type' => $dailyTypeLabel,
         'enrollment' => $enrollment !== '' ? $enrollment : '-',
-        'amount' => $amount,
+        'amount' => $effectiveAmount,
+        'base_amount' => $baseAmount,
         'status' => $status !== '' ? $status : '-',
         'billing_type' => $billingType !== '' ? $billingType : '-',
         'paid_at' => $paidAt,
     ];
 
-    $totalAmount += $amount;
+    $totalAmount += $effectiveAmount;
     if (strtolower($status) === 'paid') {
-        $totalPaidAmount += $amount;
+        $totalPaidAmount += $effectiveAmount;
     }
 }
 
