@@ -1297,5 +1297,6 @@ if (viewUserButton && viewUserStudentInput) {
   }
 }
 
-setActiveTab('charges');
+const initialTab = document.body?.dataset?.activeTab || 'charges';
+setActiveTab(initialTab);
 loadStudents();

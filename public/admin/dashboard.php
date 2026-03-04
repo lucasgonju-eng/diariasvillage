@@ -10,6 +10,11 @@ if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated']
     exit;
 }
 $canViewAsUser = (($_SESSION['admin_user'] ?? '') === 'admin');
+$allowedTabs = ['charges', 'inadimplentes', 'recebidas', 'sem-whatsapp', 'pendencias', 'duplicados', 'reset-senha', 'fluxo-caixa', 'entries'];
+$activeTab = trim((string) ($_GET['tab'] ?? 'charges'));
+if (!in_array($activeTab, $allowedTabs, true)) {
+    $activeTab = 'charges';
+}
 
 $client = new SupabaseClient(new HttpClient());
 $paymentsResult = $client->select(
@@ -196,7 +201,7 @@ if ($guardians) {
     .hidden{display:none}
   </style>
 </head>
-<body>
+<body data-active-tab="<?php echo htmlspecialchars($activeTab, ENT_QUOTES, 'UTF-8'); ?>">
   <div class="admin-wrap">
     <header class="admin-header">
       <div class="admin-title">DIÁRIAS VILLAGE • ADMIN</div>
@@ -209,7 +214,7 @@ if ($guardians) {
             <button id="admin-add-guardian-btn" class="btn btn-ghost btn-sm" type="button">Criar mais um responsável</button>
           </div>
         <?php endif; ?>
-        <button class="btn btn-primary btn-sm" type="button" data-tab="fluxo-caixa">Fluxo de Caixa</button>
+        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=fluxo-caixa" data-tab="fluxo-caixa">Fluxo de Caixa</a>
         <a class="btn btn-danger btn-sm" href="/admin/settle-pendencia.php">Baixa manual</a>
         <a class="btn btn-ghost btn-sm" href="/admin/import.php">Importar alunos</a>
         <a class="btn btn-ghost btn-sm" href="/logout.php">Sair</a>
@@ -255,18 +260,18 @@ if ($guardians) {
 
     <div class="admin-card">
       <div class="admin-tabs">
-        <button class="btn btn-primary btn-sm" type="button" data-tab="charges">Cobrança</button>
-        <button class="btn btn-primary btn-sm" type="button" data-tab="inadimplentes">Inadimplentes</button>
-        <button class="btn btn-primary btn-sm" type="button" data-tab="recebidas">Cobranças recebidas</button>
-        <button class="btn btn-primary btn-sm" type="button" data-tab="sem-whatsapp">Sem WhatsApp</button>
-        <button class="btn btn-primary btn-sm" type="button" data-tab="pendencias">Pendências</button>
-        <button class="btn btn-primary btn-sm" type="button" data-tab="duplicados">Duplicados</button>
-        <button class="btn btn-primary btn-sm" type="button" data-tab="reset-senha">Resetar senha</button>
-        <button class="btn btn-primary btn-sm" type="button" data-tab="fluxo-caixa">Fluxo de Caixa</button>
-        <button class="btn btn-primary btn-sm" type="button" data-tab="entries">Entradas confirmadas</button>
+        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=charges" data-tab="charges">Cobrança</a>
+        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=inadimplentes" data-tab="inadimplentes">Inadimplentes</a>
+        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=recebidas" data-tab="recebidas">Cobranças recebidas</a>
+        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=sem-whatsapp" data-tab="sem-whatsapp">Sem WhatsApp</a>
+        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=pendencias" data-tab="pendencias">Pendências</a>
+        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=duplicados" data-tab="duplicados">Duplicados</a>
+        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=reset-senha" data-tab="reset-senha">Resetar senha</a>
+        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=fluxo-caixa" data-tab="fluxo-caixa">Fluxo de Caixa</a>
+        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=entries" data-tab="entries">Entradas confirmadas</a>
       </div>
 
-      <section id="tab-entries">
+      <section id="tab-entries" class="<?php echo $activeTab === 'entries' ? '' : 'hidden'; ?>">
         <h2>Entradas confirmadas</h2>
         <p class="muted">Pagamentos confirmados e liberados para entrada.</p>
 
@@ -343,7 +348,7 @@ if ($guardians) {
         </div>
       </section>
 
-      <section id="tab-charges" class="hidden">
+      <section id="tab-charges" class="<?php echo $activeTab === 'charges' ? '' : 'hidden'; ?>">
         <h2>Cobrança</h2>
         <p class="muted">Selecione alunos e informe os dados do responsável para salvar pendências localmente (sem enviar).</p>
 
@@ -359,7 +364,7 @@ if ($guardians) {
         <div id="charge-message" class="charge-message"></div>
       </section>
 
-      <section id="tab-inadimplentes" class="hidden">
+      <section id="tab-inadimplentes" class="<?php echo $activeTab === 'inadimplentes' ? '' : 'hidden'; ?>">
         <h2>Inadimplentes</h2>
         <p class="muted">Selecione as pendências em fila para enviar em massa quando finalizar sua revisão.</p>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
@@ -439,7 +444,7 @@ if ($guardians) {
         </div>
       </section>
 
-      <section id="tab-recebidas" class="hidden">
+      <section id="tab-recebidas" class="<?php echo $activeTab === 'recebidas' ? '' : 'hidden'; ?>">
         <h2>Cobranças recebidas</h2>
         <p class="muted">Cobranças pagas e regularizadas.</p>
 
@@ -499,7 +504,7 @@ if ($guardians) {
         </div>
       </section>
 
-      <section id="tab-sem-whatsapp" class="hidden">
+      <section id="tab-sem-whatsapp" class="<?php echo $activeTab === 'sem-whatsapp' ? '' : 'hidden'; ?>">
         <h2>Responsáveis sem WhatsApp</h2>
         <p class="muted">Lista de responsáveis sem celular cadastrado.</p>
 
@@ -534,7 +539,7 @@ if ($guardians) {
         </div>
       </section>
 
-      <section id="tab-pendencias" class="hidden">
+      <section id="tab-pendencias" class="<?php echo $activeTab === 'pendencias' ? '' : 'hidden'; ?>">
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
           <h2 style="margin:0;">Pendências de cadastro</h2>
           <a href="/admin/settle-pendencia.php" class="btn btn-danger btn-sm">Baixa manual (página dedicada)</a>
@@ -626,7 +631,7 @@ if ($guardians) {
         </div>
       </section>
 
-      <section id="tab-duplicados" class="hidden">
+      <section id="tab-duplicados" class="<?php echo $activeTab === 'duplicados' ? '' : 'hidden'; ?>">
         <h2>Alunos duplicados</h2>
         <p class="muted">Mescla automática por nome ou matrícula (mantém o registro mais antigo). Abaixo listamos possíveis duplicados por CPF do responsável.</p>
 
@@ -734,7 +739,7 @@ if ($guardians) {
         <div class="charge-message" id="merge-message"></div>
       </section>
 
-      <section id="tab-reset-senha" class="hidden">
+      <section id="tab-reset-senha" class="<?php echo $activeTab === 'reset-senha' ? '' : 'hidden'; ?>">
         <h2>Resetar senha do usuário</h2>
         <p class="muted">Busque o usuário pelo CPF e defina uma nova senha. Use para recuperação quando o responsável esquecer a senha.</p>
 
@@ -758,7 +763,7 @@ if ($guardians) {
         <div id="reset-senha-message" class="charge-message"></div>
       </section>
 
-      <section id="tab-fluxo-caixa" class="hidden">
+      <section id="tab-fluxo-caixa" class="<?php echo $activeTab === 'fluxo-caixa' ? '' : 'hidden'; ?>">
         <h2>Fluxo de Caixa</h2>
         <p class="muted">Consolidação de pagamentos para conferência com planilha offline.</p>
 
@@ -851,7 +856,7 @@ if ($guardians) {
   </div>
 
   <script>window.__adminDashboardBooted = false;</script>
-  <script src="/assets/js/admin-dashboard.js?v=32"></script>
+  <script src="/assets/js/admin-dashboard.js?v=33"></script>
   <script>
     (function () {
       function activateTab(name) {
