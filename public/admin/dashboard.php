@@ -935,7 +935,7 @@ if ($guardians) {
   </div>
 
   <script>window.__adminDashboardBooted = false;</script>
-  <script src="/assets/js/admin-dashboard.js?v=38"></script>
+  <script src="/assets/js/admin-dashboard.js?v=39"></script>
   <script>
     (function () {
       function activateTab(name) {

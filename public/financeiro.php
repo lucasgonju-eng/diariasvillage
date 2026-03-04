@@ -37,6 +37,70 @@ function date_key(?string $value): string
     return date('Y-m-d', $time);
 }
 
+function normalize_text_key(string $value): string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return '';
+    }
+    if (function_exists('mb_strtoupper')) {
+        $value = mb_strtoupper($value, 'UTF-8');
+    } else {
+        $value = strtoupper($value);
+    }
+    $translit = iconv('UTF-8', 'ASCII//TRANSLIT', $value);
+    if ($translit !== false) {
+        $value = $translit;
+    }
+    $value = preg_replace('/[^A-Z0-9]+/', '', $value) ?? '';
+    return trim($value);
+}
+
+function parse_single_day_use_date(string $raw): string
+{
+    $value = trim($raw);
+    if ($value === '') {
+        return '';
+    }
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+        return date_key($value);
+    }
+    if (preg_match('/^\d{2}\/\d{2}\/\d{2,4}$/', $value)) {
+        [$day, $month, $year] = explode('/', $value);
+        $yearInt = (int) $year;
+        if ($yearInt < 100) {
+            $yearInt += 2000;
+        }
+        if (checkdate((int) $month, (int) $day, $yearInt)) {
+            return sprintf('%04d-%02d-%02d', $yearInt, (int) $month, (int) $day);
+        }
+    }
+    return date_key($value);
+}
+
+function parse_day_use_dates(string $dailyTypeRaw, string $fallbackDate): array
+{
+    $dates = [];
+    $parts = explode('|', $dailyTypeRaw, 2);
+    $datesRaw = trim((string) ($parts[1] ?? ''));
+    if ($datesRaw !== '') {
+        $normalized = str_replace(["\r\n", "\n", "\r", ';', '+'], ',', $datesRaw);
+        $tokens = array_map('trim', explode(',', $normalized));
+        foreach ($tokens as $token) {
+            $parsed = parse_single_day_use_date($token);
+            if ($parsed !== '') {
+                $dates[$parsed] = true;
+            }
+        }
+    }
+
+    $fallback = date_key($fallbackDate);
+    if ($fallback !== '') {
+        $dates[$fallback] = true;
+    }
+    return array_keys($dates);
+}
+
 function money(float $value): string
 {
     return 'R$ ' . number_format($value, 2, ',', '.');
@@ -84,43 +148,83 @@ $totalEffective = 0.0;
 foreach ($payments as $payment) {
     $student = $studentsById[(string) ($payment['student_id'] ?? '')] ?? [];
     $studentName = trim((string) ($student['name'] ?? 'Aluno'));
-    $dayUseDate = date_key((string) ($payment['payment_date'] ?? ''));
-    if ($dayUseDate === '') {
-        $dayUseDate = date_key((string) ($payment['paid_at'] ?? ''));
+    $paymentDate = date_key((string) ($payment['payment_date'] ?? ''));
+    if ($paymentDate === '') {
+        $paymentDate = date_key((string) ($payment['paid_at'] ?? ''));
     }
-    if ($dayUseDate === '') {
-        $dayUseDate = date_key((string) ($payment['created_at'] ?? ''));
+    if ($paymentDate === '') {
+        $paymentDate = date_key((string) ($payment['created_at'] ?? ''));
     }
-    $typeLabel = parse_day_type((string) ($payment['daily_type'] ?? 'planejada'));
-    $baseAmount = $typeLabel === 'Emergencial' ? 97.00 : 77.00;
+    $dailyTypeRaw = (string) ($payment['daily_type'] ?? 'planejada');
+    $typeLabel = parse_day_type($dailyTypeRaw);
+    $basePerDay = $typeLabel === 'Emergencial' ? 97.00 : 77.00;
     $storedAmount = (float) ($payment['amount'] ?? 0);
-    if ($storedAmount > 0 && $storedAmount > 97.01) {
-        $baseAmount = $storedAmount;
+    $dates = parse_day_use_dates($dailyTypeRaw, $paymentDate);
+    if (empty($dates)) {
+        $dates = [''];
     }
-
-    $effectiveAmount = $baseAmount;
-    if ($dayUseDate !== '' && $dayUseDate <= $cutoffDate && $baseAmount <= 97.01) {
-        $effectiveAmount = 77.00;
-    }
-
-    $totalBase += $baseAmount;
-    $totalEffective += $effectiveAmount;
-
     $statusRaw = strtolower((string) ($payment['status'] ?? 'pending'));
     $statusLabel = $statusRaw === 'paid' ? 'Pago' : 'Pendente';
-    $rows[] = [
-        'student_name' => $studentName,
-        'date' => $dayUseDate,
-        'type' => $typeLabel,
-        'base_amount' => $baseAmount,
-        'effective_amount' => $effectiveAmount,
-        'status' => $statusLabel,
-    ];
+    $statusRank = $statusRaw === 'paid' ? 2 : 1;
+    $createdAtRaw = (string) ($payment['created_at'] ?? '');
+
+    $isSingleDate = count($dates) === 1;
+    $baseSingle = ($storedAmount > 0 && $isSingleDate && $storedAmount > 97.01) ? $storedAmount : $basePerDay;
+    foreach ($dates as $dayUseDate) {
+        $baseAmount = $baseSingle;
+        $effectiveAmount = $baseAmount;
+        if ($dayUseDate !== '' && $dayUseDate <= $cutoffDate && $baseAmount <= 97.01) {
+            $effectiveAmount = 77.00;
+        }
+
+        $totalBase += $baseAmount;
+        $totalEffective += $effectiveAmount;
+
+        $rows[] = [
+            'student_name' => $studentName,
+            'date' => $dayUseDate,
+            'type' => $typeLabel,
+            'base_amount' => $baseAmount,
+            'effective_amount' => $effectiveAmount,
+            'status' => $statusLabel,
+            'status_rank' => $statusRank,
+            'created_at' => $createdAtRaw,
+        ];
+    }
 }
 
 usort($rows, static function (array $a, array $b): int {
-    return strcmp((string) ($b['date'] ?? ''), (string) ($a['date'] ?? ''));
+    $byDate = strcmp((string) ($b['date'] ?? ''), (string) ($a['date'] ?? ''));
+    if ($byDate !== 0) {
+        return $byDate;
+    }
+    $byStatus = ((int) ($b['status_rank'] ?? 0)) <=> ((int) ($a['status_rank'] ?? 0));
+    if ($byStatus !== 0) {
+        return $byStatus;
+    }
+    return strcmp((string) ($b['created_at'] ?? ''), (string) ($a['created_at'] ?? ''));
 });
+
+$deduped = [];
+$seenRows = [];
+$hiddenDuplicates = 0;
+foreach ($rows as $row) {
+    $key = normalize_text_key((string) ($row['student_name'] ?? '')) . '|' . (string) ($row['date'] ?? '');
+    if ($key !== '|' && isset($seenRows[$key])) {
+        $hiddenDuplicates++;
+        continue;
+    }
+    $seenRows[$key] = true;
+    $deduped[] = $row;
+}
+$rows = $deduped;
+
+$totalBase = 0.0;
+$totalEffective = 0.0;
+foreach ($rows as $row) {
+    $totalBase += (float) ($row['base_amount'] ?? 0);
+    $totalEffective += (float) ($row['effective_amount'] ?? 0);
+}
 
 $economy = max(0, $totalBase - $totalEffective);
 ?>
@@ -180,6 +284,9 @@ $economy = max(0, $totalBase - $totalEffective);
             <span class="finance-pill">Diárias: <?php echo count($rows); ?></span>
             <span class="finance-pill">Total base: <?php echo money($totalBase); ?></span>
             <span class="finance-pill">Total final: <?php echo money($totalEffective); ?></span>
+            <?php if ($hiddenDuplicates > 0): ?>
+              <span class="finance-pill">Duplicadas ocultadas: <?php echo $hiddenDuplicates; ?></span>
+            <?php endif; ?>
           </div>
           <div class="discount-note">
             <strong>Desconto de transição de sistema</strong> - Todas as diárias até o dia 15 de março de 2026 serão de R$77,00.
@@ -243,6 +350,16 @@ $economy = max(0, $totalBase - $totalEffective);
                 <?php endforeach; ?>
               <?php endif; ?>
             </tbody>
+            <?php if (!empty($rows)): ?>
+              <tfoot>
+                <tr style="font-weight:800;background:#f8fafc;">
+                  <td colspan="3">Soma final</td>
+                  <td><?php echo htmlspecialchars(money($totalBase), ENT_QUOTES, 'UTF-8'); ?></td>
+                  <td><?php echo htmlspecialchars(money($totalEffective), ENT_QUOTES, 'UTF-8'); ?></td>
+                  <td>-</td>
+                </tr>
+              </tfoot>
+            <?php endif; ?>
           </table>
         </div>
       </div>

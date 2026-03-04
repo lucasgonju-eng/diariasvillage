@@ -252,6 +252,75 @@ function detect_duplicate_dayuse_pendencias(SupabaseClient $client): array
     return array_values($duplicates);
 }
 
+function detect_duplicate_unpaid_payments(SupabaseClient $client): array
+{
+    $result = $client->select(
+        'payments',
+        'select=id,student_id,payment_date,daily_type,amount,status,created_at,students(name),guardians(parent_name,email)'
+        . '&status=in.(pending,queued)&limit=10000'
+    );
+    $rows = ($result['ok'] ?? false) && is_array($result['data'] ?? null) ? $result['data'] : [];
+    $groups = [];
+    foreach ($rows as $row) {
+        $paymentId = trim((string) ($row['id'] ?? ''));
+        if ($paymentId === '') {
+            continue;
+        }
+        $date = to_iso_date((string) ($row['payment_date'] ?? ''));
+        if ($date === '') {
+            continue;
+        }
+        $studentId = trim((string) ($row['student_id'] ?? ''));
+        $studentName = trim((string) ($row['students']['name'] ?? ''));
+        $studentKey = $studentId !== '' ? $studentId : normalize_text_key($studentName);
+        if ($studentKey === '') {
+            continue;
+        }
+        $groupKey = $studentKey . '|' . $date;
+        $groups[$groupKey][] = [
+            'payment_id' => $paymentId,
+            'student_id' => $studentId,
+            'student_name' => $studentName,
+            'guardian_name' => trim((string) ($row['guardians']['parent_name'] ?? '')),
+            'guardian_email' => trim((string) ($row['guardians']['email'] ?? '')),
+            'payment_date' => $date,
+            'amount' => (float) ($row['amount'] ?? 0),
+            'status' => trim((string) ($row['status'] ?? '')),
+            'created_at' => trim((string) ($row['created_at'] ?? '')),
+            'daily_type' => trim((string) ($row['daily_type'] ?? '')),
+        ];
+    }
+
+    $duplicates = [];
+    foreach ($groups as $items) {
+        if (count($items) <= 1) {
+            continue;
+        }
+        usort($items, static function (array $a, array $b): int {
+            $aDate = strtotime((string) ($a['created_at'] ?? '')) ?: 0;
+            $bDate = strtotime((string) ($b['created_at'] ?? '')) ?: 0;
+            return $aDate <=> $bDate;
+        });
+        $keep = $items[0];
+        foreach (array_slice($items, 1) as $extra) {
+            $duplicates[] = [
+                'type' => 'payments_same_day',
+                'keep_payment_id' => $keep['payment_id'],
+                'remove_payment_id' => $extra['payment_id'],
+                'student_name' => $extra['student_name'] ?: $keep['student_name'],
+                'guardian_name' => $extra['guardian_name'] ?: $keep['guardian_name'],
+                'guardian_email' => $extra['guardian_email'] ?: $keep['guardian_email'],
+                'payment_date' => $extra['payment_date'],
+                'keep_created_at' => $keep['created_at'],
+                'remove_created_at' => $extra['created_at'],
+                'remove_amount' => (float) ($extra['amount'] ?? 0),
+                'remove_status' => (string) ($extra['status'] ?? ''),
+            ];
+        }
+    }
+    return $duplicates;
+}
+
 function unique_payments_by_id(array $payments): array
 {
     $unique = [];
@@ -328,6 +397,7 @@ try {
     }
     $previewDuplicateDayUse = !empty($payload['preview_duplicate_dayuse']);
     $confirmRemoveDuplicateDayUse = !empty($payload['confirm_remove_duplicate_dayuse']);
+    $confirmRemoveDuplicatePayments = !empty($payload['confirm_remove_duplicate_payments']);
 
     $client = new SupabaseClient(new HttpClient());
     $asaas = new AsaasClient(new HttpClient());
@@ -344,19 +414,28 @@ try {
         'duplicate_dayuse_detected' => 0,
         'pendencias_removed_duplicate_dayuse' => 0,
         'pendencias_remove_duplicate_failed' => 0,
+        'duplicate_payments_detected' => 0,
+        'duplicate_payments_removed' => 0,
+        'duplicate_payments_remove_failed' => 0,
     ];
 
     $duplicateDayUseItems = detect_duplicate_dayuse_pendencias($client);
+    $duplicatePaymentsItems = detect_duplicate_unpaid_payments($client);
     $summary['duplicate_dayuse_detected'] = count($duplicateDayUseItems);
+    $summary['duplicate_payments_detected'] = count($duplicatePaymentsItems);
 
     if ($previewDuplicateDayUse) {
         Helpers::json([
             'ok' => true,
             'preview' => true,
-            'requires_confirmation' => $summary['duplicate_dayuse_detected'] > 0,
+            'requires_confirmation' => ($summary['duplicate_dayuse_detected'] > 0 || $summary['duplicate_payments_detected'] > 0),
             'duplicate_dayuse' => [
                 'count' => $summary['duplicate_dayuse_detected'],
                 'items' => $duplicateDayUseItems,
+            ],
+            'duplicate_payments' => [
+                'count' => $summary['duplicate_payments_detected'],
+                'items' => $duplicatePaymentsItems,
             ],
         ]);
     }
@@ -372,6 +451,21 @@ try {
                 $summary['pendencias_removed_duplicate_dayuse']++;
             } else {
                 $summary['pendencias_remove_duplicate_failed']++;
+            }
+        }
+    }
+
+    if ($confirmRemoveDuplicatePayments && !empty($duplicatePaymentsItems)) {
+        foreach ($duplicatePaymentsItems as $duplicate) {
+            $removePaymentId = trim((string) ($duplicate['remove_payment_id'] ?? ''));
+            if ($removePaymentId === '') {
+                continue;
+            }
+            $delete = $client->delete('payments', 'id=eq.' . urlencode($removePaymentId) . '&status=in.(pending,queued)');
+            if ($delete['ok'] ?? false) {
+                $summary['duplicate_payments_removed']++;
+            } else {
+                $summary['duplicate_payments_remove_failed']++;
             }
         }
     }
@@ -584,6 +678,12 @@ try {
             'removed' => $summary['pendencias_removed_duplicate_dayuse'],
             'remove_failed' => $summary['pendencias_remove_duplicate_failed'],
             'items' => $duplicateDayUseItems,
+        ],
+        'duplicate_payments' => [
+            'count' => $summary['duplicate_payments_detected'],
+            'removed' => $summary['duplicate_payments_removed'],
+            'remove_failed' => $summary['duplicate_payments_remove_failed'],
+            'items' => $duplicatePaymentsItems,
         ],
     ]);
 } catch (\Throwable $e) {

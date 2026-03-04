@@ -1168,6 +1168,31 @@ function buildSyncDuplicateDayUsePopupMessage(duplicates) {
   return lines.join('\n');
 }
 
+function buildSyncDuplicatePaymentsPopupMessage(duplicates) {
+  const lines = [
+    'ATENÇÃO: encontramos cobranças duplicadas para o MESMO dia de day-use.',
+    'O aluno não deve ter duas cobranças para o mesmo dia.',
+    '',
+    'Cobranças duplicadas detectadas (serão removidas as extras):',
+  ];
+  duplicates.slice(0, 12).forEach((item) => {
+    const student = item.student_name || '-';
+    const guardian = item.guardian_name || '-';
+    const date = formatIsoDateBr(item.payment_date || '-');
+    const amount = formatCurrency(item.remove_amount || 0);
+    const keepId = item.keep_payment_id || '-';
+    const removeId = item.remove_payment_id || '-';
+    lines.push(`- ${student} | Responsável: ${guardian} | Day-use: ${date} | Valor: ${amount}`);
+    lines.push(`  Manter: ${keepId} | Excluir: ${removeId}`);
+  });
+  if (duplicates.length > 12) {
+    lines.push(`... e mais ${duplicates.length - 12} ocorrência(s).`);
+  }
+  lines.push('');
+  lines.push('Deseja excluir as cobranças duplicadas extras e continuar?');
+  return lines.join('\n');
+}
+
 async function postSyncChargesPayments(payload) {
   const res = await fetch('/api/admin-sync-charges-payments.php', {
     method: 'POST',
@@ -1204,6 +1229,9 @@ if (syncChargesPaymentsButton) {
       const duplicateItems = Array.isArray(previewData?.duplicate_dayuse?.items)
         ? previewData.duplicate_dayuse.items
         : [];
+      const duplicatePaymentItems = Array.isArray(previewData?.duplicate_payments?.items)
+        ? previewData.duplicate_payments.items
+        : [];
       let syncPayload = {};
       if (duplicateItems.length > 0) {
         const wantsToRemove = window.confirm(buildSyncDuplicateDayUsePopupMessage(duplicateItems));
@@ -1216,6 +1244,23 @@ if (syncChargesPaymentsButton) {
           return;
         }
         syncPayload = { confirm_remove_duplicate_dayuse: true };
+      }
+      if (duplicatePaymentItems.length > 0) {
+        const wantsToRemovePayments = window.confirm(
+          buildSyncDuplicatePaymentsPopupMessage(duplicatePaymentItems),
+        );
+        if (!wantsToRemovePayments) {
+          if (syncChargesPaymentsMessage) {
+            syncChargesPaymentsMessage.textContent =
+              'Atualização cancelada. Revise as cobranças duplicadas de day-use.';
+            syncChargesPaymentsMessage.className = 'charge-message';
+          }
+          return;
+        }
+        syncPayload = {
+          ...syncPayload,
+          confirm_remove_duplicate_payments: true,
+        };
       }
 
       syncChargesPaymentsButton.textContent = 'Sincronizando...';
@@ -1237,7 +1282,7 @@ if (syncChargesPaymentsButton) {
 
       const summary = data.summary || {};
       if (syncChargesPaymentsMessage) {
-        syncChargesPaymentsMessage.textContent = `Sincronização concluída. Duplicidades de mesmo dia detectadas: ${summary.duplicate_dayuse_detected || 0}, removidas por confirmação: ${summary.pendencias_removed_duplicate_dayuse || 0}. Payments verificados: ${summary.payments_checked || 0}, atualizados para pago: ${summary.payments_paid_updated || 0}, cancelados: ${summary.payments_canceled_updated || 0}, não encontrados: ${summary.payments_not_found || 0}. Pendências verificadas: ${summary.pendencias_checked || 0}, pagas: ${summary.pendencias_paid_updated || 0}, removidas sem cobrança no Asaas: ${summary.pendencias_removed_no_charge || 0}, desvinculadas: ${summary.pendencias_unlinked || 0}.`;
+        syncChargesPaymentsMessage.textContent = `Sincronização concluída. Duplicidades em pendências (mesmo dia): ${summary.duplicate_dayuse_detected || 0}, removidas: ${summary.pendencias_removed_duplicate_dayuse || 0}. Duplicidades em cobranças: ${summary.duplicate_payments_detected || 0}, removidas: ${summary.duplicate_payments_removed || 0}. Payments verificados: ${summary.payments_checked || 0}, atualizados para pago: ${summary.payments_paid_updated || 0}, cancelados: ${summary.payments_canceled_updated || 0}, não encontrados: ${summary.payments_not_found || 0}. Pendências verificadas: ${summary.pendencias_checked || 0}, pagas: ${summary.pendencias_paid_updated || 0}, removidas sem cobrança no Asaas: ${summary.pendencias_removed_no_charge || 0}, desvinculadas: ${summary.pendencias_unlinked || 0}.`;
         syncChargesPaymentsMessage.className = 'charge-message success';
       }
       setTimeout(() => window.location.reload(), 1000);
