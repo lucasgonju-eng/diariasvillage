@@ -8,6 +8,7 @@ const tabRecebidas = document.querySelector('#tab-recebidas');
 const tabSemWhatsapp = document.querySelector('#tab-sem-whatsapp');
 const tabDuplicados = document.querySelector('#tab-duplicados');
 const tabPendencias = document.querySelector('#tab-pendencias');
+const tabExclusoes = document.querySelector('#tab-exclusoes');
 const tabResetSenha = document.querySelector('#tab-reset-senha');
 const tabFluxoCaixa = document.querySelector('#tab-fluxo-caixa');
 const tabDadosAsaas = document.querySelector('#tab-dados-asaas');
@@ -19,6 +20,8 @@ const chargeMessage = document.querySelector('#charge-message');
 const sendSelectedPendingButton = document.querySelector('#send-selected-pending');
 const selectAllPendingInput = document.querySelector('#select-all-pending');
 const sendPendingMessage = document.querySelector('#send-pending-message');
+const pendingDeleteButtons = document.querySelectorAll('.js-delete-payment');
+let inadimplentesDuplicatesPopupShown = false;
 const syncRecebidasButton = document.querySelector('#sync-recebidas-btn');
 const syncRecebidasMessage = document.querySelector('#sync-recebidas-message');
 const viewUserStudentInput = document.querySelector('#admin-view-user-student');
@@ -59,6 +62,7 @@ function setActiveTab(name) {
   tabSemWhatsapp.classList.toggle('hidden', name !== 'sem-whatsapp');
   tabDuplicados.classList.toggle('hidden', name !== 'duplicados');
   tabPendencias.classList.toggle('hidden', name !== 'pendencias');
+  if (tabExclusoes) tabExclusoes.classList.toggle('hidden', name !== 'exclusoes');
   if (tabResetSenha) tabResetSenha.classList.toggle('hidden', name !== 'reset-senha');
   if (tabFluxoCaixa) tabFluxoCaixa.classList.toggle('hidden', name !== 'fluxo-caixa');
   if (tabDadosAsaas) tabDadosAsaas.classList.toggle('hidden', name !== 'dados-asaas');
@@ -566,6 +570,9 @@ function resetChargeForm() {
 tabs.forEach((btn) => {
   btn.addEventListener('click', () => {
     setActiveTab(btn.dataset.tab);
+    if (btn.dataset.tab === 'inadimplentes') {
+      maybeAlertInadimplentesDuplicates();
+    }
     if (btn.dataset.tab === 'fluxo-caixa' && !cashflowLoaded) {
       loadCashflow();
     }
@@ -707,6 +714,116 @@ if (sendSelectedPendingButton) {
     }
   });
 }
+
+function normalizeDuplicateKey(value) {
+  return String(value || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Z0-9]+/g, '');
+}
+
+function detectInadimplentesDuplicates() {
+  const rows = [...document.querySelectorAll('.inadimplente-row')];
+  const groups = new Map();
+  rows.forEach((row) => {
+    const student = normalizeDuplicateKey(row.getAttribute('data-student') || '');
+    const dayUseDates = normalizeDuplicateKey(row.getAttribute('data-dayuse-date') || '');
+    if (!student || !dayUseDates) return;
+    const key = `${student}|${dayUseDates}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  });
+
+  const duplicates = [];
+  groups.forEach((groupRows) => {
+    if (groupRows.length <= 1) return;
+    const first = groupRows[0];
+    const studentName = first.getAttribute('data-student') || '-';
+    const dayUseDates = first.getAttribute('data-dayuse-date') || '-';
+    duplicates.push({
+      student_name: studentName,
+      day_use_dates: dayUseDates,
+      count: groupRows.length,
+      rows: groupRows,
+    });
+  });
+  return duplicates;
+}
+
+function highlightInadimplentesDuplicates(duplicates) {
+  document.querySelectorAll('.inadimplente-row').forEach((row) => {
+    row.style.background = '';
+  });
+  duplicates.forEach((dup) => {
+    dup.rows.forEach((row) => {
+      row.style.background = '#FEF2F2';
+    });
+  });
+}
+
+function maybeAlertInadimplentesDuplicates(force = false) {
+  if (inadimplentesDuplicatesPopupShown && !force) return;
+  const duplicates = detectInadimplentesDuplicates();
+  if (!duplicates.length) return;
+  inadimplentesDuplicatesPopupShown = true;
+  highlightInadimplentesDuplicates(duplicates);
+
+  const lines = [
+    'ATENÇÃO: existem cobranças em duplicidade na aba Inadimplentes.',
+    'Verifique os casos abaixo e exclua uma das cobranças duplicadas.',
+    '',
+  ];
+  duplicates.slice(0, 12).forEach((dup) => {
+    lines.push(`- ${dup.student_name} | Datas: ${dup.day_use_dates} | Duplicadas: ${dup.count}`);
+  });
+  if (duplicates.length > 12) {
+    lines.push(`... e mais ${duplicates.length - 12} grupo(s) duplicado(s).`);
+  }
+  lines.push('');
+  lines.push('Use o botão Excluir e selecione o motivo: COBRANÇA EM DUPLICIDADE.');
+  window.alert(lines.join('\n'));
+}
+
+pendingDeleteButtons.forEach((button) => {
+  button.addEventListener('click', async () => {
+    if (!(button instanceof HTMLElement)) return;
+    const paymentId = button.dataset.id;
+    const row = button.closest('tr');
+    if (!paymentId || !row) return;
+
+    const student = row.getAttribute('data-student') || 'Aluno';
+    const dayUseDates = row.getAttribute('data-dayuse-date') || '-';
+    const amountRaw = Number(row.getAttribute('data-amount') || 0);
+    const amount = formatCurrency(amountRaw);
+
+    const chooseReason = window.confirm(
+      `Excluir cobrança?\n\nAluno: ${student}\nDatas do day-use: ${dayUseDates}\nValor: ${amount}\n\nMotivo: COBRANÇA EM DUPLICIDADE`,
+    );
+    if (!chooseReason) return;
+
+    const confirmDelete = window.confirm('Confirmar exclusão desta cobrança em duplicidade?');
+    if (!confirmDelete) return;
+
+    button.setAttribute('disabled', 'disabled');
+    showSendPendingMessage('Excluindo cobrança...', false);
+    try {
+      const res = await fetch('/api/admin-delete-payment.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: paymentId, reason: 'COBRANCA_EM_DUPLICIDADE' }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        showSendPendingMessage(data?.error || 'Falha ao excluir cobrança.', true);
+        return;
+      }
+      row.remove();
+      showSendPendingMessage('Cobrança excluída com motivo: Cobrança em duplicidade.');
+      maybeAlertInadimplentesDuplicates(true);
+    } catch {
+      showSendPendingMessage('Falha ao excluir cobrança.', true);
+    } finally {
+      button.removeAttribute('disabled');
+    }
+  });
+});
 
 if (syncRecebidasButton) {
   syncRecebidasButton.addEventListener('click', async () => {
@@ -1640,6 +1757,9 @@ if (viewUserButton && viewUserStudentInput) {
 
 const initialTab = document.body?.dataset?.activeTab || 'charges';
 setActiveTab(initialTab);
+if (initialTab === 'inadimplentes') {
+  maybeAlertInadimplentesDuplicates();
+}
 if (initialTab === 'dados-asaas') {
   loadAsaasData();
 }

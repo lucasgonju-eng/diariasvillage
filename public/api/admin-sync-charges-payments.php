@@ -95,6 +95,16 @@ function make_key(string $value, string $date): string
     return $value . '|' . $date;
 }
 
+function append_exclusion_log(array $entry): void
+{
+    $path = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'exclusions_log.jsonl';
+    $line = json_encode($entry, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($line) || $line === '') {
+        return;
+    }
+    @file_put_contents($path, $line . PHP_EOL, FILE_APPEND);
+}
+
 function add_paid_reference(array &$index, string $key, array $reference): void
 {
     if ($key === '') {
@@ -449,6 +459,18 @@ try {
             $delete = $client->delete('pendencia_de_cadastro', 'id=eq.' . urlencode($pendenciaId));
             if ($delete['ok'] ?? false) {
                 $summary['pendencias_removed_duplicate_dayuse']++;
+                append_exclusion_log([
+                    'deleted_at' => date('c'),
+                    'entity_type' => 'pendencia',
+                    'entity_id' => $pendenciaId,
+                    'student_name' => trim((string) ($duplicate['student_name'] ?? '')),
+                    'guardian_name' => trim((string) ($duplicate['guardian_name'] ?? '')),
+                    'payment_date' => trim((string) ($duplicate['payment_date'] ?? '')),
+                    'amount' => 77.0,
+                    'reason' => 'DAY-USE DUPLICADO (JÁ PAGO)',
+                    'source' => 'sync_charges_payments',
+                    'notes' => 'Removida via confirmação de duplicidade por mesmo dia.',
+                ]);
             } else {
                 $summary['pendencias_remove_duplicate_failed']++;
             }
@@ -464,6 +486,18 @@ try {
             $delete = $client->delete('payments', 'id=eq.' . urlencode($removePaymentId) . '&status=in.(pending,queued)');
             if ($delete['ok'] ?? false) {
                 $summary['duplicate_payments_removed']++;
+                append_exclusion_log([
+                    'deleted_at' => date('c'),
+                    'entity_type' => 'payment',
+                    'entity_id' => $removePaymentId,
+                    'student_name' => trim((string) ($duplicate['student_name'] ?? '')),
+                    'guardian_name' => trim((string) ($duplicate['guardian_name'] ?? '')),
+                    'payment_date' => trim((string) ($duplicate['payment_date'] ?? '')),
+                    'amount' => (float) ($duplicate['remove_amount'] ?? 0),
+                    'reason' => 'COBRANÇA EM DUPLICIDADE',
+                    'source' => 'sync_charges_payments',
+                    'notes' => 'Removida via confirmação no popup de duplicidade.',
+                ]);
             } else {
                 $summary['duplicate_payments_remove_failed']++;
             }
@@ -529,7 +563,7 @@ try {
 
     $pendenciasResult = $client->select(
         'pendencia_de_cadastro',
-        'select=id,paid_at,asaas_payment_id,asaas_invoice_url,guardian_cpf,guardian_email,payment_date'
+        'select=id,student_name,guardian_name,paid_at,asaas_payment_id,asaas_invoice_url,guardian_cpf,guardian_email,payment_date'
         . '&limit=5000'
     );
     $pendencias = ($pendenciasResult['ok'] ?? false) && is_array($pendenciasResult['data'] ?? null)
@@ -657,6 +691,18 @@ try {
         $delete = $client->delete('pendencia_de_cadastro', 'id=eq.' . urlencode($pendenciaId));
         if ($delete['ok'] ?? false) {
             $summary['pendencias_removed_no_charge']++;
+            append_exclusion_log([
+                'deleted_at' => date('c'),
+                'entity_type' => 'pendencia',
+                'entity_id' => $pendenciaId,
+                'student_name' => trim((string) ($pendencia['student_name'] ?? '')),
+                'guardian_name' => trim((string) ($pendencia['guardian_name'] ?? '')),
+                'payment_date' => $paymentDate,
+                'amount' => 77.0,
+                'reason' => 'SEM COBRANÇA NO ASAAS',
+                'source' => 'sync_charges_payments',
+                'notes' => 'Removida automaticamente por ausência no Asaas.',
+            ]);
         } else {
             // Fallback: ao menos desvincula se não conseguiu remover.
             $update = $client->update('pendencia_de_cadastro', 'id=eq.' . urlencode($pendenciaId), [

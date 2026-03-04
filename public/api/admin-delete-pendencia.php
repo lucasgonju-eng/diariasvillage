@@ -14,6 +14,16 @@ use App\Helpers;
 use App\HttpClient;
 use App\SupabaseClient;
 
+function append_exclusion_log(array $entry): void
+{
+    $path = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'exclusions_log.jsonl';
+    $line = json_encode($entry, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($line) || $line === '') {
+        return;
+    }
+    @file_put_contents($path, $line . PHP_EOL, FILE_APPEND);
+}
+
 if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
     Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
 }
@@ -51,6 +61,19 @@ $delete = $client->delete('pendencia_de_cadastro', 'id=eq.' . urlencode($pendenc
 if (!($delete['ok'] ?? false)) {
     Helpers::json(['ok' => false, 'error' => 'Falha ao excluir pendência.'], 500);
 }
+
+append_exclusion_log([
+    'deleted_at' => date('c'),
+    'entity_type' => 'pendencia',
+    'entity_id' => $pendenciaId,
+    'student_name' => trim((string) ($row['student_name'] ?? '')),
+    'guardian_name' => trim((string) ($row['guardian_name'] ?? '')),
+    'payment_date' => trim((string) ($row['payment_date'] ?? '')),
+    'amount' => 77.0,
+    'reason' => 'DIÁRIA NÃO USADA',
+    'source' => 'admin_pendencias',
+    'notes' => '',
+]);
 
 Helpers::json([
     'ok' => true,

@@ -10,7 +10,7 @@ if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated']
     exit;
 }
 $canViewAsUser = (($_SESSION['admin_user'] ?? '') === 'admin');
-$allowedTabs = ['charges', 'inadimplentes', 'recebidas', 'sem-whatsapp', 'pendencias', 'duplicados', 'reset-senha', 'fluxo-caixa', 'dados-asaas', 'entries'];
+$allowedTabs = ['charges', 'inadimplentes', 'recebidas', 'sem-whatsapp', 'pendencias', 'exclusoes', 'duplicados', 'reset-senha', 'fluxo-caixa', 'dados-asaas', 'entries'];
 $activeTab = trim((string) ($_GET['tab'] ?? 'charges'));
 if (!in_array($activeTab, $allowedTabs, true)) {
     $activeTab = 'charges';
@@ -135,6 +135,36 @@ if ($guardians) {
         if (count($studentIds) > 1) {
             $cpfDuplicateGroups[] = $group;
         }
+    }
+}
+
+$exclusionsLog = [];
+$exclusionsLogPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'exclusions_log.jsonl';
+if (is_file($exclusionsLogPath)) {
+    $lines = @file($exclusionsLogPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    $maxRows = 500;
+    $count = 0;
+    foreach (array_reverse($lines) as $line) {
+        if ($count >= $maxRows) {
+            break;
+        }
+        $decoded = json_decode((string) $line, true);
+        if (!is_array($decoded)) {
+            continue;
+        }
+        $exclusionsLog[] = [
+            'deleted_at' => $decoded['deleted_at'] ?? '',
+            'entity_type' => $decoded['entity_type'] ?? '',
+            'entity_id' => $decoded['entity_id'] ?? '',
+            'student_name' => $decoded['student_name'] ?? '',
+            'guardian_name' => $decoded['guardian_name'] ?? '',
+            'payment_date' => $decoded['payment_date'] ?? '',
+            'amount' => $decoded['amount'] ?? null,
+            'reason' => $decoded['reason'] ?? '',
+            'source' => $decoded['source'] ?? '',
+            'notes' => $decoded['notes'] ?? '',
+        ];
+        $count++;
     }
 }
 ?>
@@ -272,6 +302,7 @@ if ($guardians) {
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=recebidas" data-tab="recebidas">Cobranças recebidas</a>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=sem-whatsapp" data-tab="sem-whatsapp">Sem WhatsApp</a>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=pendencias" data-tab="pendencias">Pendências</a>
+        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=exclusoes" data-tab="exclusoes">Exclusões</a>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=duplicados" data-tab="duplicados">Duplicados</a>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=reset-senha" data-tab="reset-senha">Resetar senha</a>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=fluxo-caixa" data-tab="fluxo-caixa">Fluxo de Caixa</a>
@@ -396,12 +427,13 @@ if ($guardians) {
                 <th>Valor</th>
                 <th>Status</th>
                 <th>Criado em</th>
+                <th>Ações</th>
               </tr>
             </thead>
             <tbody>
               <?php if (empty($queuedPending) && empty($manualPending)): ?>
                 <tr>
-                  <td colspan="8">Nenhuma cobrança pendente.</td>
+                  <td colspan="9">Nenhuma cobrança pendente.</td>
                 </tr>
               <?php else: ?>
                 <?php foreach ($queuedPending as $payment): ?>
@@ -413,7 +445,13 @@ if ($guardians) {
                     $dailyParts = explode('|', $payment['daily_type'] ?? '', 2);
                     $datesLabel = $dailyParts[1] ?? date('d/m/Y', strtotime($payment['payment_date']));
                   ?>
-                  <tr>
+                  <tr
+                    class="inadimplente-row"
+                    data-payment-id="<?php echo htmlspecialchars((string) ($payment['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                    data-student="<?php echo htmlspecialchars((string) ($student['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                    data-dayuse-date="<?php echo htmlspecialchars((string) $datesLabel, ENT_QUOTES, 'UTF-8'); ?>"
+                    data-amount="<?php echo htmlspecialchars((string) ($payment['amount'] ?? 0), ENT_QUOTES, 'UTF-8'); ?>"
+                  >
                     <td>
                       <input class="pending-send-checkbox" type="checkbox" value="<?php echo htmlspecialchars($payment['id'] ?? '', ENT_QUOTES, 'UTF-8'); ?>" />
                     </td>
@@ -424,6 +462,15 @@ if ($guardians) {
                     <td>R$ <?php echo $amount; ?></td>
                     <td>Na fila (não enviada)</td>
                     <td><?php echo $created; ?></td>
+                    <td>
+                      <button
+                        class="btn btn-danger btn-sm js-delete-payment"
+                        type="button"
+                        data-id="<?php echo htmlspecialchars((string) ($payment['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                      >
+                        Excluir
+                      </button>
+                    </td>
                   </tr>
                 <?php endforeach; ?>
                 <?php foreach ($manualPending as $payment): ?>
@@ -435,7 +482,13 @@ if ($guardians) {
                     $dailyParts = explode('|', $payment['daily_type'] ?? '', 2);
                     $datesLabel = $dailyParts[1] ?? date('d/m/Y', strtotime($payment['payment_date']));
                   ?>
-                  <tr>
+                  <tr
+                    class="inadimplente-row"
+                    data-payment-id="<?php echo htmlspecialchars((string) ($payment['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                    data-student="<?php echo htmlspecialchars((string) ($student['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                    data-dayuse-date="<?php echo htmlspecialchars((string) $datesLabel, ENT_QUOTES, 'UTF-8'); ?>"
+                    data-amount="<?php echo htmlspecialchars((string) ($payment['amount'] ?? 0), ENT_QUOTES, 'UTF-8'); ?>"
+                  >
                     <td>-</td>
                     <td><?php echo htmlspecialchars($student['name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo htmlspecialchars($guardian['parent_name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
@@ -444,6 +497,15 @@ if ($guardians) {
                     <td>R$ <?php echo $amount; ?></td>
                     <td>Enviada (aguardando pagamento)</td>
                     <td><?php echo $created; ?></td>
+                    <td>
+                      <button
+                        class="btn btn-danger btn-sm js-delete-payment"
+                        type="button"
+                        data-id="<?php echo htmlspecialchars((string) ($payment['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                      >
+                        Excluir
+                      </button>
+                    </td>
                   </tr>
                 <?php endforeach; ?>
               <?php endif; ?>
@@ -626,6 +688,53 @@ if ($guardians) {
                         </button>
                       <?php endif; ?>
                     </td>
+                  </tr>
+                <?php endforeach; ?>
+              <?php endif; ?>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="tab-exclusoes" class="<?php echo $activeTab === 'exclusoes' ? '' : 'hidden'; ?>">
+        <h2>Histórico de exclusões</h2>
+        <p class="muted">Registro de exclusões de cobranças e pendências com motivo informado.</p>
+        <div style="overflow-x:auto;">
+          <table class="admin-table">
+            <thead>
+              <tr style="text-align:left;">
+                <th>Data da exclusão</th>
+                <th>Tipo</th>
+                <th>Aluno</th>
+                <th>Responsável</th>
+                <th>Data do day-use</th>
+                <th>Valor</th>
+                <th>Motivo</th>
+                <th>Origem</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php if (empty($exclusionsLog)): ?>
+                <tr>
+                  <td colspan="8">Nenhuma exclusão registrada ainda.</td>
+                </tr>
+              <?php else: ?>
+                <?php foreach ($exclusionsLog as $entry): ?>
+                  <?php
+                    $deletedAt = !empty($entry['deleted_at']) ? date('d/m/Y H:i', strtotime((string) $entry['deleted_at'])) : '-';
+                    $dayUseDate = !empty($entry['payment_date']) ? date('d/m/Y', strtotime((string) $entry['payment_date'])) : '-';
+                    $amountNumber = (float) ($entry['amount'] ?? 0);
+                    $amountLabel = $amountNumber > 0 ? ('R$ ' . number_format($amountNumber, 2, ',', '.')) : '-';
+                  ?>
+                  <tr>
+                    <td><?php echo htmlspecialchars($deletedAt, ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars((string) ($entry['entity_type'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars((string) ($entry['student_name'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars((string) ($entry['guardian_name'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars($dayUseDate, ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars($amountLabel, ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars((string) ($entry['reason'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars((string) ($entry['source'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></td>
                   </tr>
                 <?php endforeach; ?>
               <?php endif; ?>
@@ -935,7 +1044,7 @@ if ($guardians) {
   </div>
 
   <script>window.__adminDashboardBooted = false;</script>
-  <script src="/assets/js/admin-dashboard.js?v=39"></script>
+  <script src="/assets/js/admin-dashboard.js?v=40"></script>
   <script>
     (function () {
       function activateTab(name) {
@@ -946,6 +1055,7 @@ if ($guardians) {
           recebidas: 'tab-recebidas',
           'sem-whatsapp': 'tab-sem-whatsapp',
           pendencias: 'tab-pendencias',
+          exclusoes: 'tab-exclusoes',
           duplicados: 'tab-duplicados',
           'reset-senha': 'tab-reset-senha',
           'fluxo-caixa': 'tab-fluxo-caixa',
