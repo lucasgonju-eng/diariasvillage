@@ -624,7 +624,7 @@ if (syncRecebidasButton) {
       }
       const summary = data.summary || {};
       if (syncRecebidasMessage) {
-        syncRecebidasMessage.textContent = `Atualização concluída. Payments promovidos para pago: ${summary.payments_promoted_paid || 0}. Pendências movidas para pagas: ${summary.pendencias_promoted_paid || 0}. Asaas pagos varridos: ${summary.asaas_paid_scanned || 0}. Importados novos: ${summary.asaas_paid_imported || 0}. Não mapeados: ${summary.asaas_paid_unmapped || 0}.`;
+        syncRecebidasMessage.textContent = `Atualização concluída. Locais promovidos para pago: ${summary.payments_promoted_paid || 0}. Pendências locais movidas para pagas: ${summary.pendencias_promoted_paid || 0}. Asaas varrido: ${summary.asaas_scanned_total || 0}. Pagos encontrados: ${summary.asaas_paid_found || 0}. Importados em payments: ${summary.asaas_paid_imported_payments || 0}. Importados em recebidas (pendências pagas): ${summary.asaas_paid_imported_pendencias || 0}. Não mapeados: ${summary.asaas_paid_unmapped || 0}.`;
         syncRecebidasMessage.className = 'charge-message success';
       }
       setTimeout(() => window.location.reload(), 900);

@@ -84,6 +84,13 @@ class AsaasClient
         return $this->http->request('GET', $url, $this->headers());
     }
 
+    public function listPayments(int $limit = 100, int $offset = 0): array
+    {
+        $url = $this->baseUrl . '/payments?limit=' . max(1, min(100, $limit))
+            . '&offset=' . max(0, $offset);
+        return $this->http->request('GET', $url, $this->headers());
+    }
+
     public function getCustomer(string $customerId): array
     {
         return $this->http->request('GET', $this->baseUrl . '/customers/' . urlencode($customerId), $this->headers());
