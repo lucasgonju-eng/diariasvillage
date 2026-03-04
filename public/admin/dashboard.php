@@ -23,17 +23,28 @@ $paymentsResult = $client->select(
 );
 $payments = $paymentsResult['data'] ?? [];
 
-$manualPendingResult = $client->select(
-    'payments',
-    'select=*,students(name,enrollment),guardians(parent_name,email,parent_phone)&billing_type=eq.PIX_MANUAL&status=eq.pending&order=created_at.desc&limit=200'
-);
-$manualPending = $manualPendingResult['data'] ?? [];
-
 $queuedPendingResult = $client->select(
     'payments',
     'select=*,students(name,enrollment),guardians(parent_name,email,parent_phone)&billing_type=eq.PIX_MANUAL_QUEUE&status=eq.queued&order=created_at.desc&limit=500'
 );
 $queuedPending = $queuedPendingResult['data'] ?? [];
+
+$allUnpaidResult = $client->select(
+    'payments',
+    'select=*,students(name,enrollment),guardians(parent_name,email,parent_phone)&status=neq.paid&order=created_at.desc&limit=5000'
+);
+$allUnpaidRows = $allUnpaidResult['data'] ?? [];
+$manualPending = [];
+foreach ($allUnpaidRows as $row) {
+    $status = strtolower(trim((string) ($row['status'] ?? '')));
+    if (in_array($status, ['paid', 'canceled', 'refunded', 'deleted'], true)) {
+        continue;
+    }
+    if ($status === 'queued' && strtoupper((string) ($row['billing_type'] ?? '')) === 'PIX_MANUAL_QUEUE') {
+        continue; // Já mostrado na seção de fila.
+    }
+    $manualPending[] = $row;
+}
 
 $manualPaidResult = $client->select(
     'payments',
@@ -555,6 +566,14 @@ if (!empty($exclusionsLog)) {
                     $created = $payment['created_at'] ? date('d/m/Y H:i', strtotime($payment['created_at'])) : '-';
                     $dailyParts = explode('|', $payment['daily_type'] ?? '', 2);
                     $datesLabel = $dailyParts[1] ?? date('d/m/Y', strtotime($payment['payment_date']));
+                    $statusRaw = strtolower(trim((string) ($payment['status'] ?? 'pending')));
+                    $statusMap = [
+                        'pending' => 'Aguardando pagamento',
+                        'overdue' => 'Vencida',
+                        'awaiting_risk_analysis' => 'Em análise de risco',
+                        'queued' => 'Na fila (não enviada)',
+                    ];
+                    $statusLabel = $statusMap[$statusRaw] ?? (trim((string) ($payment['status'] ?? '')) !== '' ? (string) $payment['status'] : 'Aguardando pagamento');
                   ?>
                   <tr
                     class="inadimplente-row"
@@ -569,7 +588,7 @@ if (!empty($exclusionsLog)) {
                     <td><?php echo htmlspecialchars($guardian['email'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo htmlspecialchars($datesLabel, ENT_QUOTES, 'UTF-8'); ?></td>
                     <td>R$ <?php echo $amount; ?></td>
-                    <td>Enviada (aguardando pagamento)</td>
+                    <td><?php echo htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo $created; ?></td>
                     <td>
                       <button
