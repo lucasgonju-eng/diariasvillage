@@ -10,7 +10,7 @@ if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated']
     exit;
 }
 $canViewAsUser = (($_SESSION['admin_user'] ?? '') === 'admin');
-$allowedTabs = ['charges', 'inadimplentes', 'recebidas', 'sem-whatsapp', 'pendencias', 'duplicados', 'reset-senha', 'fluxo-caixa', 'entries'];
+$allowedTabs = ['charges', 'inadimplentes', 'recebidas', 'sem-whatsapp', 'pendencias', 'duplicados', 'reset-senha', 'fluxo-caixa', 'dados-asaas', 'entries'];
 $activeTab = trim((string) ($_GET['tab'] ?? 'charges'));
 if (!in_array($activeTab, $allowedTabs, true)) {
     $activeTab = 'charges';
@@ -37,7 +37,7 @@ $queuedPending = $queuedPendingResult['data'] ?? [];
 
 $manualPaidResult = $client->select(
     'payments',
-    'select=*,students(name,enrollment),guardians(parent_name,email,parent_phone)&billing_type=eq.PIX_MANUAL&status=eq.paid&order=paid_at.desc&limit=200'
+    'select=*,students(name,enrollment),guardians(parent_name,email,parent_phone)&status=eq.paid&order=paid_at.desc&limit=1000'
 );
 $manualPaid = $manualPaidResult['data'] ?? [];
 
@@ -275,6 +275,7 @@ if ($guardians) {
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=duplicados" data-tab="duplicados">Duplicados</a>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=reset-senha" data-tab="reset-senha">Resetar senha</a>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=fluxo-caixa" data-tab="fluxo-caixa">Fluxo de Caixa</a>
+        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=dados-asaas" data-tab="dados-asaas">Dados do Asaas</a>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=entries" data-tab="entries">Entradas confirmadas</a>
       </div>
 
@@ -861,13 +862,89 @@ if ($guardians) {
           </table>
         </div>
       </section>
+
+      <section id="tab-dados-asaas" class="<?php echo $activeTab === 'dados-asaas' ? '' : 'hidden'; ?>">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <h2 style="margin:0;">Dados do Asaas</h2>
+          <button id="asaas-data-refresh" class="btn btn-primary btn-sm" type="button">Atualizar direto do Asaas</button>
+        </div>
+        <p class="muted">Dados carregados diretamente do Asaas, separados por pagos, pendentes e vencidos.</p>
+        <div id="asaas-data-message" class="charge-message"></div>
+        <div id="asaas-data-summary" class="cashflow-summary"></div>
+
+        <h3 style="margin-top:12px;">Pagos</h3>
+        <div style="overflow-x:auto;">
+          <table class="admin-table">
+            <thead>
+              <tr style="text-align:left;">
+                <th>ID Asaas</th>
+                <th>Status</th>
+                <th>Cliente</th>
+                <th>Descrição</th>
+                <th>Vencimento</th>
+                <th>Pago em</th>
+                <th>Forma</th>
+                <th>Valor</th>
+                <th>Link</th>
+              </tr>
+            </thead>
+            <tbody id="asaas-paid-tbody">
+              <tr><td colspan="9">Clique em "Atualizar direto do Asaas".</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 style="margin-top:18px;">Pendentes</h3>
+        <div style="overflow-x:auto;">
+          <table class="admin-table">
+            <thead>
+              <tr style="text-align:left;">
+                <th>ID Asaas</th>
+                <th>Status</th>
+                <th>Cliente</th>
+                <th>Descrição</th>
+                <th>Vencimento</th>
+                <th>Pago em</th>
+                <th>Forma</th>
+                <th>Valor</th>
+                <th>Link</th>
+              </tr>
+            </thead>
+            <tbody id="asaas-pending-tbody">
+              <tr><td colspan="9">Clique em "Atualizar direto do Asaas".</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 style="margin-top:18px;">Vencidos</h3>
+        <div style="overflow-x:auto;">
+          <table class="admin-table">
+            <thead>
+              <tr style="text-align:left;">
+                <th>ID Asaas</th>
+                <th>Status</th>
+                <th>Cliente</th>
+                <th>Descrição</th>
+                <th>Vencimento</th>
+                <th>Pago em</th>
+                <th>Forma</th>
+                <th>Valor</th>
+                <th>Link</th>
+              </tr>
+            </thead>
+            <tbody id="asaas-overdue-tbody">
+              <tr><td colspan="9">Clique em "Atualizar direto do Asaas".</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
 
     <div class="footer">Desenvolvido por Lucas Gonçalves Junior - 2026</div>
   </div>
 
   <script>window.__adminDashboardBooted = false;</script>
-  <script src="/assets/js/admin-dashboard.js?v=34"></script>
+  <script src="/assets/js/admin-dashboard.js?v=35"></script>
   <script>
     (function () {
       function activateTab(name) {
@@ -880,7 +957,8 @@ if ($guardians) {
           pendencias: 'tab-pendencias',
           duplicados: 'tab-duplicados',
           'reset-senha': 'tab-reset-senha',
-          'fluxo-caixa': 'tab-fluxo-caixa'
+          'fluxo-caixa': 'tab-fluxo-caixa',
+          'dados-asaas': 'tab-dados-asaas'
         };
         Object.keys(mapping).forEach(function (key) {
           var section = document.getElementById(mapping[key]);

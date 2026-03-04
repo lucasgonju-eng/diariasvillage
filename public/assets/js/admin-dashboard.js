@@ -10,6 +10,7 @@ const tabDuplicados = document.querySelector('#tab-duplicados');
 const tabPendencias = document.querySelector('#tab-pendencias');
 const tabResetSenha = document.querySelector('#tab-reset-senha');
 const tabFluxoCaixa = document.querySelector('#tab-fluxo-caixa');
+const tabDadosAsaas = document.querySelector('#tab-dados-asaas');
 const studentInput = document.querySelector('#charge-student');
 const studentList = document.querySelector('#students-list');
 const chargeList = document.querySelector('#charge-list');
@@ -60,6 +61,7 @@ function setActiveTab(name) {
   tabPendencias.classList.toggle('hidden', name !== 'pendencias');
   if (tabResetSenha) tabResetSenha.classList.toggle('hidden', name !== 'reset-senha');
   if (tabFluxoCaixa) tabFluxoCaixa.classList.toggle('hidden', name !== 'fluxo-caixa');
+  if (tabDadosAsaas) tabDadosAsaas.classList.toggle('hidden', name !== 'dados-asaas');
   tabs.forEach((btn) => {
     const isActive = btn.dataset.tab === name;
     btn.classList.toggle('btn-primary', isActive);
@@ -83,6 +85,13 @@ const cashflowMessage = document.querySelector('#cashflow-message');
 const cashflowSummary = document.querySelector('#cashflow-summary');
 const cashflowTbody = document.querySelector('#cashflow-tbody');
 let cashflowLoaded = false;
+const asaasDataRefreshButton = document.querySelector('#asaas-data-refresh');
+const asaasDataMessage = document.querySelector('#asaas-data-message');
+const asaasDataSummary = document.querySelector('#asaas-data-summary');
+const asaasPaidTbody = document.querySelector('#asaas-paid-tbody');
+const asaasPendingTbody = document.querySelector('#asaas-pending-tbody');
+const asaasOverdueTbody = document.querySelector('#asaas-overdue-tbody');
+let asaasDataLoaded = false;
 
 function getCashflowDefaultFromDate() {
   const now = new Date();
@@ -208,6 +217,104 @@ async function loadCashflow() {
     renderCashflowSummary(null, null);
   } finally {
     cashflowSearchButton.removeAttribute('disabled');
+  }
+}
+
+function setAsaasDataMessage(text, isError = false) {
+  if (!asaasDataMessage) return;
+  asaasDataMessage.textContent = text;
+  asaasDataMessage.className = `charge-message ${isError ? 'error' : ''}`.trim();
+}
+
+function formatDateTimeBR(value) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('pt-BR');
+}
+
+function renderAsaasGroupRows(tbody, items) {
+  if (!tbody) return;
+  const list = Array.isArray(items) ? items : [];
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="9">Nenhum registro.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = list
+    .map((item) => {
+      const link = item.invoice_url
+        ? `<a href="${escapeHtml(item.invoice_url)}" target="_blank" rel="noopener">Abrir</a>`
+        : '-';
+      const customer = [item.customer_name, item.customer_id].filter(Boolean).join(' • ') || '-';
+      return `
+      <tr>
+        <td>${escapeHtml(item.id || '-')}</td>
+        <td>${escapeHtml(item.status || '-')}</td>
+        <td>${escapeHtml(customer)}</td>
+        <td>${escapeHtml(item.description || '-')}</td>
+        <td>${formatDateBR(item.due_date)}</td>
+        <td>${formatDateTimeBR(item.paid_at)}</td>
+        <td>${escapeHtml(item.billing_type || '-')}</td>
+        <td>${formatCurrency(item.value)}</td>
+        <td>${link}</td>
+      </tr>
+      `;
+    })
+    .join('');
+}
+
+function renderAsaasSummary(groups, generatedAt, warnings) {
+  if (!asaasDataSummary) return;
+  const pagos = groups?.pagos || {};
+  const pendentes = groups?.pendentes || {};
+  const vencidos = groups?.vencidos || {};
+  const warnCount = Array.isArray(warnings) ? warnings.length : 0;
+  asaasDataSummary.innerHTML = `
+    <span class="cashflow-pill">Atualizado em: ${formatDateTimeBR(generatedAt)}</span>
+    <span class="cashflow-pill">Pagos: ${pagos.count || 0} (${formatCurrency(pagos.total_value || 0)})</span>
+    <span class="cashflow-pill">Pendentes: ${pendentes.count || 0} (${formatCurrency(pendentes.total_value || 0)})</span>
+    <span class="cashflow-pill">Vencidos: ${vencidos.count || 0} (${formatCurrency(vencidos.total_value || 0)})</span>
+    <span class="cashflow-pill">Avisos: ${warnCount}</span>
+  `;
+}
+
+async function loadAsaasData(force = false) {
+  if (!asaasPaidTbody || !asaasPendingTbody || !asaasOverdueTbody) {
+    return;
+  }
+  if (asaasDataLoaded && !force) {
+    return;
+  }
+
+  if (asaasDataRefreshButton) asaasDataRefreshButton.setAttribute('disabled', 'disabled');
+  setAsaasDataMessage('Buscando dados diretamente do Asaas...');
+  renderAsaasGroupRows(asaasPaidTbody, []);
+  renderAsaasGroupRows(asaasPendingTbody, []);
+  renderAsaasGroupRows(asaasOverdueTbody, []);
+
+  try {
+    const res = await fetch(`/api/admin-asaas-data.php?ts=${Date.now()}`);
+    const data = await res.json();
+    if (!res.ok || !data?.ok) {
+      const warningsText = Array.isArray(data?.warnings) ? ` ${data.warnings.join(' | ')}` : '';
+      setAsaasDataMessage((data?.error || 'Falha ao carregar dados do Asaas.') + warningsText, true);
+      return;
+    }
+
+    const groups = data.groups || {};
+    renderAsaasGroupRows(asaasPaidTbody, groups?.pagos?.items || []);
+    renderAsaasGroupRows(asaasPendingTbody, groups?.pendentes?.items || []);
+    renderAsaasGroupRows(asaasOverdueTbody, groups?.vencidos?.items || []);
+    renderAsaasSummary(groups, data.generated_at, data.warnings || []);
+    const warningsText = Array.isArray(data.warnings) && data.warnings.length
+      ? ` (com avisos: ${data.warnings.join(' | ')})`
+      : '';
+    setAsaasDataMessage('Dados carregados diretamente do Asaas.' + warningsText);
+    asaasDataLoaded = true;
+  } catch {
+    setAsaasDataMessage('Falha ao carregar dados do Asaas.', true);
+  } finally {
+    if (asaasDataRefreshButton) asaasDataRefreshButton.removeAttribute('disabled');
   }
 }
 
@@ -461,6 +568,9 @@ tabs.forEach((btn) => {
     setActiveTab(btn.dataset.tab);
     if (btn.dataset.tab === 'fluxo-caixa' && !cashflowLoaded) {
       loadCashflow();
+    }
+    if (btn.dataset.tab === 'dados-asaas' && !asaasDataLoaded) {
+      loadAsaasData();
     }
   });
 });
@@ -1171,6 +1281,12 @@ if (cashflowClearButton) {
   });
 }
 
+if (asaasDataRefreshButton) {
+  asaasDataRefreshButton.addEventListener('click', () => {
+    loadAsaasData(true);
+  });
+}
+
 if (viewUserButton && viewUserStudentInput) {
   let viewUserSaveMode = 'open_user';
   const showViewUserForm = (studentName, mode = 'open_user') => {
@@ -1343,4 +1459,7 @@ if (viewUserButton && viewUserStudentInput) {
 
 const initialTab = document.body?.dataset?.activeTab || 'charges';
 setActiveTab(initialTab);
+if (initialTab === 'dados-asaas') {
+  loadAsaasData();
+}
 loadStudents();
