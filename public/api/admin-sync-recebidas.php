@@ -38,6 +38,9 @@ $summary = [
     'payments_promoted_paid' => 0,
     'pendencias_checked' => 0,
     'pendencias_promoted_paid' => 0,
+    'asaas_paid_scanned' => 0,
+    'asaas_paid_imported' => 0,
+    'asaas_paid_unmapped' => 0,
 ];
 
 $paymentsResult = $client->select(
@@ -154,6 +157,120 @@ foreach ($pendencias as $pendencia) {
     ]);
     if ($update['ok'] ?? false) {
         $summary['pendencias_promoted_paid']++;
+    }
+}
+
+// Asaas-first: varre cobranças pagas diretamente no Asaas e traz para o SaaS.
+$paidStatuses = ['RECEIVED', 'CONFIRMED'];
+$paidFromAsaas = [];
+foreach ($paidStatuses as $status) {
+    $offset = 0;
+    for ($page = 0; $page < 20; $page++) {
+        $res = $asaas->listPaymentsByStatus($status, 100, $offset);
+        $list = ($res['ok'] ?? false) && is_array($res['data']['data'] ?? null) ? $res['data']['data'] : [];
+        if (empty($list)) {
+            break;
+        }
+        foreach ($list as $item) {
+            if (!is_array($item) || empty($item['id'])) {
+                continue;
+            }
+            $paidFromAsaas[(string) $item['id']] = $item;
+        }
+        if (count($list) < 100) {
+            break;
+        }
+        $offset += 100;
+    }
+}
+
+foreach ($paidFromAsaas as $asaasPaymentId => $payment) {
+    $summary['asaas_paid_scanned']++;
+
+    $existing = $client->select(
+        'payments',
+        'select=id,status,paid_at&asaas_payment_id=eq.' . urlencode($asaasPaymentId) . '&limit=1'
+    );
+    $existingRow = $existing['data'][0] ?? null;
+    if ($existingRow) {
+        if (($existingRow['status'] ?? '') !== 'paid' || empty($existingRow['paid_at'])) {
+            $paidAtRaw = (string) ($payment['clientPaymentDate'] ?? '');
+            $paidAtIso = $paidAtRaw !== '' ? date('c', strtotime($paidAtRaw)) : date('c');
+            $update = $client->update('payments', 'id=eq.' . urlencode((string) $existingRow['id']), [
+                'status' => 'paid',
+                'paid_at' => $paidAtIso,
+            ]);
+            if ($update['ok'] ?? false) {
+                $summary['payments_promoted_paid']++;
+            }
+        }
+        continue;
+    }
+
+    $customerId = trim((string) ($payment['customer'] ?? ''));
+    $guardian = null;
+    if ($customerId !== '') {
+        $guardianRes = $client->select('guardians', 'select=id,student_id,email,parent_document&asaas_customer_id=eq.' . urlencode($customerId) . '&limit=1');
+        $guardian = $guardianRes['data'][0] ?? null;
+    }
+
+    if (!$guardian && $customerId !== '') {
+        $customerRes = $asaas->getCustomer($customerId);
+        $customer = ($customerRes['ok'] ?? false) && is_array($customerRes['data'] ?? null) ? $customerRes['data'] : null;
+        if (is_array($customer)) {
+            $cpf = normalize_digits((string) ($customer['cpfCnpj'] ?? ''));
+            $email = trim((string) ($customer['email'] ?? ''));
+            if ($cpf !== '') {
+                $guardianRes = $client->select('guardians', 'select=id,student_id,email,parent_document&parent_document=eq.' . urlencode($cpf) . '&limit=1');
+                $guardian = $guardianRes['data'][0] ?? null;
+            }
+            if (!$guardian && $email !== '') {
+                $guardianRes = $client->select('guardians', 'select=id,student_id,email,parent_document&email=eq.' . urlencode($email) . '&limit=1');
+                $guardian = $guardianRes['data'][0] ?? null;
+            }
+            if ($guardian && $customerId !== '') {
+                $client->update('guardians', 'id=eq.' . urlencode((string) $guardian['id']), ['asaas_customer_id' => $customerId]);
+            }
+        }
+    }
+
+    if (!$guardian || empty($guardian['id']) || empty($guardian['student_id'])) {
+        $summary['asaas_paid_unmapped']++;
+        continue;
+    }
+
+    $dueDateRaw = trim((string) ($payment['dueDate'] ?? ''));
+    $paymentDate = $dueDateRaw !== '' ? date('Y-m-d', strtotime($dueDateRaw)) : date('Y-m-d');
+    $description = trim((string) ($payment['description'] ?? ''));
+    $dailyType = 'planejada';
+    $descLower = function_exists('mb_strtolower') ? mb_strtolower($description, 'UTF-8') : strtolower($description);
+    if (str_contains($descLower, 'emergencial')) {
+        $dailyType = 'emergencial';
+    }
+    if (str_contains($descLower, 'pendência') || str_contains($descLower, 'pendencia')) {
+        $dailyType = 'pendencia';
+    }
+    $dailyType = $dailyType . '|' . date('d/m/y', strtotime($paymentDate));
+    $amount = (float) ($payment['value'] ?? 0);
+    $billingType = trim((string) ($payment['billingType'] ?? 'PIX'));
+    $paidAtRaw = trim((string) ($payment['clientPaymentDate'] ?? ''));
+    $paidAt = $paidAtRaw !== '' ? date('c', strtotime($paidAtRaw)) : date('c');
+
+    $insert = $client->insert('payments', [[
+        'guardian_id' => $guardian['id'],
+        'student_id' => $guardian['student_id'],
+        'payment_date' => $paymentDate,
+        'daily_type' => $dailyType,
+        'amount' => $amount,
+        'status' => 'paid',
+        'billing_type' => $billingType !== '' ? $billingType : 'PIX',
+        'asaas_payment_id' => $asaasPaymentId,
+        'paid_at' => $paidAt,
+    ]]);
+    if ($insert['ok'] ?? false) {
+        $summary['asaas_paid_imported']++;
+    } else {
+        $summary['asaas_paid_unmapped']++;
     }
 }
 

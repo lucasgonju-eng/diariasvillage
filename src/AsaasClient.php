@@ -76,6 +76,19 @@ class AsaasClient
         return $this->http->request('GET', $url, $this->headers());
     }
 
+    public function listPaymentsByStatus(string $status, int $limit = 100, int $offset = 0): array
+    {
+        $url = $this->baseUrl . '/payments?status=' . urlencode($status)
+            . '&limit=' . max(1, min(100, $limit))
+            . '&offset=' . max(0, $offset);
+        return $this->http->request('GET', $url, $this->headers());
+    }
+
+    public function getCustomer(string $customerId): array
+    {
+        return $this->http->request('GET', $this->baseUrl . '/customers/' . urlencode($customerId), $this->headers());
+    }
+
     private function headers(): array
     {
         return [
