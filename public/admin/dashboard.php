@@ -122,6 +122,24 @@ $sortByStudentName($pendencias, static fn($row) => (string) ($row['student_name'
 
 $studentsResult = $client->select('students', 'select=id,name,enrollment,created_at,active&limit=10000');
 $students = $studentsResult['data'] ?? [];
+$studentsForJs = array_map(static function ($row): array {
+    if (!is_array($row)) {
+        return [
+            'id' => '',
+            'name' => '',
+            'enrollment' => null,
+            'grade' => null,
+            'class_name' => null,
+        ];
+    }
+    return [
+        'id' => (string) ($row['id'] ?? ''),
+        'name' => (string) ($row['name'] ?? ''),
+        'enrollment' => $row['enrollment'] ?? null,
+        'grade' => isset($row['grade']) ? (int) $row['grade'] : null,
+        'class_name' => $row['class_name'] ?? null,
+    ];
+}, $students);
 $duplicateGroups = [];
 $duplicateEnrollmentGroups = [];
 $cpfDuplicateGroups = [];
@@ -1193,8 +1211,11 @@ if (!empty($exclusionsLog)) {
     <div class="footer">Desenvolvido por Lucas Gonçalves Junior - 2026</div>
   </div>
 
-  <script>window.__adminDashboardBooted = false;</script>
-  <script src="/assets/js/admin-dashboard.js?v=44"></script>
+  <script>
+    window.__adminDashboardBooted = false;
+    window.__adminStudents = <?php echo json_encode($studentsForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
+  </script>
+  <script src="/assets/js/admin-dashboard.js?v=45"></script>
   <script>
     (function () {
       function activateTab(name) {

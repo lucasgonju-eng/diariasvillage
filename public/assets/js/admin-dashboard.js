@@ -722,31 +722,8 @@ async function addChargeItem(studentName) {
   }
 }
 
-async function loadStudents() {
-  if (!studentList && !viewUserStudentsList && !pendenciaStudentsList) return;
-  let data = null;
-  try {
-    const res = await fetch('/api/students.php', {
-      headers: { Accept: 'application/json' },
-    });
-    try {
-      data = await res.json();
-    } catch {
-      data = null;
-    }
-    if (!res.ok || !data?.ok) {
-      console.error('[admin-dashboard] loadStudents falhou', {
-        status: res.status,
-        payload: data,
-      });
-      return;
-    }
-  } catch (error) {
-    console.error('[admin-dashboard] loadStudents erro de rede', error);
-    return;
-  }
-
-  adminStudents = Array.isArray(data.students) ? data.students : [];
+function applyStudentsToLists(students) {
+  adminStudents = Array.isArray(students) ? students : [];
   if (studentList) studentList.innerHTML = '';
   if (viewUserStudentsList) viewUserStudentsList.innerHTML = '';
   if (pendenciaStudentsList) pendenciaStudentsList.innerHTML = '';
@@ -776,6 +753,40 @@ async function loadStudents() {
     studentNames.add(studentName);
   });
   updateViewUserAutocompleteOptions('');
+}
+
+async function loadStudents() {
+  if (!studentList && !viewUserStudentsList && !pendenciaStudentsList) return;
+
+  const bootStudents = Array.isArray(window.__adminStudents) ? window.__adminStudents : null;
+  if (bootStudents && bootStudents.length) {
+    applyStudentsToLists(bootStudents);
+    return;
+  }
+
+  let data = null;
+  try {
+    const res = await fetch('/api/students.php', {
+      headers: { Accept: 'application/json' },
+    });
+    try {
+      data = await res.json();
+    } catch {
+      data = null;
+    }
+    if (!res.ok || !data?.ok) {
+      console.error('[admin-dashboard] loadStudents falhou', {
+        status: res.status,
+        payload: data,
+      });
+      return;
+    }
+  } catch (error) {
+    console.error('[admin-dashboard] loadStudents erro de rede', error);
+    return;
+  }
+
+  applyStudentsToLists(data.students);
 }
 
 function tryAddStudentFromInput() {

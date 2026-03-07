@@ -12,12 +12,24 @@ if (!$isAdmin) {
 
 try {
     $client = new SupabaseClient(new HttpClient());
-    $result = $client->select(
-        'students',
-        'select=id,name,enrollment,grade,class_name&grade=in.(6,7,8)&active=eq.true&order=name.asc'
-    );
+    $queries = [
+        'select=id,name,enrollment,grade,class_name&grade=in.(6,7,8)&active=eq.true&order=name.asc&limit=10000',
+        'select=id,name,enrollment,grade,class_name&active=eq.true&order=name.asc&limit=10000',
+        'select=id,name,enrollment,grade,class_name&order=name.asc&limit=10000',
+        'select=id,name,enrollment,active&active=eq.true&order=name.asc&limit=10000',
+        'select=id,name,enrollment&order=name.asc&limit=10000',
+    ];
 
-    if (!($result['ok'] ?? false)) {
+    $result = null;
+    foreach ($queries as $query) {
+        $attempt = $client->select('students', $query);
+        if ($attempt['ok'] ?? false) {
+            $result = $attempt;
+            break;
+        }
+    }
+
+    if (!is_array($result) || !($result['ok'] ?? false)) {
         Helpers::json(['ok' => false, 'error' => 'Erro ao buscar alunos.'], 500);
     }
 
@@ -36,7 +48,7 @@ try {
             'name' => (string) ($row['name'] ?? ''),
             'enrollment' => $row['enrollment'] ?? null,
             'grade' => isset($row['grade']) ? (int) $row['grade'] : null,
-            'class_name' => $row['class_name'] ?? null,
+            'class_name' => $row['class_name'] ?? ($row['class'] ?? null),
         ];
     }
 
