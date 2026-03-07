@@ -455,6 +455,9 @@ $economy = max(0, $totalBase - $totalEffective);
     .finance-kpis{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
     .finance-pill{display:inline-block;padding:8px 12px;border-radius:999px;border:1px solid #e2e8f0;background:#f8fafc;font-size:13px}
     .discount-note{margin-top:10px;padding:12px 14px;border-radius:12px;background:#fff7db;border:1px solid #f4d37a;color:#5e4700;font-size:14px;line-height:1.5}
+    .status-badge{display:inline-flex;align-items:center;justify-content:center;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;line-height:1.2;border:1px solid transparent}
+    .status-paid{background:#e8f1ff;color:#1e4f9c;border-color:#c9dcff}
+    .status-pending{background:#fff1f1;color:#a13a3a;border-color:#f3caca}
   </style>
 </head>
 <body>
@@ -555,7 +558,15 @@ $economy = max(0, $totalBase - $totalEffective);
                         <span class="small" style="color:#1f6f38;">(com desconto)</span>
                       <?php endif; ?>
                     </td>
-                    <td><?php echo htmlspecialchars($row['status'], ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td>
+                      <?php
+                        $statusText = (string) ($row['status'] ?? '');
+                        $statusClass = strtolower(trim($statusText)) === 'pago' ? 'status-paid' : 'status-pending';
+                      ?>
+                      <span class="status-badge <?php echo $statusClass; ?>">
+                        <?php echo htmlspecialchars($statusText, ENT_QUOTES, 'UTF-8'); ?>
+                      </span>
+                    </td>
                   </tr>
                 <?php endforeach; ?>
               <?php endif; ?>
