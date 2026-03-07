@@ -44,6 +44,7 @@ const selectedStudents = new Set();
 const guardianCache = new Map();
 const studentNames = new Set();
 const studentLookupByLabel = new Map();
+const MIN_ADMIN_AUTOCOMPLETE_CHARS = 3;
 let adminStudents = [];
 
 function setActiveTab(name) {
@@ -277,6 +278,89 @@ function escapeHtml(value) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
+}
+
+function normalizeSearchText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function updateViewUserAutocompleteOptions(rawQuery) {
+  if (!viewUserStudentsList) return;
+  const query = normalizeSearchText(rawQuery);
+  viewUserStudentsList.innerHTML = '';
+  if (query.length < MIN_ADMIN_AUTOCOMPLETE_CHARS) return;
+
+  const seen = new Set();
+  const startsWith = [];
+  const contains = [];
+  adminStudents.forEach((student) => {
+    const name = String(student.name || '').trim();
+    if (!name) return;
+    const key = normalizeSearchText(name);
+    if (!key || seen.has(key)) return;
+    if (key.startsWith(query)) {
+      startsWith.push(name);
+      seen.add(key);
+      return;
+    }
+    if (key.includes(query)) {
+      contains.push(name);
+      seen.add(key);
+    }
+  });
+
+  [...startsWith, ...contains].slice(0, 40).forEach((name) => {
+    const option = document.createElement('option');
+    option.value = name;
+    viewUserStudentsList.appendChild(option);
+  });
+}
+
+function resolveStudentNameForAdmin(rawInput) {
+  const input = String(rawInput || '').trim();
+  if (!input) {
+    return { ok: false, error: 'Digite pelo menos 3 letras do nome do aluno.' };
+  }
+
+  if (studentNames.has(input)) {
+    return { ok: true, name: input };
+  }
+
+  const normalizedInput = normalizeSearchText(input);
+  if (normalizedInput.length < MIN_ADMIN_AUTOCOMPLETE_CHARS) {
+    return {
+      ok: false,
+      error: `Digite pelo menos ${MIN_ADMIN_AUTOCOMPLETE_CHARS} letras para buscar o aluno.`,
+    };
+  }
+
+  const candidates = [];
+  const seen = new Set();
+  adminStudents.forEach((student) => {
+    const name = String(student.name || '').trim();
+    if (!name) return;
+    const normalizedName = normalizeSearchText(name);
+    if (!normalizedName || seen.has(normalizedName)) return;
+    if (normalizedName.includes(normalizedInput)) {
+      candidates.push({ name, normalizedName });
+      seen.add(normalizedName);
+    }
+  });
+
+  if (!candidates.length) {
+    return { ok: false, error: 'Aluno não encontrado. Continue digitando para buscar.' };
+  }
+  if (candidates.length > 1) {
+    return {
+      ok: false,
+      error: 'Mais de um aluno encontrado. Selecione um nome da lista de autocomplete.',
+    };
+  }
+  return { ok: true, name: candidates[0].name };
 }
 
 function setCashflowMessage(text, isError = false) {
@@ -655,11 +739,6 @@ async function loadStudents() {
     const option = document.createElement('option');
     option.value = studentName;
     if (studentList) studentList.appendChild(option);
-    if (viewUserStudentsList) {
-      const optionView = document.createElement('option');
-      optionView.value = studentName;
-      viewUserStudentsList.appendChild(optionView);
-    }
     if (pendenciaStudentsList) {
       const gradeLabel = student.grade ? `${student.grade}º ano` : '';
       const classLabel = (student.class_name || '').trim();
@@ -677,6 +756,7 @@ async function loadStudents() {
     }
     studentNames.add(studentName);
   });
+  updateViewUserAutocompleteOptions('');
 }
 
 function tryAddStudentFromInput() {
@@ -2079,16 +2159,21 @@ if (viewUserButton && viewUserStudentInput) {
     }
   };
 
+  viewUserStudentInput.addEventListener('input', () => {
+    updateViewUserAutocompleteOptions(viewUserStudentInput.value);
+  });
+  viewUserStudentInput.addEventListener('focus', () => {
+    updateViewUserAutocompleteOptions(viewUserStudentInput.value);
+  });
+
   viewUserButton.addEventListener('click', async () => {
-    const studentName = viewUserStudentInput.value.trim();
-    if (!studentName) {
-      await showAdminAlert('Selecione um aluno para abrir o modo usuário.');
+    const resolved = resolveStudentNameForAdmin(viewUserStudentInput.value);
+    if (!resolved.ok) {
+      await showAdminAlert(resolved.error || 'Aluno não encontrado na lista.');
       return;
     }
-    if (!studentNames.has(studentName)) {
-      await showAdminAlert('Aluno não encontrado na lista.');
-      return;
-    }
+    const studentName = resolved.name;
+    viewUserStudentInput.value = studentName;
 
     viewUserButton.setAttribute('disabled', 'disabled');
     const originalText = viewUserButton.textContent;
@@ -2129,15 +2214,13 @@ if (viewUserButton && viewUserStudentInput) {
 
   if (addGuardianButton) {
     addGuardianButton.addEventListener('click', async () => {
-      const studentName = viewUserStudentInput.value.trim();
-      if (!studentName) {
-        await showAdminAlert('Selecione um aluno para cadastrar responsável.');
+      const resolved = resolveStudentNameForAdmin(viewUserStudentInput.value);
+      if (!resolved.ok) {
+        await showAdminAlert(resolved.error || 'Aluno não encontrado na lista.');
         return;
       }
-      if (!studentNames.has(studentName)) {
-        await showAdminAlert('Aluno não encontrado na lista.');
-        return;
-      }
+      const studentName = resolved.name;
+      viewUserStudentInput.value = studentName;
       showViewUserForm(studentName, 'create_more');
     });
   }

@@ -339,7 +339,7 @@ if (!empty($exclusionsLog)) {
       <div class="cta">
         <?php if ($canViewAsUser): ?>
           <div class="admin-view-user">
-            <input id="admin-view-user-student" list="admin-students-list" placeholder="Ver como aluno" autocomplete="off" />
+            <input id="admin-view-user-student" list="admin-students-list" placeholder="Digite 3 letras do aluno" autocomplete="off" />
             <datalist id="admin-students-list"></datalist>
             <button id="admin-view-user-btn" class="btn btn-ghost btn-sm" type="button">Ver como usuário</button>
             <button id="admin-add-guardian-btn" class="btn btn-ghost btn-sm" type="button">Criar mais um responsável</button>
@@ -1194,7 +1194,7 @@ if (!empty($exclusionsLog)) {
   </div>
 
   <script>window.__adminDashboardBooted = false;</script>
-  <script src="/assets/js/admin-dashboard.js?v=42"></script>
+  <script src="/assets/js/admin-dashboard.js?v=43"></script>
   <script>
     (function () {
       function activateTab(name) {
