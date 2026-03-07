@@ -74,21 +74,42 @@ if ($action === 'create_student') {
     if ($studentName === '') {
         Helpers::json(['ok' => false, 'error' => 'Informe o nome do aluno para incluir no banco.'], 422);
     }
-    if ($grade < 6 || $grade > 8) {
-        Helpers::json(['ok' => false, 'error' => 'Informe a série entre 6 e 8 para incluir o aluno.'], 422);
-    }
 
-    $existingResult = $client->select(
+    $existingByNameResult = $client->select(
         'students',
         'select=id,name,enrollment,grade,class_name,active&name=eq.' . urlencode($studentName)
-            . '&grade=eq.' . $grade
             . '&active=eq.true'
-            . '&limit=1'
+            . '&order=created_at.asc'
+            . '&limit=50'
     );
+    $existingByName = (($existingByNameResult['ok'] ?? false) && is_array($existingByNameResult['data'] ?? null))
+        ? $existingByNameResult['data']
+        : [];
 
-    if (($existingResult['ok'] ?? false) && !empty($existingResult['data'])) {
-        $studentRow = $existingResult['data'][0];
+    if ($grade < 6 || $grade > 8) {
+        if (count($existingByName) === 1) {
+            $studentRow = $existingByName[0];
+        } elseif (count($existingByName) > 1) {
+            Helpers::json([
+                'ok' => false,
+                'error' => 'Mais de um aluno com esse nome. Informe a série (6, 7 ou 8) para concluir o vínculo.',
+            ], 422);
+        } else {
+            Helpers::json(['ok' => false, 'error' => 'Informe a série entre 6 e 8 para incluir o aluno.'], 422);
+        }
     } else {
+        $matchByGrade = array_values(array_filter($existingByName, static function ($row) use ($grade): bool {
+            return (int) ($row['grade'] ?? 0) === $grade;
+        }));
+
+        if (count($matchByGrade) === 1) {
+            $studentRow = $matchByGrade[0];
+        } elseif (count($matchByGrade) > 1) {
+            Helpers::json([
+                'ok' => false,
+                'error' => 'Há mais de um aluno ativo com esse nome e série. Use "Mesclar com existente".',
+            ], 422);
+        } else {
         $insertResult = $client->insert('students', [[
             'name' => $studentName,
             'grade' => $grade,
@@ -102,6 +123,7 @@ if ($action === 'create_student') {
         }
         $studentRow = $insertResult['data'][0];
         $createdStudent = true;
+        }
     }
 }
 
