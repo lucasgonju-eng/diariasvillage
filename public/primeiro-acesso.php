@@ -71,7 +71,7 @@ foreach ($bootstrapCandidates as $bootstrapFile) {
             </div>
 
             <div class="form-group">
-              <button class="btn btn-ghost btn-sm" id="search-student" type="button">Buscar aluno(a)</button>
+              <button class="btn btn-primary btn-sm" id="search-student" type="button">Buscar Aluno</button>
             </div>
 
             <div class="form-group" id="student-confirm-wrap" style="display:none;">
