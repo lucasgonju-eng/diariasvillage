@@ -408,7 +408,7 @@ if (!empty($exclusionsLog)) {
 
       <section id="tab-entries" class="<?php echo $activeTab === 'entries' ? '' : 'hidden'; ?>">
         <h2>Entradas confirmadas</h2>
-        <p class="muted">Pagamentos confirmados e liberados para entrada.</p>
+        <p class="muted">Apenas conferência de day-use criado e pago corretamente.</p>
 
         <div style="overflow-x:auto;">
           <table class="admin-table">
@@ -427,7 +427,7 @@ if (!empty($exclusionsLog)) {
             <tbody>
               <?php if (empty($payments) && empty($pendenciasPagas)): ?>
                 <tr>
-                  <td colspan="8">Nenhuma entrada confirmada ainda.</td>
+                  <td colspan="8">Nenhuma entrada confirmada para conferência.</td>
                 </tr>
               <?php else: ?>
                 <?php foreach ($payments as $payment): ?>
@@ -622,7 +622,7 @@ if (!empty($exclusionsLog)) {
         <h2>Cobranças recebidas</h2>
         <p class="muted">Apenas conferência de cobranças pagas e regularizadas.</p>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
-          <button id="sync-recebidas-btn" class="btn btn-primary btn-sm" type="button">Atualizar recebidas no Asaas</button>
+          <button id="sync-recebidas-btn" class="btn btn-primary btn-sm" type="button">Atualizar conferência no Asaas</button>
           <div id="sync-recebidas-message" class="charge-message"></div>
         </div>
 
@@ -684,7 +684,7 @@ if (!empty($exclusionsLog)) {
 
       <section id="tab-sem-whatsapp" class="<?php echo $activeTab === 'sem-whatsapp' ? '' : 'hidden'; ?>">
         <h2>Responsáveis sem WhatsApp</h2>
-        <p class="muted">Lista de responsáveis sem celular cadastrado.</p>
+        <p class="muted">Aba de auditoria (somente conferência) para responsáveis sem celular cadastrado.</p>
 
         <div style="overflow-x:auto;">
           <table class="admin-table">
@@ -699,7 +699,7 @@ if (!empty($exclusionsLog)) {
             <tbody>
               <?php if (empty($missingWhatsapp)): ?>
                 <tr>
-                  <td colspan="4">Nenhum responsável pendente.</td>
+                  <td colspan="4">Nenhum responsável sem WhatsApp no momento.</td>
                 </tr>
               <?php else: ?>
                 <?php foreach ($missingWhatsapp as $guardian): ?>
@@ -1027,7 +1027,7 @@ if (!empty($exclusionsLog)) {
 
       <section id="tab-fluxo-caixa" class="<?php echo $activeTab === 'fluxo-caixa' ? '' : 'hidden'; ?>">
         <h2>Fluxo de Caixa</h2>
-        <p class="muted">Consolidação de pagamentos para conferência com planilha offline.</p>
+        <p class="muted">Visão operacional para conferência financeira com planilha offline.</p>
 
         <div class="cashflow-filters">
           <div class="form-group">
@@ -1118,7 +1118,7 @@ if (!empty($exclusionsLog)) {
           <h2 style="margin:0;">Dados do Asaas</h2>
           <button id="asaas-data-refresh" class="btn btn-primary btn-sm" type="button">Atualizar direto do Asaas</button>
         </div>
-        <p class="muted">Dados carregados diretamente do Asaas, separados por pagos, pendentes e vencidos.</p>
+        <p class="muted">Aba separada de conferência direta no Asaas (não altera dados locais).</p>
         <div id="asaas-data-message" class="charge-message"></div>
         <div id="asaas-data-summary" class="cashflow-summary"></div>
 

@@ -715,7 +715,7 @@ if (sendSelectedPendingButton) {
       .filter(Boolean);
 
     if (!selected.length) {
-      showSendPendingMessage('Selecione ao menos uma cobrança pendente da fila.', true);
+      showSendPendingMessage('Selecione ao menos uma cobrança da fila de envio.', true);
       return;
     }
 
@@ -732,13 +732,13 @@ if (sendSelectedPendingButton) {
       });
       const data = await res.json();
       if (!res.ok || !data?.ok) {
-        showSendPendingMessage(data?.error || 'Falha ao enviar cobranças pendentes.', true);
+        showSendPendingMessage(data?.error || 'Falha ao enviar cobranças da fila.', true);
         return;
       }
       showSendPendingMessage('Cobranças da fila enviadas com sucesso.');
       window.location.reload();
     } catch {
-      showSendPendingMessage('Falha ao enviar cobranças pendentes.', true);
+      showSendPendingMessage('Falha ao enviar cobranças da fila.', true);
     } finally {
       sendSelectedPendingButton.removeAttribute('disabled');
       sendSelectedPendingButton.textContent = originalText;
