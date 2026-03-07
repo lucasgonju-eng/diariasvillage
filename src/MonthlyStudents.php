@@ -6,7 +6,18 @@ class MonthlyStudents
 {
     public static function storagePath(): string
     {
-        return dirname(__DIR__) . DIRECTORY_SEPARATOR . 'monthly_students.json';
+        $projectRoot = dirname(__DIR__);
+        $preferred = $projectRoot . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'monthly_students.json';
+        $legacy = $projectRoot . DIRECTORY_SEPARATOR . 'monthly_students.json';
+
+        if (is_file($preferred)) {
+            return $preferred;
+        }
+        if (is_file($legacy)) {
+            return $legacy;
+        }
+
+        return $preferred;
     }
 
     /**
@@ -96,7 +107,14 @@ class MonthlyStudents
         }
 
         $path = self::storagePath();
-        return @file_put_contents($path, $json . PHP_EOL) !== false;
+        $dir = dirname($path);
+        if (!is_dir($dir)) {
+            if (!@mkdir($dir, 0775, true) && !is_dir($dir)) {
+                return false;
+            }
+        }
+
+        return @file_put_contents($path, $json . PHP_EOL, LOCK_EX) !== false;
     }
 
     /**
