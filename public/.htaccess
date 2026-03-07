@@ -9,6 +9,9 @@ Options -Indexes
 <IfModule mod_rewrite.c>
     RewriteEngine On
     RewriteBase /
+    # Redirecionamento temporário do domínio antigo para o novo.
+    RewriteCond %{HTTP_HOST} ^(www\.)?village\.einsteinhub\.co$ [NC]
+    RewriteRule ^ https://diarias.village.einsteinhub.co%{REQUEST_URI} [L,R=302]
     RewriteCond %{HTTPS} off
     RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
     RewriteRule ^diaria/([^/]+)/grade-oficina-modular/?$ diaria-grade-oficina-modular.php?diariaId=$1 [L,QSA]
