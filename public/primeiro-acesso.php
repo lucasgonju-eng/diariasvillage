@@ -42,8 +42,8 @@ foreach ($bootstrapCandidates as $bootstrapFile) {
           <div class="pill">Primeiro acesso</div>
           <h1>Ative o acesso em poucos minutos.</h1>
           <p class="lead">
-            Informe o CPF do responsável, seu e-mail e crie uma senha. O sistema validará
-            o CPF e enviará um e-mail de confirmação.
+            Informe o CPF do responsável e o nome completo do aluno(a). O sistema busca por semelhança,
+            pede confirmação dos dados e conclui o cadastro com e-mail e senha.
           </p>
 
           <div class="microchips" role="list">
@@ -55,7 +55,7 @@ foreach ($bootstrapCandidates as $bootstrapFile) {
 
         <aside class="hero-card" aria-label="Cadastro do responsável">
           <h3>Cadastro do responsável</h3>
-          <p class="muted">CPF, matrícula do aluno(a), e-mail e senha.</p>
+          <p class="muted">CPF, nome do aluno(a), e-mail e senha.</p>
 
           <form id="register-form">
             <div class="form-group">
@@ -65,9 +65,20 @@ foreach ($bootstrapCandidates as $bootstrapFile) {
             </div>
 
             <div class="form-group">
-              <label>Matrícula do aluno(a)</label>
-              <input type="text" id="enrollment" placeholder="Ex.: 12345" required />
-              <div class="small">Usamos a matrícula para validar o vínculo do CPF com o aluno(a).</div>
+              <label>Nome completo do aluno(a)</label>
+              <input type="text" id="student-name" placeholder="Digite o nome completo" autocomplete="off" required />
+              <div class="small">Buscaremos por semelhança e pediremos confirmação antes de concluir.</div>
+            </div>
+
+            <div class="form-group">
+              <button class="btn btn-ghost btn-sm" id="search-student" type="button">Buscar aluno(a)</button>
+            </div>
+
+            <div class="form-group" id="student-confirm-wrap" style="display:none;">
+              <label>Confira os dados antes de concluir o cadastro</label>
+              <select id="student-candidate" required></select>
+              <input type="hidden" id="student-id" />
+              <div class="small" id="student-confirm-details" style="margin-top:6px;"></div>
             </div>
 
             <div class="form-group">
@@ -140,8 +151,8 @@ foreach ($bootstrapCandidates as $bootstrapFile) {
           <div class="step">
             <div class="step-n">1</div>
             <div>
-              <div class="step-t">Informe CPF e matrícula do aluno(a)</div>
-              <div class="muted">Os dados devem corresponder ao vínculo cadastrado.</div>
+              <div class="step-t">Informe CPF e nome do aluno(a)</div>
+              <div class="muted">Confirme nome, série, turma e matrícula antes de concluir.</div>
             </div>
           </div>
           <div class="step">

@@ -5,6 +5,14 @@ const pendingForm = document.querySelector('#pending-form');
 const pendingMessage = document.querySelector('#pending-message');
 const cpfInput = document.querySelector('#cpf');
 const pendingCpfInput = document.querySelector('#pending-cpf');
+const studentNameInput = document.querySelector('#student-name');
+const searchStudentButton = document.querySelector('#search-student');
+const studentConfirmWrap = document.querySelector('#student-confirm-wrap');
+const studentCandidateSelect = document.querySelector('#student-candidate');
+const studentConfirmDetails = document.querySelector('#student-confirm-details');
+const studentIdInput = document.querySelector('#student-id');
+
+let studentCandidates = [];
 
 function applyCpfMask(value) {
   const digits = value.replace(/\D/g, '').slice(0, 11);
@@ -15,9 +23,125 @@ function applyCpfMask(value) {
   return masked;
 }
 
+function sanitizeDigits(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function resetStudentConfirmation() {
+  studentCandidates = [];
+  if (studentConfirmWrap) studentConfirmWrap.style.display = 'none';
+  if (studentCandidateSelect) studentCandidateSelect.innerHTML = '';
+  if (studentConfirmDetails) studentConfirmDetails.textContent = '';
+  if (studentIdInput) studentIdInput.value = '';
+}
+
+function candidateLabel(candidate) {
+  const serie = candidate.grade ? `${candidate.grade}º ano` : 'Série não informada';
+  const turma = candidate.class_name || 'Turma não informada';
+  const matricula = candidate.enrollment || 'Matrícula não informada';
+  return `${candidate.name} • ${serie} • ${turma} • Matrícula ${matricula}`;
+}
+
+function updateStudentDetailsBySelectedOption() {
+  if (!studentCandidateSelect || !studentConfirmDetails || !studentIdInput) return;
+  const idx = Number(studentCandidateSelect.value);
+  const candidate = Number.isInteger(idx) ? studentCandidates[idx] : null;
+  if (!candidate) {
+    studentConfirmDetails.textContent = '';
+    studentIdInput.value = '';
+    return;
+  }
+  studentIdInput.value = candidate.id || '';
+  const serie = candidate.grade ? `${candidate.grade}º ano` : 'Série não informada';
+  const turma = candidate.class_name || 'Turma não informada';
+  const matricula = candidate.enrollment || 'Matrícula não informada';
+  studentConfirmDetails.textContent = `Nome: ${candidate.name} | Série: ${serie} | Turma: ${turma} | Matrícula: ${matricula}`;
+}
+
+async function searchStudentsForFirstAccess() {
+  if (!cpfInput || !studentNameInput) return;
+  const cpfDigits = sanitizeDigits(cpfInput.value);
+  const studentName = studentNameInput.value.trim();
+  if (cpfDigits.length !== 11) {
+    resetStudentConfirmation();
+    if (message) {
+      message.textContent = 'Informe um CPF válido antes de buscar o aluno(a).';
+      message.className = 'error';
+    }
+    return;
+  }
+  if (studentName.length < 3) {
+    resetStudentConfirmation();
+    if (message) {
+      message.textContent = 'Digite pelo menos 3 letras do nome do aluno(a).';
+      message.className = 'error';
+    }
+    return;
+  }
+
+  if (searchStudentButton) {
+    searchStudentButton.disabled = true;
+    searchStudentButton.textContent = 'Buscando...';
+  }
+  if (message) {
+    message.textContent = '';
+    message.className = '';
+  }
+
+  try {
+    const res = await fetch('/api/primeiro-acesso-students.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cpf: cpfInput.value.trim(), student_name: studentName }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok || !Array.isArray(data.candidates)) {
+      resetStudentConfirmation();
+      if (message) {
+        message.textContent = (data && data.error) ? data.error : 'Não foi possível buscar os dados do aluno(a).';
+        message.className = 'error';
+      }
+      return;
+    }
+    studentCandidates = data.candidates;
+    if (!studentCandidates.length) {
+      resetStudentConfirmation();
+      if (message) {
+        message.textContent = 'Nenhum aluno(a) encontrado com esse CPF e nome. Revise os dados.';
+        message.className = 'error';
+      }
+      return;
+    }
+    if (studentCandidateSelect) {
+      studentCandidateSelect.innerHTML = studentCandidates
+        .map((candidate, idx) => `<option value="${idx}">${candidateLabel(candidate)}</option>`)
+        .join('');
+      studentCandidateSelect.value = '0';
+    }
+    if (studentConfirmWrap) studentConfirmWrap.style.display = 'block';
+    updateStudentDetailsBySelectedOption();
+    if (message) {
+      message.textContent = 'Confira os dados do aluno(a) antes de concluir o cadastro.';
+      message.className = 'success';
+    }
+  } catch (error) {
+    resetStudentConfirmation();
+    if (message) {
+      message.textContent = 'Erro ao buscar aluno(a). Tente novamente.';
+      message.className = 'error';
+    }
+  } finally {
+    if (searchStudentButton) {
+      searchStudentButton.disabled = false;
+      searchStudentButton.textContent = 'Buscar aluno(a)';
+    }
+  }
+}
+
 if (cpfInput) {
   cpfInput.addEventListener('input', (event) => {
     event.target.value = applyCpfMask(event.target.value);
+    resetStudentConfirmation();
   });
 }
 
@@ -25,6 +149,22 @@ if (pendingCpfInput) {
   pendingCpfInput.addEventListener('input', (event) => {
     event.target.value = applyCpfMask(event.target.value);
   });
+}
+
+if (studentNameInput) {
+  studentNameInput.addEventListener('input', () => {
+    resetStudentConfirmation();
+  });
+}
+
+if (searchStudentButton) {
+  searchStudentButton.addEventListener('click', () => {
+    searchStudentsForFirstAccess();
+  });
+}
+
+if (studentCandidateSelect) {
+  studentCandidateSelect.addEventListener('change', updateStudentDetailsBySelectedOption);
 }
 
 if (form) {
@@ -46,11 +186,20 @@ if (form) {
     try {
       const payload = {
         cpf: document.querySelector('#cpf').value.trim(),
-        enrollment: document.querySelector('#enrollment').value.trim(),
+        student_id: document.querySelector('#student-id').value.trim(),
         email: document.querySelector('#email').value.trim(),
         password: document.querySelector('#password').value,
         password_confirm: document.querySelector('#password-confirm').value,
       };
+      if (!payload.student_id) {
+        message.textContent = 'Busque e confirme o aluno(a) antes de criar a conta.';
+        message.className = 'error';
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = btnOriginalText;
+        }
+        return;
+      }
 
       const res = await fetch('/api/register-primeiro-acesso.php', {
         method: 'POST',

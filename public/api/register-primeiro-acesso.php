@@ -20,13 +20,13 @@ Helpers::requirePost();
 $payload = json_decode(file_get_contents('php://input'), true);
 
 $cpf = trim($payload['cpf'] ?? '');
-$enrollment = trim((string) ($payload['enrollment'] ?? ''));
+$studentIdInput = trim((string) ($payload['student_id'] ?? ''));
 $email = trim($payload['email'] ?? '');
 $password = $payload['password'] ?? '';
 $passwordConfirm = $payload['password_confirm'] ?? '';
 
-if ($cpf === '' || $enrollment === '' || $email === '' || $password === '') {
-    Helpers::json(['ok' => false, 'error' => 'Preencha CPF, matrícula do aluno(a), e-mail e senha.'], 422);
+if ($cpf === '' || $studentIdInput === '' || $email === '' || $password === '') {
+    Helpers::json(['ok' => false, 'error' => 'Preencha CPF, aluno(a), e-mail e senha.'], 422);
 }
 
 if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -45,10 +45,10 @@ if (strlen($cpfDigits) !== 11) {
 $client = new SupabaseClient(new HttpClient());
 $studentResult = $client->select(
     'students',
-    'select=id,name,enrollment,active&enrollment=eq.' . urlencode($enrollment) . '&limit=1'
+    'select=id,name,enrollment,active&id=eq.' . urlencode($studentIdInput) . '&limit=1'
 );
 if (!$studentResult['ok'] || empty($studentResult['data'])) {
-    Helpers::json(['ok' => false, 'error' => 'Matrícula não encontrada.'], 404);
+    Helpers::json(['ok' => false, 'error' => 'Aluno(a) não encontrado. Refaça a busca e confirmação.'], 404);
 }
 $student = $studentResult['data'][0];
 if (!(bool) ($student['active'] ?? true)) {
