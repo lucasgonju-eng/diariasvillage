@@ -155,6 +155,10 @@ if ($date === $today) {
     $amount = $plannedAmount;
 }
 
+// Ajuste temporário para teste de compra real.
+// REMOVER após validar o fluxo de pagamento.
+$amount = 5.00;
+
 $asaas = new AsaasClient(new HttpClient());
 $portalLink = Helpers::baseUrl() ?: 'https://diarias.village.einsteinhub.co';
 $successUrl = $portalLink . '/pagamento-retorno.php?diariaId=' . rawurlencode($diariaId);
@@ -558,7 +562,7 @@ $template = <<<'HTML'
                 </div>
 
                 <div style="margin-top:16px;font-size:12px;line-height:1.6;color:#556070;">
-                  Dica: o sistema aplica automaticamente a regra do valor conforme o horário do pagamento.
+                  Dica: valor temporário de teste aplicado nesta cobrança.
                 </div>
 
               </div>
