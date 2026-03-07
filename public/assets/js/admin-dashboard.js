@@ -919,7 +919,7 @@ async function syncMonthlyStudents(action) {
   setMonthlyMessage(action === 'set' ? 'Salvando mensalista...' : 'Removendo mensalista...');
 
   try {
-    const res = await fetch('/api/admin-monthly-students.php', {
+    const res = await fetch('/api/admin-mensalistas.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

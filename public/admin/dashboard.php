@@ -1377,7 +1377,7 @@ if (!empty($exclusionsLog)) {
     window.__adminStudents = <?php echo json_encode($studentsForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
     window.__monthlyStudents = <?php echo json_encode($monthlyRowsForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
   </script>
-  <script src="/assets/js/admin-dashboard.js?v=46"></script>
+  <script src="/assets/js/admin-dashboard.js?v=47"></script>
   <script>
     (function () {
       function activateTab(name) {
