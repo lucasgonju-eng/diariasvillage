@@ -1453,6 +1453,30 @@ function findPendenciaRow(id) {
   return document.querySelector(`[data-pendencia-id="${id}"]`);
 }
 
+function ensurePendenciasEmptyState() {
+  const tbody = document.querySelector('#tab-pendencias tbody');
+  if (!tbody) return;
+  const rows = tbody.querySelectorAll('tr[data-pendencia-id]');
+  if (rows.length > 0) return;
+  tbody.innerHTML = '<tr><td colspan="11">Nenhuma pendência registrada.</td></tr>';
+}
+
+function removePendenciaRowsByIds(ids) {
+  const uniqueIds = Array.from(new Set((Array.isArray(ids) ? ids : []).map((id) => String(id || '').trim()).filter(Boolean)));
+  let removed = 0;
+  uniqueIds.forEach((id) => {
+    const row = findPendenciaRow(id);
+    if (row) {
+      row.remove();
+      removed += 1;
+    }
+  });
+  if (removed > 0) {
+    ensurePendenciasEmptyState();
+  }
+  return removed;
+}
+
 function updatePendenciaRow(row, data) {
   if (!row) return;
   const paidCell = row.querySelector('[data-col="paid-at"]');
@@ -1916,10 +1940,18 @@ pendenciaLinkStudentButtons.forEach((button) => {
         }
         return;
       }
-      renderPendenciaStudentLink(row, data.student || found.student);
+      const linkedIds = Array.isArray(data?.linked_pendencia_ids) && data.linked_pendencia_ids.length
+        ? data.linked_pendencia_ids
+        : [pendenciaId];
+      const removedRows = removePendenciaRowsByIds(linkedIds);
+      if (removedRows === 0) {
+        renderPendenciaStudentLink(row, data.student || found.student);
+      }
       if (lookupInput) lookupInput.value = '';
       if (pendenciaMessage) {
-        pendenciaMessage.textContent = 'Pendência mesclada com aluno existente.';
+        pendenciaMessage.textContent = removedRows > 1
+          ? `Pendências vinculadas e removidas da lista: ${removedRows}.`
+          : 'Pendência mesclada com aluno existente e removida da lista.';
         pendenciaMessage.className = 'charge-message success';
       }
     } catch {
@@ -1992,7 +2024,13 @@ pendenciaCreateStudentButtons.forEach((button) => {
 
       const student = data.student || null;
       if (student) {
-        renderPendenciaStudentLink(row, student);
+        const linkedIds = Array.isArray(data?.linked_pendencia_ids) && data.linked_pendencia_ids.length
+          ? data.linked_pendencia_ids
+          : [pendenciaId];
+        const removedRows = removePendenciaRowsByIds(linkedIds);
+        if (removedRows === 0) {
+          renderPendenciaStudentLink(row, student);
+        }
         const newName = String(student.name || '').trim();
         if (newName && !studentNames.has(newName)) {
           studentNames.add(newName);
@@ -2026,9 +2064,16 @@ pendenciaCreateStudentButtons.forEach((button) => {
       }
 
       if (pendenciaMessage) {
-        pendenciaMessage.textContent = data.created_student
-          ? 'Aluno incluído no banco e pendência vinculada com sucesso.'
-          : 'Aluno já existia no banco e a pendência foi vinculada.';
+        const linkedCount = Array.isArray(data?.linked_pendencia_ids) ? data.linked_pendencia_ids.length : 1;
+        if (data.created_student) {
+          pendenciaMessage.textContent = linkedCount > 1
+            ? `Aluno incluído e ${linkedCount} pendências vinculadas/removidas da lista.`
+            : 'Aluno incluído no banco e pendência vinculada/removida da lista.';
+        } else {
+          pendenciaMessage.textContent = linkedCount > 1
+            ? `${linkedCount} pendências vinculadas ao aluno existente e removidas da lista.`
+            : 'Aluno já existia no banco e a pendência foi vinculada/removida da lista.';
+        }
         pendenciaMessage.className = 'charge-message success';
       }
     } catch {

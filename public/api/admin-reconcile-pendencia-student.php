@@ -1,5 +1,14 @@
 <?php
-require_once dirname(__DIR__, 2) . '/src/Bootstrap.php';
+$bootstrapCandidates = [
+    __DIR__ . '/../src/Bootstrap.php',
+    dirname(__DIR__, 2) . '/src/Bootstrap.php',
+];
+foreach ($bootstrapCandidates as $bootstrapFile) {
+    if (is_file($bootstrapFile)) {
+        require_once $bootstrapFile;
+        break;
+    }
+}
 
 use App\Helpers;
 use App\HttpClient;
@@ -25,7 +34,7 @@ if (!in_array($action, ['link_existing', 'create_student'], true)) {
 $client = new SupabaseClient(new HttpClient());
 $pendenciaResult = $client->select(
     'pendencia_de_cadastro',
-    'select=id,student_name,student_id,enrollment&id=eq.' . urlencode($pendenciaId) . '&limit=1'
+    'select=id,student_name,student_id,enrollment,guardian_cpf,guardian_email,paid_at&id=eq.' . urlencode($pendenciaId) . '&limit=1'
 );
 
 if (!($pendenciaResult['ok'] ?? false) || empty($pendenciaResult['data'])) {
@@ -117,11 +126,81 @@ if (!($updateResult['ok'] ?? false)) {
     Helpers::json(['ok' => false, 'error' => 'Falha ao atualizar pendência com o aluno selecionado.'], 500);
 }
 
+$linkedPendenciaIds = [$pendenciaId];
+$studentNameOriginal = trim((string) ($pendenciaRow['student_name'] ?? ''));
+$guardianCpfRaw = trim((string) ($pendenciaRow['guardian_cpf'] ?? ''));
+$guardianCpfDigits = preg_replace('/\D+/', '', $guardianCpfRaw) ?? '';
+$guardianEmail = trim((string) ($pendenciaRow['guardian_email'] ?? ''));
+$relatedQueries = [];
+
+if ($studentNameOriginal !== '') {
+    if ($guardianCpfDigits !== '') {
+        $relatedQueries[] = 'select=id'
+            . '&student_name=eq.' . urlencode($studentNameOriginal)
+            . '&guardian_cpf=ilike.' . urlencode('*' . $guardianCpfDigits . '*')
+            . '&paid_at=is.null'
+            . '&student_id=is.null'
+            . '&id=neq.' . urlencode($pendenciaId)
+            . '&limit=200';
+        if ($guardianCpfRaw !== '' && $guardianCpfRaw !== $guardianCpfDigits) {
+            $relatedQueries[] = 'select=id'
+                . '&student_name=eq.' . urlencode($studentNameOriginal)
+                . '&guardian_cpf=eq.' . urlencode($guardianCpfRaw)
+                . '&paid_at=is.null'
+                . '&student_id=is.null'
+                . '&id=neq.' . urlencode($pendenciaId)
+                . '&limit=200';
+        }
+    }
+    if ($guardianEmail !== '') {
+        $relatedQueries[] = 'select=id'
+            . '&student_name=eq.' . urlencode($studentNameOriginal)
+            . '&guardian_email=eq.' . urlencode($guardianEmail)
+            . '&paid_at=is.null'
+            . '&student_id=is.null'
+            . '&id=neq.' . urlencode($pendenciaId)
+            . '&limit=200';
+    }
+}
+
+$relatedIds = [];
+foreach ($relatedQueries as $query) {
+    $relatedResult = $client->select('pendencia_de_cadastro', $query);
+    if (!($relatedResult['ok'] ?? false) || empty($relatedResult['data'])) {
+        continue;
+    }
+    foreach ($relatedResult['data'] as $relatedRow) {
+        $relatedId = trim((string) ($relatedRow['id'] ?? ''));
+        if ($relatedId !== '') {
+            $relatedIds[$relatedId] = true;
+        }
+    }
+}
+
+if (!empty($relatedIds)) {
+    $bulkPayload = [
+        'student_id' => $studentRow['id'],
+        'student_name' => $studentNameFinal,
+        'enrollment' => $enrollmentFinal,
+    ];
+    foreach (array_keys($relatedIds) as $relatedId) {
+        $bulkUpdate = $client->update(
+            'pendencia_de_cadastro',
+            'id=eq.' . urlencode($relatedId),
+            $bulkPayload
+        );
+        if ($bulkUpdate['ok'] ?? false) {
+            $linkedPendenciaIds[] = $relatedId;
+        }
+    }
+}
+
 Helpers::json([
     'ok' => true,
     'action' => $action,
     'created_student' => $createdStudent,
     'pendencia_id' => $pendenciaId,
+    'linked_pendencia_ids' => array_values(array_unique($linkedPendenciaIds)),
     'student' => [
         'id' => (string) ($studentRow['id'] ?? ''),
         'name' => $studentNameFinal,

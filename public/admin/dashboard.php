@@ -141,7 +141,7 @@ if (!($pendenciasResult['ok'] ?? false)) {
 $pendenciasAll = $pendenciasResult['data'] ?? [];
 $pendenciasPagas = array_filter($pendenciasAll, fn($p) => !empty($p['paid_at']));
 $pendencias = array_values(array_filter($pendenciasAll, static function ($p): bool {
-    return empty($p['paid_at']);
+    return empty($p['paid_at']) && empty($p['student_id']);
 }));
 $valorPendencia = 77.00;
 
@@ -1377,7 +1377,7 @@ if (!empty($exclusionsLog)) {
     window.__adminStudents = <?php echo json_encode($studentsForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
     window.__monthlyStudents = <?php echo json_encode($monthlyRowsForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
   </script>
-  <script src="/assets/js/admin-dashboard.js?v=47"></script>
+  <script src="/assets/js/admin-dashboard.js?v=48"></script>
   <script>
     (function () {
       function activateTab(name) {
