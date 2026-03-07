@@ -127,8 +127,10 @@ if (!$createResult['ok']) {
             'email_confirm' => true,
         ]);
         if (!$updateResult['ok']) {
-            $upErr = $updateResult['data']['message'] ?? $updateResult['error'] ?? 'Falha ao atualizar senha.';
-            Helpers::json(['ok' => false, 'error' => $upErr], 500);
+            // Em alguns ambientes, a API de update pode falhar para usuários legados.
+            // Seguimos com atualização local (guardians) para não bloquear o primeiro acesso.
+            $upErr = $updateResult['data']['message'] ?? $updateResult['error'] ?? 'Falha ao atualizar senha no Auth.';
+            error_log('register-primeiro-acesso: updateUser falhou para email ' . $email . ' - ' . (string) $upErr);
         }
     } else {
         Helpers::json(['ok' => false, 'error' => $errorMsg ?: 'Falha ao criar conta. Tente novamente.'], 500);
@@ -141,6 +143,7 @@ $updateGuardian = $client->update(
     'parent_document=eq.' . urlencode($cpfDigits),
     [
         'email' => $email,
+        'password_hash' => password_hash($password, PASSWORD_DEFAULT),
         'verified_at' => date('c'),
     ]
 );
