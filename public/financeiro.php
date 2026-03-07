@@ -205,7 +205,7 @@ if (!empty($guardianIds)) {
 }
 
 $payments = [];
-$paymentColumns = 'select=id,student_id,payment_date,daily_type,amount,status,paid_at,created_at,guardian_id';
+$paymentColumns = 'select=id,student_id,payment_date,daily_type,amount,status,billing_type,paid_at,created_at,guardian_id';
 $paymentsById = [];
 $appendPayments = static function (array $rows) use (&$payments, &$paymentsById): void {
     foreach ($rows as $row) {
@@ -290,6 +290,18 @@ $rows = [];
 $totalBase = 0.0;
 $totalEffective = 0.0;
 foreach ($payments as $payment) {
+    $statusRaw = strtolower(trim((string) ($payment['status'] ?? '')));
+    $paidAtRaw = trim((string) ($payment['paid_at'] ?? ''));
+    $isReceived = $statusRaw === 'paid';
+    $isOpen = $paidAtRaw === '' && !in_array($statusRaw, ['paid', 'canceled', 'refunded', 'deleted'], true);
+
+    // Espelha a regra do Admin:
+    // - Cobranças recebidas: status paid
+    // - Cobranças em aberto: não pagas e sem status de exclusão/cancelamento
+    if (!$isReceived && !$isOpen) {
+        continue;
+    }
+
     $student = $studentsById[(string) ($payment['student_id'] ?? '')] ?? [];
     $studentName = trim((string) ($student['name'] ?? 'Aluno'));
     $paymentDate = date_key((string) ($payment['payment_date'] ?? ''));
@@ -307,8 +319,7 @@ foreach ($payments as $payment) {
     if (empty($dates)) {
         $dates = [''];
     }
-    $statusRaw = strtolower((string) ($payment['status'] ?? 'pending'));
-    $statusLabel = $statusRaw === 'paid' ? 'Pago' : 'Pendente';
+    $statusLabel = $isReceived ? 'Pago' : 'Pendente';
     $statusRank = $statusRaw === 'paid' ? 2 : 1;
     $createdAtRaw = (string) ($payment['created_at'] ?? '');
 
