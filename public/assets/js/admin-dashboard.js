@@ -731,12 +731,50 @@ if (sendSelectedPendingButton) {
         body: JSON.stringify({ payment_ids: selected }),
       });
       const data = await res.json();
-      if (!res.ok || !data?.ok) {
+      const results = Array.isArray(data?.results) ? data.results : [];
+      const successIds = results
+        .filter((row) => row && row.ok && row.id)
+        .map((row) => String(row.id));
+      const failures = results.filter((row) => row && !row.ok);
+
+      if (!res.ok && !successIds.length) {
         showSendPendingMessage(data?.error || 'Falha ao enviar cobranças da fila.', true);
         return;
       }
-      showSendPendingMessage('Cobranças da fila enviadas com sucesso.');
-      window.location.reload();
+
+      successIds.forEach((paymentId) => {
+        const row = document.querySelector(`.inadimplente-row[data-payment-id="${paymentId}"]`);
+        if (!row) return;
+
+        const firstCell = row.querySelector('td');
+        if (firstCell) {
+          firstCell.textContent = '-';
+        }
+        const statusCell = row.children?.[6];
+        if (statusCell) {
+          statusCell.textContent = 'Aguardando pagamento';
+        }
+      });
+
+      if (selectAllPendingInput) {
+        selectAllPendingInput.checked = false;
+      }
+
+      if (successIds.length && failures.length) {
+        const firstError = failures[0]?.error || 'Erro em parte dos envios.';
+        showSendPendingMessage(
+          `${successIds.length} cobrança(s) enviada(s). ${failures.length} com erro: ${firstError}`,
+          true,
+        );
+        return;
+      }
+
+      if (successIds.length) {
+        showSendPendingMessage('Cobranças da fila enviadas com sucesso. Tabela atualizada sem recarregar a página.');
+        return;
+      }
+
+      showSendPendingMessage(data?.error || 'Falha ao enviar cobranças da fila.', true);
     } catch {
       showSendPendingMessage('Falha ao enviar cobranças da fila.', true);
     } finally {
@@ -882,10 +920,9 @@ if (syncRecebidasButton) {
       }
       const summary = data.summary || {};
       if (syncRecebidasMessage) {
-        syncRecebidasMessage.textContent = `Atualização concluída. Locais promovidos para pago: ${summary.payments_promoted_paid || 0}. Pendências locais movidas para pagas: ${summary.pendencias_promoted_paid || 0}. Asaas varrido: ${summary.asaas_scanned_total || 0}. Pagos encontrados: ${summary.asaas_paid_found || 0}. Importados em payments: ${summary.asaas_paid_imported_payments || 0}. Importados em recebidas (pendências pagas): ${summary.asaas_paid_imported_pendencias || 0}. Não mapeados: ${summary.asaas_paid_unmapped || 0}.`;
+        syncRecebidasMessage.textContent = `Atualização concluída. Locais promovidos para pago: ${summary.payments_promoted_paid || 0}. Pendências locais movidas para pagas: ${summary.pendencias_promoted_paid || 0}. Asaas varrido: ${summary.asaas_scanned_total || 0}. Pagos encontrados: ${summary.asaas_paid_found || 0}. Importados em payments: ${summary.asaas_paid_imported_payments || 0}. Importados em recebidas (pendências pagas): ${summary.asaas_paid_imported_pendencias || 0}. Não mapeados: ${summary.asaas_paid_unmapped || 0}. Recarregue a página quando quiser refletir tudo na tabela.`;
         syncRecebidasMessage.className = 'charge-message success';
       }
-      setTimeout(() => window.location.reload(), 900);
     } catch {
       if (syncRecebidasMessage) {
         syncRecebidasMessage.textContent = 'Falha ao atualizar cobrancas recebidas.';
@@ -1650,10 +1687,9 @@ if (syncChargesPaymentsButton) {
 
       const summary = data.summary || {};
       if (syncChargesPaymentsMessage) {
-        syncChargesPaymentsMessage.textContent = `Sincronização concluída. Duplicidades em pendências (mesmo dia): ${summary.duplicate_dayuse_detected || 0}, removidas: ${summary.pendencias_removed_duplicate_dayuse || 0}. Duplicidades em cobranças: ${summary.duplicate_payments_detected || 0}, removidas: ${summary.duplicate_payments_removed || 0}. Payments verificados: ${summary.payments_checked || 0}, atualizados para pago: ${summary.payments_paid_updated || 0}, cancelados: ${summary.payments_canceled_updated || 0}, não encontrados: ${summary.payments_not_found || 0}. Pendências verificadas: ${summary.pendencias_checked || 0}, pagas: ${summary.pendencias_paid_updated || 0}, removidas sem cobrança no Asaas: ${summary.pendencias_removed_no_charge || 0}, desvinculadas: ${summary.pendencias_unlinked || 0}.`;
+        syncChargesPaymentsMessage.textContent = `Sincronização concluída. Duplicidades em pendências (mesmo dia): ${summary.duplicate_dayuse_detected || 0}, removidas: ${summary.pendencias_removed_duplicate_dayuse || 0}. Duplicidades em cobranças: ${summary.duplicate_payments_detected || 0}, removidas: ${summary.duplicate_payments_removed || 0}. Payments verificados: ${summary.payments_checked || 0}, atualizados para pago: ${summary.payments_paid_updated || 0}, cancelados: ${summary.payments_canceled_updated || 0}, não encontrados: ${summary.payments_not_found || 0}. Pendências verificadas: ${summary.pendencias_checked || 0}, pagas: ${summary.pendencias_paid_updated || 0}, removidas sem cobrança no Asaas: ${summary.pendencias_removed_no_charge || 0}, desvinculadas: ${summary.pendencias_unlinked || 0}. Recarregue a página quando quiser refletir tudo na tabela.`;
         syncChargesPaymentsMessage.className = 'charge-message success';
       }
-      setTimeout(() => window.location.reload(), 1000);
     } catch {
       if (syncChargesPaymentsMessage) {
         syncChargesPaymentsMessage.textContent = 'Falha ao sincronizar cobranças e pagamentos.';
@@ -1701,7 +1737,14 @@ mergeButtons.forEach((button) => {
       } else if (mergeMessage) {
         mergeMessage.textContent = 'Duplicados mesclados com sucesso.';
         mergeMessage.className = 'charge-message success';
-        setTimeout(() => window.location.reload(), 800);
+        const row = button.closest('tr');
+        if (row) {
+          const tbody = row.parentElement;
+          row.remove();
+          if (tbody && !tbody.querySelector('.js-merge-duplicates')) {
+            tbody.innerHTML = '<tr><td colspan="6">Nenhum duplicado encontrado.</td></tr>';
+          }
+        }
       }
     } catch {
       if (mergeMessage) {
