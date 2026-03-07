@@ -106,17 +106,161 @@ function money(float $value): string
     return 'R$ ' . number_format($value, 2, ',', '.');
 }
 
+function only_digits(string $value): string
+{
+    return preg_replace('/\D+/', '', $value) ?? '';
+}
+
+function mask_cpf(string $digits): string
+{
+    if (strlen($digits) !== 11) {
+        return $digits;
+    }
+    return substr($digits, 0, 3) . '.'
+        . substr($digits, 3, 3) . '.'
+        . substr($digits, 6, 3) . '-'
+        . substr($digits, 9, 2);
+}
+
 $user = Helpers::requireAuthWeb();
 $client = new SupabaseClient(new HttpClient());
+$guardianIds = [];
+$studentIdsScope = [];
+$sessionGuardianId = trim((string) ($user['id'] ?? ''));
+if ($sessionGuardianId !== '') {
+    $guardianIds[$sessionGuardianId] = true;
+}
+$sessionStudentId = trim((string) ($user['student_id'] ?? ''));
+if ($sessionStudentId !== '') {
+    $studentIdsScope[$sessionStudentId] = true;
+}
 
-$paymentsResult = $client->select(
-    'payments',
-    'select=id,student_id,payment_date,daily_type,amount,status,paid_at,created_at&guardian_id=eq.'
-    . urlencode((string) ($user['id'] ?? ''))
-    . '&order=payment_date.desc&limit=1000'
-);
+$sessionCpfDigits = only_digits((string) ($user['parent_document'] ?? ''));
+if ($sessionCpfDigits !== '') {
+    $cpfAttempts = [
+        'parent_document=eq.' . urlencode($sessionCpfDigits) . '&select=id,student_id',
+        'parent_document=eq.' . urlencode(mask_cpf($sessionCpfDigits)) . '&select=id,student_id',
+        'parent_document=ilike.' . urlencode('*' . $sessionCpfDigits . '*') . '&select=id,student_id',
+    ];
+    foreach ($cpfAttempts as $query) {
+        $guardiansByCpf = $client->select('guardians', $query);
+        if (!($guardiansByCpf['ok'] ?? false) || empty($guardiansByCpf['data'])) {
+            continue;
+        }
+        foreach ($guardiansByCpf['data'] as $row) {
+            $gid = trim((string) ($row['id'] ?? ''));
+            if ($gid !== '') {
+                $guardianIds[$gid] = true;
+            }
+            $sid = trim((string) ($row['student_id'] ?? ''));
+            if ($sid !== '') {
+                $studentIdsScope[$sid] = true;
+            }
+        }
+    }
+}
 
-$payments = ($paymentsResult['ok'] ?? false) ? ($paymentsResult['data'] ?? []) : [];
+$sessionEmail = trim((string) ($user['email'] ?? ''));
+if ($sessionEmail !== '') {
+    $emailAttempts = [
+        'email=eq.' . urlencode($sessionEmail) . '&select=id,student_id&limit=200',
+        'email=ilike.' . urlencode($sessionEmail) . '&select=id,student_id&limit=200',
+    ];
+    foreach ($emailAttempts as $query) {
+        $guardiansByEmail = $client->select('guardians', $query);
+        if (!($guardiansByEmail['ok'] ?? false) || empty($guardiansByEmail['data'])) {
+            continue;
+        }
+        foreach ($guardiansByEmail['data'] as $row) {
+            $gid = trim((string) ($row['id'] ?? ''));
+            if ($gid !== '') {
+                $guardianIds[$gid] = true;
+            }
+            $sid = trim((string) ($row['student_id'] ?? ''));
+            if ($sid !== '') {
+                $studentIdsScope[$sid] = true;
+            }
+        }
+    }
+}
+
+if (!empty($guardianIds)) {
+    $quotedGuardianIds = array_map(static fn($id) => '"' . str_replace('"', '', $id) . '"', array_keys($guardianIds));
+    $guardiansByStudent = $client->select(
+        'guardians',
+        'select=id,student_id&id=in.(' . implode(',', $quotedGuardianIds) . ')&limit=500'
+    );
+    if (($guardiansByStudent['ok'] ?? false) && !empty($guardiansByStudent['data'])) {
+        foreach ($guardiansByStudent['data'] as $row) {
+            $gid = trim((string) ($row['id'] ?? ''));
+            if ($gid !== '') {
+                $guardianIds[$gid] = true;
+            }
+            $sid = trim((string) ($row['student_id'] ?? ''));
+            if ($sid !== '') {
+                $studentIdsScope[$sid] = true;
+            }
+        }
+    }
+}
+
+$payments = [];
+$paymentColumns = 'select=id,student_id,payment_date,daily_type,amount,status,paid_at,created_at,guardian_id';
+$paymentsById = [];
+$appendPayments = static function (array $rows) use (&$payments, &$paymentsById): void {
+    foreach ($rows as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $pid = trim((string) ($row['id'] ?? ''));
+        if ($pid !== '' && isset($paymentsById[$pid])) {
+            continue;
+        }
+        if ($pid !== '') {
+            $paymentsById[$pid] = true;
+        }
+        $payments[] = $row;
+    }
+};
+
+$studentIdList = array_keys($studentIdsScope);
+if (!empty($studentIdList)) {
+    $quotedStudentIds = array_map(static fn($id) => '"' . str_replace('"', '', $id) . '"', $studentIdList);
+    $paymentsByStudent = $client->select(
+        'payments',
+        $paymentColumns
+        . '&student_id=in.(' . implode(',', $quotedStudentIds) . ')'
+        . '&order=payment_date.desc&limit=5000'
+    );
+    if ($paymentsByStudent['ok'] ?? false) {
+        $appendPayments($paymentsByStudent['data'] ?? []);
+    }
+}
+
+$guardianIdList = array_keys($guardianIds);
+if (!empty($guardianIdList)) {
+    $quotedGuardianIds = array_map(static fn($id) => '"' . str_replace('"', '', $id) . '"', $guardianIdList);
+    $paymentsByGuardian = $client->select(
+        'payments',
+        $paymentColumns
+        . '&guardian_id=in.(' . implode(',', $quotedGuardianIds) . ')'
+        . '&order=payment_date.desc&limit=5000'
+    );
+    if ($paymentsByGuardian['ok'] ?? false) {
+        $appendPayments($paymentsByGuardian['data'] ?? []);
+    }
+}
+if (empty($payments) && $sessionGuardianId !== '') {
+    $paymentsFallback = $client->select(
+        'payments',
+        $paymentColumns
+        . '&guardian_id=eq.' . urlencode($sessionGuardianId)
+        . '&order=payment_date.desc&limit=1000'
+    );
+    if ($paymentsFallback['ok'] ?? false) {
+        $appendPayments($paymentsFallback['data'] ?? []);
+    }
+}
 $studentsById = [];
 $studentIds = [];
 foreach ($payments as $payment) {
@@ -181,6 +325,7 @@ foreach ($payments as $payment) {
         $totalEffective += $effectiveAmount;
 
         $rows[] = [
+            'student_id' => (string) ($payment['student_id'] ?? ''),
             'student_name' => $studentName,
             'date' => $dayUseDate,
             'type' => $typeLabel,
@@ -209,7 +354,11 @@ $deduped = [];
 $seenRows = [];
 $hiddenDuplicates = 0;
 foreach ($rows as $row) {
-    $key = normalize_text_key((string) ($row['student_name'] ?? '')) . '|' . (string) ($row['date'] ?? '');
+    $studentKey = trim((string) ($row['student_id'] ?? ''));
+    if ($studentKey === '') {
+        $studentKey = normalize_text_key((string) ($row['student_name'] ?? ''));
+    }
+    $key = $studentKey . '|' . (string) ($row['date'] ?? '');
     if ($key !== '|' && isset($seenRows[$key])) {
         $hiddenDuplicates++;
         continue;
