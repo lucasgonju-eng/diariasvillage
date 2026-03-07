@@ -24,6 +24,7 @@ $nextBusinessDay = static function (DateTimeImmutable $date): DateTimeImmutable 
 };
 $candidateDt = ((int) $nowDt->format('H') >= 16) ? $nowDt->modify('+1 day') : $nowDt;
 $minDate = $nextBusinessDay($candidateDt)->format('Y-m-d');
+$minDateBr = (DateTimeImmutable::createFromFormat('Y-m-d', $minDate) ?: $nowDt)->format('d/m/Y');
 $dashboardError = isset($_SESSION['dashboard_error']) ? (string) $_SESSION['dashboard_error'] : '';
 unset($_SESSION['dashboard_error']);
 ?>
@@ -82,7 +83,8 @@ unset($_SESSION['dashboard_error']);
             <div class="grid-2">
               <div class="form-group">
                 <label>Data</label>
-                <input type="date" id="payment-date" name="date" value="<?php echo $minDate; ?>" min="<?php echo $minDate; ?>" required />
+                <input type="text" id="payment-date-br" value="<?php echo htmlspecialchars($minDateBr, ENT_QUOTES, 'UTF-8'); ?>" inputmode="numeric" autocomplete="off" placeholder="dd/mm/aaaa" required />
+                <input type="hidden" id="payment-date" name="date" value="<?php echo $minDate; ?>" data-min-iso="<?php echo $minDate; ?>" />
                 <div class="small">Após 16h, somente datas futuras.</div>
               </div>
             </div>
@@ -136,6 +138,70 @@ unset($_SESSION['dashboard_error']);
   </footer>
 
   <script src="/assets/js/dashboard.js?v=20260219-1"></script>
+  <script>
+    (function setupBrazilianDateInput() {
+      var form = document.getElementById('payment-form');
+      var dateBr = document.getElementById('payment-date-br');
+      var dateIso = document.getElementById('payment-date');
+      var paymentMessage = document.getElementById('payment-message');
+      if (!form || !dateBr || !dateIso) return;
+
+      function parseBrToIso(raw) {
+        var m = String(raw || '').trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (!m) return null;
+        var dd = Number(m[1]);
+        var mm = Number(m[2]);
+        var yyyy = Number(m[3]);
+        var date = new Date(yyyy, mm - 1, dd);
+        if (
+          date.getFullYear() !== yyyy ||
+          date.getMonth() !== (mm - 1) ||
+          date.getDate() !== dd
+        ) {
+          return null;
+        }
+        var d = String(dd).padStart(2, '0');
+        var m2 = String(mm).padStart(2, '0');
+        return String(yyyy) + '-' + m2 + '-' + d;
+      }
+
+      function normalizeBrInput() {
+        var digits = dateBr.value.replace(/\D+/g, '').slice(0, 8);
+        if (digits.length > 4) {
+          dateBr.value = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+        } else if (digits.length > 2) {
+          dateBr.value = digits.slice(0, 2) + '/' + digits.slice(2);
+        } else {
+          dateBr.value = digits;
+        }
+      }
+
+      dateBr.addEventListener('input', normalizeBrInput);
+      dateBr.addEventListener('blur', function () {
+        var iso = parseBrToIso(dateBr.value);
+        if (iso) {
+          var parts = iso.split('-');
+          dateBr.value = parts[2] + '/' + parts[1] + '/' + parts[0];
+        }
+      });
+
+      form.addEventListener('submit', function (e) {
+        var iso = parseBrToIso(dateBr.value);
+        var minIso = dateIso.dataset.minIso || '';
+        if (!iso) {
+          e.preventDefault();
+          if (paymentMessage) paymentMessage.innerHTML = '<div class="error">Informe a data no formato DD/MM/AAAA.</div>';
+          return;
+        }
+        if (minIso && iso < minIso) {
+          e.preventDefault();
+          if (paymentMessage) paymentMessage.innerHTML = '<div class="error">Selecione a próxima data útil disponível.</div>';
+          return;
+        }
+        dateIso.value = iso;
+      });
+    })();
+  </script>
   <script>
     (async function checkPendingPaymentAfterReturn() {
       let paymentId = '';

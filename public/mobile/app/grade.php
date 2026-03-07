@@ -11,6 +11,7 @@ $nextBusinessDay = static function (DateTimeImmutable $date): DateTimeImmutable 
 };
 $candidateDt = ((int) $nowDt->format('H') >= 16) ? $nowDt->modify('+1 day') : $nowDt;
 $minDate = $nextBusinessDay($candidateDt)->format('Y-m-d');
+$minDateBr = (DateTimeImmutable::createFromFormat('Y-m-d', $minDate) ?: $nowDt)->format('d/m/Y');
 $now = date('c');
 ?>
 <style>
@@ -69,7 +70,8 @@ $now = date('c');
       <form id="m-dash">
         <div class="m-field">
           <label>Data</label>
-          <input type="date" id="m-date" name="date" value="<?= $minDate ?>" min="<?= $minDate ?>" required>
+          <input type="text" id="m-date-br" value="<?= htmlspecialchars($minDateBr, ENT_QUOTES, 'UTF-8') ?>" inputmode="numeric" autocomplete="off" placeholder="dd/mm/aaaa" required>
+          <input type="hidden" id="m-date" name="date" value="<?= $minDate ?>" data-min-iso="<?= $minDate ?>">
           <div class="hint">Após 16h, somente datas futuras.</div>
         </div>
         <button class="m-btn m-btn-gold" type="submit">Ir para Grade de Oficina Modular</button>
@@ -109,12 +111,41 @@ $now = date('c');
   }
 
   var form=document.getElementById('m-dash'),msg=document.getElementById('m-dash-msg');
+  var dateBrInput=document.getElementById('m-date-br');
+  var dateIsoInput=document.getElementById('m-date');
+  function parseBrToIso(raw){
+    var m=String(raw||'').trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if(!m)return null;
+    var dd=Number(m[1]),mm=Number(m[2]),yy=Number(m[3]);
+    var dt=new Date(yy,mm-1,dd);
+    if(dt.getFullYear()!==yy||dt.getMonth()!==(mm-1)||dt.getDate()!==dd)return null;
+    return String(yy)+'-'+String(mm).padStart(2,'0')+'-'+String(dd).padStart(2,'0');
+  }
+  function normalizeBrInput(){
+    if(!dateBrInput)return;
+    var digits=dateBrInput.value.replace(/\D+/g,'').slice(0,8);
+    if(digits.length>4) dateBrInput.value=digits.slice(0,2)+'/'+digits.slice(2,4)+'/'+digits.slice(4);
+    else if(digits.length>2) dateBrInput.value=digits.slice(0,2)+'/'+digits.slice(2);
+    else dateBrInput.value=digits;
+  }
+  if(dateBrInput){
+    dateBrInput.addEventListener('input',normalizeBrInput);
+    dateBrInput.addEventListener('blur',function(){
+      var iso=parseBrToIso(dateBrInput.value);
+      if(!iso)return;
+      var p=iso.split('-');
+      dateBrInput.value=p[2]+'/'+p[1]+'/'+p[0];
+    });
+  }
   if(form) form.addEventListener('submit',async function(e){
     e.preventDefault();
     if(msg){msg.style.display='none';msg.textContent='';}
-    var dateInput=document.getElementById('m-date');
-    var dateVal=dateInput?dateInput.value.trim():'';
-    if(!dateVal){if(msg){msg.style.display='block';msg.textContent='Selecione a data.';}return;}
+    var dateValBr=dateBrInput?dateBrInput.value.trim():'';
+    var dateVal=parseBrToIso(dateValBr);
+    var minIso=(dateIsoInput&&dateIsoInput.dataset.minIso)?dateIsoInput.dataset.minIso:'';
+    if(!dateVal){if(msg){msg.style.display='block';msg.textContent='Informe a data no formato DD/MM/AAAA.';}return;}
+    if(minIso && dateVal < minIso){if(msg){msg.style.display='block';msg.textContent='Selecione a próxima data útil disponível.';}return;}
+    if(dateIsoInput) dateIsoInput.value=dateVal;
     var btn=form.querySelector('button[type=submit]');
     btn.disabled=true;btn.textContent='Aguarde...';
     try{
