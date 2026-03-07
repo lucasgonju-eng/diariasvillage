@@ -8,6 +8,7 @@ const tabRecebidas = document.querySelector('#tab-recebidas');
 const tabSemWhatsapp = document.querySelector('#tab-sem-whatsapp');
 const tabDuplicados = document.querySelector('#tab-duplicados');
 const tabPendencias = document.querySelector('#tab-pendencias');
+const tabMensalistas = document.querySelector('#tab-mensalistas');
 const tabExclusoes = document.querySelector('#tab-exclusoes');
 const tabResetSenha = document.querySelector('#tab-reset-senha');
 const tabFluxoCaixa = document.querySelector('#tab-fluxo-caixa');
@@ -22,6 +23,7 @@ const selectAllPendingInput = document.querySelector('#select-all-pending');
 const sendPendingMessage = document.querySelector('#send-pending-message');
 const pendingDeleteButtons = document.querySelectorAll('.js-delete-payment');
 let inadimplentesDuplicatesPopupShown = false;
+let inadimplentesMonthlyPopupShown = false;
 const syncRecebidasButton = document.querySelector('#sync-recebidas-btn');
 const syncRecebidasMessage = document.querySelector('#sync-recebidas-message');
 const viewUserStudentInput = document.querySelector('#admin-view-user-student');
@@ -39,6 +41,11 @@ const viewUserForceCreateInput = document.querySelector('#view-user-force-create
 const viewUserSaveGuardianButton = document.querySelector('#view-user-save-guardian');
 const viewUserCancelGuardianButton = document.querySelector('#view-user-cancel-guardian');
 const viewUserFormMessage = document.querySelector('#view-user-form-message');
+const monthlyStudentInput = document.querySelector('#monthly-student');
+const monthlySaveButton = document.querySelector('#monthly-save-btn');
+const monthlyRemoveButton = document.querySelector('#monthly-remove-btn');
+const monthlyMessage = document.querySelector('#monthly-message');
+const monthlyTableBody = document.querySelector('#monthly-table-body');
 
 const selectedStudents = new Set();
 const guardianCache = new Map();
@@ -46,6 +53,9 @@ const studentNames = new Set();
 const studentLookupByLabel = new Map();
 const MIN_ADMIN_AUTOCOMPLETE_CHARS = 3;
 let adminStudents = [];
+let monthlyStudents = Array.isArray(window.__monthlyStudents) ? window.__monthlyStudents : [];
+const monthlyByStudentId = new Map();
+const monthlyByName = new Map();
 
 function setActiveTab(name) {
   if (
@@ -54,7 +64,8 @@ function setActiveTab(name) {
     !tabInadimplentes ||
     !tabRecebidas ||
     !tabSemWhatsapp ||
-    !tabPendencias
+    !tabPendencias ||
+    !tabMensalistas
   ) {
     return;
   }
@@ -65,6 +76,7 @@ function setActiveTab(name) {
   tabSemWhatsapp.classList.toggle('hidden', name !== 'sem-whatsapp');
   if (tabDuplicados) tabDuplicados.classList.toggle('hidden', name !== 'duplicados');
   tabPendencias.classList.toggle('hidden', name !== 'pendencias');
+  tabMensalistas.classList.toggle('hidden', name !== 'mensalistas');
   if (tabExclusoes) tabExclusoes.classList.toggle('hidden', name !== 'exclusoes');
   if (tabResetSenha) tabResetSenha.classList.toggle('hidden', name !== 'reset-senha');
   if (tabFluxoCaixa) tabFluxoCaixa.classList.toggle('hidden', name !== 'fluxo-caixa');
@@ -84,6 +96,7 @@ const cashflowEnrollmentInput = document.querySelector('#cashflow-enrollment');
 const cashflowDayTypeInput = document.querySelector('#cashflow-day-type');
 const cashflowStatusInput = document.querySelector('#cashflow-status');
 const cashflowBillingTypeInput = document.querySelector('#cashflow-billing-type');
+const cashflowMonthlyModeInput = document.querySelector('#cashflow-monthly-mode');
 const cashflowExcludeStudentInput = document.querySelector('#cashflow-exclude-student');
 const cashflowExcludeTermInput = document.querySelector('#cashflow-exclude-term');
 const cashflowSearchButton = document.querySelector('#cashflow-search');
@@ -363,6 +376,72 @@ function resolveStudentNameForAdmin(rawInput) {
   return { ok: true, name: candidates[0].name };
 }
 
+function rebuildMonthlyMaps() {
+  monthlyByStudentId.clear();
+  monthlyByName.clear();
+  const rows = Array.isArray(monthlyStudents) ? monthlyStudents : [];
+  rows.forEach((row) => {
+    if (!row || row.active === false) return;
+    const studentId = String(row.student_id || '').trim();
+    const studentName = String(row.student_name || '').trim();
+    const weeklyDays = Number(row.weekly_days || 0);
+    if (!studentId || ![2, 3, 4, 5].includes(weeklyDays)) return;
+    monthlyByStudentId.set(studentId, row);
+    if (studentName) {
+      monthlyByName.set(normalizeSearchText(studentName), row);
+    }
+  });
+}
+
+function getStudentByName(studentName) {
+  const value = String(studentName || '').trim().toLowerCase();
+  if (!value) return null;
+  return adminStudents.find((student) => String(student.name || '').trim().toLowerCase() === value) || null;
+}
+
+function getMonthlyPlanForStudent(studentName) {
+  const student = getStudentByName(studentName);
+  if (student?.id && monthlyByStudentId.has(String(student.id))) {
+    return monthlyByStudentId.get(String(student.id));
+  }
+  const key = normalizeSearchText(studentName || '');
+  if (key && monthlyByName.has(key)) {
+    return monthlyByName.get(key);
+  }
+  return null;
+}
+
+function setMonthlyMessage(text, isError = false) {
+  if (!monthlyMessage) return;
+  monthlyMessage.textContent = text;
+  monthlyMessage.className = `charge-message ${isError ? 'error' : 'success'}`.trim();
+}
+
+function renderMonthlyTable() {
+  if (!monthlyTableBody) return;
+  const rows = Array.isArray(monthlyStudents) ? [...monthlyStudents] : [];
+  rows.sort((a, b) => String(a?.student_name || '').localeCompare(String(b?.student_name || ''), 'pt-BR'));
+  if (!rows.length) {
+    monthlyTableBody.innerHTML = '<tr><td colspan="5">Nenhum mensalista cadastrado.</td></tr>';
+    return;
+  }
+  monthlyTableBody.innerHTML = rows
+    .map((row) => {
+      const updatedAt = row?.updated_at ? formatDateTimeBR(row.updated_at) : '-';
+      const days = Number(row?.weekly_days || 0);
+      return `
+        <tr data-student-id="${escapeHtml(row?.student_id || '')}">
+          <td>${escapeHtml(row?.student_name || '-')}</td>
+          <td>${escapeHtml(row?.enrollment || '-')}</td>
+          <td>${escapeHtml(days || '-')} dias/semana</td>
+          <td>${escapeHtml(updatedAt)}</td>
+          <td>${escapeHtml(row?.updated_by || '-')}</td>
+        </tr>
+      `;
+    })
+    .join('');
+}
+
 function setCashflowMessage(text, isError = false) {
   if (!cashflowMessage) return;
   cashflowMessage.textContent = text;
@@ -392,17 +471,23 @@ function renderCashflowRows(items) {
     .join('');
 }
 
-function renderCashflowSummary(totals, period) {
+function renderCashflowSummary(totals, period, monthlyAdjustment = null) {
   if (!cashflowSummary) return;
   if (!totals) {
     cashflowSummary.innerHTML = '';
     return;
   }
+  const monthlyCount = Number(monthlyAdjustment?.count || 0);
+  const monthlyAmount = Number(monthlyAdjustment?.amount || 0);
+  const monthlyLabel = monthlyCount > 0
+    ? `<span class="cashflow-pill">Subtraído mensalistas: ${formatCurrency(monthlyAmount)} (${monthlyCount} registro(s) • Aluno mensalista)</span>`
+    : '';
   cashflowSummary.innerHTML = `
     <span class="cashflow-pill">Período: ${formatDateBR(period?.from)} até ${formatDateBR(period?.to)}</span>
     <span class="cashflow-pill">Registros: ${totals.count || 0}</span>
     <span class="cashflow-pill">Total geral: ${formatCurrency(totals.amount || 0)}</span>
     <span class="cashflow-pill">Total pago: ${formatCurrency(totals.paid_amount || 0)}</span>
+    ${monthlyLabel}
   `;
 }
 
@@ -417,6 +502,7 @@ async function loadCashflow() {
     !cashflowDayTypeInput ||
     !cashflowStatusInput ||
     !cashflowBillingTypeInput ||
+    !cashflowMonthlyModeInput ||
     !cashflowExcludeStudentInput ||
     !cashflowExcludeTermInput
   ) {
@@ -433,6 +519,7 @@ async function loadCashflow() {
   if (cashflowDayTypeInput.value) params.set('day_use_type', cashflowDayTypeInput.value);
   if (cashflowStatusInput.value) params.set('status', cashflowStatusInput.value);
   if (cashflowBillingTypeInput.value) params.set('billing_type', cashflowBillingTypeInput.value);
+  if (cashflowMonthlyModeInput.value) params.set('monthly_mode', cashflowMonthlyModeInput.value);
   if (cashflowExcludeStudentInput.value.trim())
     params.set('exclude_student', cashflowExcludeStudentInput.value.trim());
   if (cashflowExcludeTermInput.value.trim())
@@ -446,17 +533,17 @@ async function loadCashflow() {
     if (!data.ok) {
       setCashflowMessage(data.error || 'Falha ao carregar fluxo de caixa.', true);
       renderCashflowRows([]);
-      renderCashflowSummary(null, null);
+      renderCashflowSummary(null, null, null);
       return;
     }
     renderCashflowRows(data.items || []);
-    renderCashflowSummary(data.totals || null, data.period || null);
+    renderCashflowSummary(data.totals || null, data.period || null, data.monthly_adjustment || null);
     setCashflowMessage('');
     cashflowLoaded = true;
   } catch {
     setCashflowMessage('Falha ao carregar fluxo de caixa.', true);
     renderCashflowRows([]);
-    renderCashflowSummary(null, null);
+    renderCashflowSummary(null, null, null);
   } finally {
     cashflowSearchButton.removeAttribute('disabled');
   }
@@ -562,11 +649,20 @@ async function loadAsaasData(force = false) {
 
 async function addChargeItem(studentName) {
   if (!studentName || selectedStudents.has(studentName)) return;
+  const monthlyPlan = getMonthlyPlanForStudent(studentName);
+  if (monthlyPlan && Number(monthlyPlan.weekly_days || 0) > 0) {
+    await showAdminAlert(
+      `Aluno ${studentName} é mensalista de ${monthlyPlan.weekly_days} dias por semana.`,
+      { title: 'Atenção: aluno mensalista' },
+    );
+  }
   selectedStudents.add(studentName);
+  const studentRecord = getStudentByName(studentName);
 
   const wrapper = document.createElement('div');
   wrapper.className = 'charge-item';
   wrapper.dataset.student = studentName;
+  wrapper.dataset.studentId = studentRecord?.id ? String(studentRecord.id) : '';
   wrapper.innerHTML = `
     <div class="charge-header">
       <strong>Aluno: ${studentName}</strong>
@@ -789,6 +885,73 @@ async function loadStudents() {
   applyStudentsToLists(data.students);
 }
 
+async function syncMonthlyStudents(action) {
+  if (!monthlyStudentInput) return;
+  const resolved = resolveStudentNameForAdmin(monthlyStudentInput.value);
+  if (!resolved.ok) {
+    setMonthlyMessage(resolved.error || 'Selecione um aluno válido.', true);
+    return;
+  }
+  const studentName = resolved.name;
+  monthlyStudentInput.value = studentName;
+  const student = getStudentByName(studentName);
+  if (!student?.id) {
+    setMonthlyMessage('Aluno não encontrado no banco.', true);
+    return;
+  }
+
+  let weeklyDays = null;
+  if (action === 'set') {
+    const checked = document.querySelector('input[name="monthly-days"]:checked');
+    weeklyDays = checked ? Number(checked.value || 0) : 0;
+    if (![2, 3, 4, 5].includes(weeklyDays)) {
+      setMonthlyMessage('Selecione 2, 3, 4 ou 5 dias por semana.', true);
+      return;
+    }
+  }
+
+  const targetButton = action === 'set' ? monthlySaveButton : monthlyRemoveButton;
+  const originalLabel = targetButton?.textContent || '';
+  if (targetButton) {
+    targetButton.setAttribute('disabled', 'disabled');
+    targetButton.textContent = action === 'set' ? 'Salvando...' : 'Removendo...';
+  }
+  setMonthlyMessage(action === 'set' ? 'Salvando mensalista...' : 'Removendo mensalista...');
+
+  try {
+    const res = await fetch('/api/admin-monthly-students.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action,
+        student_id: student.id,
+        weekly_days: weeklyDays,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data?.ok) {
+      setMonthlyMessage(data?.error || 'Falha ao atualizar mensalistas.', true);
+      return;
+    }
+    monthlyStudents = Array.isArray(data.items) ? data.items : [];
+    rebuildMonthlyMaps();
+    renderMonthlyTable();
+    setMonthlyMessage(
+      action === 'set'
+        ? `Aluno ${studentName} definido como mensalista de ${weeklyDays} dias/semana.`
+        : `Aluno ${studentName} removido da lista de mensalistas.`,
+      false,
+    );
+  } catch {
+    setMonthlyMessage('Falha ao atualizar mensalistas.', true);
+  } finally {
+    if (targetButton) {
+      targetButton.removeAttribute('disabled');
+      targetButton.textContent = originalLabel;
+    }
+  }
+}
+
 function tryAddStudentFromInput() {
   if (!studentInput) return;
   const value = studentInput.value.trim();
@@ -801,6 +964,7 @@ function collectCharges() {
   const items = [...chargeList.querySelectorAll('.charge-item')];
   return items.map((item) => ({
     student_name: item.dataset.student,
+    student_id: item.dataset.studentId || '',
     guardian_name: item.querySelector('[name="guardian_name"]').value.trim(),
     guardian_email: item.querySelector('[name="guardian_email"]').value.trim(),
     guardian_whatsapp: item.querySelector('[name="guardian_whatsapp"]').value.trim(),
@@ -856,6 +1020,7 @@ tabs.forEach((btn) => {
     setActiveTab(btn.dataset.tab);
     if (btn.dataset.tab === 'inadimplentes') {
       maybeAlertInadimplentesDuplicates();
+      maybeAlertInadimplentesMonthly();
     }
     if (btn.dataset.tab === 'fluxo-caixa' && !cashflowLoaded) {
       loadCashflow();
@@ -875,6 +1040,18 @@ if (studentInput) {
       event.preventDefault();
       tryAddStudentFromInput();
     }
+  });
+}
+
+if (monthlySaveButton) {
+  monthlySaveButton.addEventListener('click', () => {
+    syncMonthlyStudents('set');
+  });
+}
+
+if (monthlyRemoveButton) {
+  monthlyRemoveButton.addEventListener('click', () => {
+    syncMonthlyStudents('remove');
   });
 }
 
@@ -938,8 +1115,35 @@ if (sendChargesButton) {
       } else {
         const results = Array.isArray(data.results) ? data.results : [];
         const failures = results.filter((item) => !item.ok);
+        const monthlyCoveredOnly = results.filter((item) => item?.ok && item?.monthly_covered);
+        const monthlyPartial = results.filter(
+          (item) =>
+            item?.ok &&
+            !item?.monthly_covered &&
+            Array.isArray(item?.covered_dates) &&
+            item.covered_dates.length > 0 &&
+            Array.isArray(item?.overflow_dates) &&
+            item.overflow_dates.length > 0,
+        );
+        if (monthlyCoveredOnly.length || monthlyPartial.length) {
+          const lines = [];
+          monthlyCoveredOnly.forEach((item) => {
+            lines.push(
+              `- ${item.student_name}: dentro da franquia mensalista (${item.monthly_days || '?'} dias/semana), sem cobrança.`,
+            );
+          });
+          monthlyPartial.forEach((item) => {
+            lines.push(
+              `- ${item.student_name}: mensalista (${item.monthly_days || '?'} dias). Cobrança criada só para excedente.`,
+            );
+          });
+          await showAdminAlert(lines.join('\n'), { title: 'Regra de mensalistas aplicada' });
+        }
         if (failures.length) {
           showChargeMessage('Algumas cobranças manuais não foram registradas. Verifique os dados.', true);
+        } else if (results.length > 0 && results.every((item) => item?.ok && item?.monthly_covered)) {
+          showChargeMessage('Nenhuma cobrança gerada: todas as datas estão dentro da franquia de mensalistas.');
+          resetChargeForm();
         } else {
           showChargeMessage('Cobranças manuais registradas na fila (sem envio). Abrindo Cobranças em aberto...');
           resetChargeForm();
@@ -1113,6 +1317,27 @@ function maybeAlertInadimplentesDuplicates(force = false) {
   lines.push('');
   lines.push('Use o botão Excluir e selecione o motivo: COBRANÇA EM DUPLICIDADE.');
   showAdminAlert(lines.join('\n'), { title: 'Cobranças em duplicidade' });
+}
+
+function maybeAlertInadimplentesMonthly(force = false) {
+  if (inadimplentesMonthlyPopupShown && !force) return;
+  const rows = [...document.querySelectorAll('.inadimplente-row[data-monthly="1"]')];
+  if (!rows.length) return;
+  inadimplentesMonthlyPopupShown = true;
+
+  const lines = ['Alunos mensalistas encontrados em Cobranças em aberto:'];
+  rows.slice(0, 12).forEach((row) => {
+    const student = row.getAttribute('data-student') || 'Aluno';
+    const dates = row.getAttribute('data-dayuse-date') || '-';
+    const days = row.getAttribute('data-monthly-days') || '?';
+    lines.push(`- ${student} (${days} dias/semana) | Day-use: ${dates}`);
+  });
+  if (rows.length > 12) {
+    lines.push(`... e mais ${rows.length - 12} registro(s).`);
+  }
+  lines.push('');
+  lines.push('Aluno mensalista. Checar antes de enviar cobrança.');
+  showAdminAlert(lines.join('\n'), { title: 'Atenção: alunos mensalistas' });
 }
 
 pendingDeleteButtons.forEach((button) => {
@@ -2149,6 +2374,7 @@ if (cashflowClearButton) {
     if (cashflowDayTypeInput) cashflowDayTypeInput.value = '';
     if (cashflowStatusInput) cashflowStatusInput.value = '';
     if (cashflowBillingTypeInput) cashflowBillingTypeInput.value = '';
+    if (cashflowMonthlyModeInput) cashflowMonthlyModeInput.value = 'subtract';
     if (cashflowExcludeStudentInput) cashflowExcludeStudentInput.value = '';
     if (cashflowExcludeTermInput) cashflowExcludeTermInput.value = '';
     loadCashflow();
@@ -2335,9 +2561,12 @@ if (viewUserButton && viewUserStudentInput) {
 }
 
 const initialTab = document.body?.dataset?.activeTab || 'charges';
+rebuildMonthlyMaps();
+renderMonthlyTable();
 setActiveTab(initialTab);
 if (initialTab === 'inadimplentes') {
   maybeAlertInadimplentesDuplicates();
+  maybeAlertInadimplentesMonthly();
 }
 if (initialTab === 'dados-asaas') {
   loadAsaasData();

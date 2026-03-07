@@ -3,6 +3,7 @@ require_once __DIR__ . '/../src/Bootstrap.php';
 
 use App\Helpers;
 use App\HttpClient;
+use App\MonthlyStudents;
 use App\SupabaseClient;
 
 if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
@@ -11,7 +12,7 @@ if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated']
 }
 $canViewAsUser = (($_SESSION['admin_user'] ?? '') === 'admin');
 $canMergeDuplicates = (($_SESSION['admin_user'] ?? '') === 'admin');
-$allowedTabs = ['charges', 'inadimplentes', 'recebidas', 'sem-whatsapp', 'pendencias', 'exclusoes', 'reset-senha', 'fluxo-caixa', 'dados-asaas', 'entries'];
+$allowedTabs = ['charges', 'inadimplentes', 'recebidas', 'sem-whatsapp', 'pendencias', 'mensalistas', 'exclusoes', 'reset-senha', 'fluxo-caixa', 'dados-asaas', 'entries'];
 if ($canMergeDuplicates) {
     $allowedTabs[] = 'duplicados';
 }
@@ -50,11 +51,75 @@ foreach ($allUnpaidRows as $row) {
     $manualPending[] = $row;
 }
 
+$monthlyItems = MonthlyStudents::load();
+$monthlyById = MonthlyStudents::mapByStudentId($monthlyItems);
+$monthlyByName = MonthlyStudents::mapByNormalizedName($monthlyItems);
+$monthlyRowsForJs = array_values(array_map(static function (array $row): array {
+    return [
+        'student_id' => (string) ($row['student_id'] ?? ''),
+        'student_name' => (string) ($row['student_name'] ?? ''),
+        'enrollment' => (string) ($row['enrollment'] ?? ''),
+        'weekly_days' => (int) ($row['weekly_days'] ?? 0),
+        'active' => ($row['active'] ?? true) !== false,
+        'updated_at' => (string) ($row['updated_at'] ?? ''),
+        'updated_by' => (string) ($row['updated_by'] ?? ''),
+    ];
+}, $monthlyItems));
+
+$inadimplentesMonthlyMetaById = [];
+
 $manualPaidResult = $client->select(
     'payments',
     'select=*,students(name,enrollment),guardians(parent_name,email,parent_phone)&status=eq.paid&order=paid_at.desc&limit=1000'
 );
 $manualPaid = $manualPaidResult['data'] ?? [];
+
+$inadimplentesClassified = MonthlyStudents::classifyRowsByQuota(
+    array_merge($queuedPending, $manualPending, $manualPaid),
+    static function (array $row): array {
+        $student = is_array($row['students'] ?? null) ? $row['students'] : [];
+        $studentId = trim((string) ($row['student_id'] ?? ($student['id'] ?? '')));
+        $studentName = trim((string) ($student['name'] ?? ''));
+        $dates = MonthlyStudents::extractDatesFromPayment(
+            (string) ($row['daily_type'] ?? ''),
+            (string) ($row['payment_date'] ?? '')
+        );
+        return [
+            'student_id' => $studentId,
+            'student_name' => $studentName,
+            'dates' => $dates,
+            'created_at' => (string) ($row['created_at'] ?? ''),
+        ];
+    },
+    $monthlyById,
+    $monthlyByName
+);
+$inadimplentesVisibleById = [];
+foreach (($inadimplentesClassified['visible'] ?? []) as $rowVisible) {
+    if (!is_array($rowVisible)) {
+        continue;
+    }
+    $pid = trim((string) ($rowVisible['id'] ?? ''));
+    if ($pid !== '') {
+        $inadimplentesVisibleById[$pid] = true;
+    }
+}
+foreach (($inadimplentesClassified['meta'] ?? []) as $metaId => $metaRow) {
+    if (!is_array($metaRow) || empty($metaRow['monthly'])) {
+        continue;
+    }
+    if (!empty($metaRow['overflow_dates'])) {
+        $inadimplentesMonthlyMetaById[(string) $metaId] = $metaRow;
+    }
+}
+$queuedPending = array_values(array_filter($queuedPending, static function ($row) use ($inadimplentesVisibleById): bool {
+    $pid = trim((string) ($row['id'] ?? ''));
+    return $pid === '' || isset($inadimplentesVisibleById[$pid]);
+}));
+$manualPending = array_values(array_filter($manualPending, static function ($row) use ($inadimplentesVisibleById): bool {
+    $pid = trim((string) ($row['id'] ?? ''));
+    return $pid === '' || isset($inadimplentesVisibleById[$pid]);
+}));
 
 $missingWhatsappResult = $client->select(
     'guardians',
@@ -347,6 +412,10 @@ if (!empty($exclusionsLog)) {
     .pendencia-student-actions{display:grid;gap:8px;min-width:240px}
     .pendencia-student-actions input{min-width:220px}
     .pendencia-student-actions .btn{justify-content:center}
+    .monthly-check-row{background:#E0F2FE}
+    .monthly-check-badge{display:inline-block;margin-left:8px;padding:2px 8px;border-radius:999px;background:#0EA5E9;color:#fff;font-size:11px;font-weight:700}
+    .monthly-days-wrap{display:flex;gap:12px;flex-wrap:wrap}
+    .monthly-days-wrap label{display:flex;gap:6px;align-items:center;padding:6px 10px;border:1px solid #CBD5E1;border-radius:10px;background:#F8FAFC}
     .hidden{display:none}
   </style>
 </head>
@@ -414,6 +483,7 @@ if (!empty($exclusionsLog)) {
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=recebidas" data-tab="recebidas">Cobranças recebidas</a>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=sem-whatsapp" data-tab="sem-whatsapp">Sem WhatsApp</a>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=pendencias" data-tab="pendencias">Pendência de cadastro</a>
+        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=mensalistas" data-tab="mensalistas">Mensalistas</a>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=exclusoes" data-tab="exclusoes">Exclusões</a>
         <?php if ($canMergeDuplicates): ?>
           <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=duplicados" data-tab="duplicados">Duplicados</a>
@@ -559,12 +629,21 @@ if (!empty($exclusionsLog)) {
                     $dailyParts = explode('|', $payment['daily_type'] ?? '', 2);
                     $datesLabel = $dailyParts[1] ?? date('d/m/Y', strtotime($payment['payment_date']));
                   ?>
+                  <?php
+                    $paymentIdRow = trim((string) ($payment['id'] ?? ''));
+                    $monthlyMeta = $paymentIdRow !== '' ? ($inadimplentesMonthlyMetaById[$paymentIdRow] ?? null) : null;
+                    $isMonthlyCheck = is_array($monthlyMeta);
+                    $monthlyDays = (int) ($monthlyMeta['weekly_days'] ?? 0);
+                    $monthlyWarning = $isMonthlyCheck ? 'Aluno mensalista. Checar' : '';
+                  ?>
                   <tr
-                    class="inadimplente-row"
+                    class="inadimplente-row<?php echo $isMonthlyCheck ? ' monthly-check-row' : ''; ?>"
                     data-payment-id="<?php echo htmlspecialchars((string) ($payment['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
                     data-student="<?php echo htmlspecialchars((string) ($student['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
                     data-dayuse-date="<?php echo htmlspecialchars((string) $datesLabel, ENT_QUOTES, 'UTF-8'); ?>"
                     data-amount="<?php echo htmlspecialchars((string) ($payment['amount'] ?? 0), ENT_QUOTES, 'UTF-8'); ?>"
+                    data-monthly="<?php echo $isMonthlyCheck ? '1' : '0'; ?>"
+                    data-monthly-days="<?php echo $isMonthlyCheck ? htmlspecialchars((string) $monthlyDays, ENT_QUOTES, 'UTF-8') : ''; ?>"
                   >
                     <td>
                       <input class="pending-send-checkbox" type="checkbox" value="<?php echo htmlspecialchars($payment['id'] ?? '', ENT_QUOTES, 'UTF-8'); ?>" />
@@ -574,7 +653,12 @@ if (!empty($exclusionsLog)) {
                     <td><?php echo htmlspecialchars($guardian['email'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo htmlspecialchars($datesLabel, ENT_QUOTES, 'UTF-8'); ?></td>
                     <td>R$ <?php echo $amount; ?></td>
-                    <td>Na fila (não enviada)</td>
+                    <td>
+                      Na fila (não enviada)
+                      <?php if ($isMonthlyCheck): ?>
+                        <span class="monthly-check-badge"><?php echo htmlspecialchars($monthlyWarning . ' • ' . $monthlyDays . ' dias', ENT_QUOTES, 'UTF-8'); ?></span>
+                      <?php endif; ?>
+                    </td>
                     <td><?php echo $created; ?></td>
                     <td>
                       <button
@@ -604,12 +688,24 @@ if (!empty($exclusionsLog)) {
                     ];
                     $statusLabel = $statusMap[$statusRaw] ?? (trim((string) ($payment['status'] ?? '')) !== '' ? (string) $payment['status'] : 'Aguardando pagamento');
                   ?>
+                  <?php
+                    $paymentIdRow = trim((string) ($payment['id'] ?? ''));
+                    $monthlyMeta = $paymentIdRow !== '' ? ($inadimplentesMonthlyMetaById[$paymentIdRow] ?? null) : null;
+                    $isMonthlyCheck = is_array($monthlyMeta);
+                    $monthlyDays = (int) ($monthlyMeta['weekly_days'] ?? 0);
+                    $monthlyWarning = $isMonthlyCheck ? 'Aluno mensalista. Checar' : '';
+                    if ($isMonthlyCheck) {
+                        $statusLabel .= ' • ' . $monthlyWarning;
+                    }
+                  ?>
                   <tr
-                    class="inadimplente-row"
+                    class="inadimplente-row<?php echo $isMonthlyCheck ? ' monthly-check-row' : ''; ?>"
                     data-payment-id="<?php echo htmlspecialchars((string) ($payment['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
                     data-student="<?php echo htmlspecialchars((string) ($student['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
                     data-dayuse-date="<?php echo htmlspecialchars((string) $datesLabel, ENT_QUOTES, 'UTF-8'); ?>"
                     data-amount="<?php echo htmlspecialchars((string) ($payment['amount'] ?? 0), ENT_QUOTES, 'UTF-8'); ?>"
+                    data-monthly="<?php echo $isMonthlyCheck ? '1' : '0'; ?>"
+                    data-monthly-days="<?php echo $isMonthlyCheck ? htmlspecialchars((string) $monthlyDays, ENT_QUOTES, 'UTF-8') : ''; ?>"
                   >
                     <td>-</td>
                     <td><?php echo htmlspecialchars($student['name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
@@ -617,7 +713,12 @@ if (!empty($exclusionsLog)) {
                     <td><?php echo htmlspecialchars($guardian['email'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo htmlspecialchars($datesLabel, ENT_QUOTES, 'UTF-8'); ?></td>
                     <td>R$ <?php echo $amount; ?></td>
-                    <td><?php echo htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td>
+                      <?php echo htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8'); ?>
+                      <?php if ($isMonthlyCheck): ?>
+                        <span class="monthly-check-badge"><?php echo htmlspecialchars($monthlyDays . ' dias/semana', ENT_QUOTES, 'UTF-8'); ?></span>
+                      <?php endif; ?>
+                    </td>
                     <td><?php echo $created; ?></td>
                     <td>
                       <button
@@ -862,6 +963,59 @@ if (!empty($exclusionsLog)) {
         </div>
       </section>
 
+      <section id="tab-mensalistas" class="<?php echo $activeTab === 'mensalistas' ? '' : 'hidden'; ?>">
+        <h2>Mensalistas</h2>
+        <p class="muted">Marque no cadastro os alunos mensalistas com 2, 3, 4 ou 5 dias por semana.</p>
+        <div class="charge-fields" style="margin-bottom:12px;">
+          <div class="form-group">
+            <label>Aluno</label>
+            <input id="monthly-student" type="text" list="students-list" placeholder="Digite o nome do aluno" autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label>Dias por semana</label>
+            <div class="monthly-days-wrap">
+              <label><input type="radio" name="monthly-days" value="5" /> 5 dias</label>
+              <label><input type="radio" name="monthly-days" value="4" /> 4 dias</label>
+              <label><input type="radio" name="monthly-days" value="3" /> 3 dias</label>
+              <label><input type="radio" name="monthly-days" value="2" /> 2 dias</label>
+            </div>
+          </div>
+          <div class="form-group" style="display:flex;align-items:flex-end;gap:8px;">
+            <button id="monthly-save-btn" class="btn btn-primary btn-sm" type="button">Salvar mensalista</button>
+            <button id="monthly-remove-btn" class="btn btn-danger btn-sm" type="button">Remover mensalista</button>
+          </div>
+        </div>
+        <div id="monthly-message" class="charge-message"></div>
+        <div style="overflow-x:auto;">
+          <table class="admin-table">
+            <thead>
+              <tr style="text-align:left;">
+                <th>Aluno</th>
+                <th>Matrícula</th>
+                <th>Plano semanal</th>
+                <th>Atualizado em</th>
+                <th>Atualizado por</th>
+              </tr>
+            </thead>
+            <tbody id="monthly-table-body">
+              <?php if (empty($monthlyRowsForJs)): ?>
+                <tr><td colspan="5">Nenhum mensalista cadastrado.</td></tr>
+              <?php else: ?>
+                <?php foreach ($monthlyRowsForJs as $monthlyRow): ?>
+                  <tr data-student-id="<?php echo htmlspecialchars((string) ($monthlyRow['student_id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">
+                    <td><?php echo htmlspecialchars((string) ($monthlyRow['student_name'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars((string) ($monthlyRow['enrollment'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars((string) ($monthlyRow['weekly_days'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?> dias/semana</td>
+                    <td><?php echo !empty($monthlyRow['updated_at']) ? htmlspecialchars(date('d/m/Y H:i', strtotime((string) $monthlyRow['updated_at'])), ENT_QUOTES, 'UTF-8') : '-'; ?></td>
+                    <td><?php echo htmlspecialchars((string) (($monthlyRow['updated_by'] ?? '') ?: '-'), ENT_QUOTES, 'UTF-8'); ?></td>
+                  </tr>
+                <?php endforeach; ?>
+              <?php endif; ?>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <section id="tab-exclusoes" class="<?php echo $activeTab === 'exclusoes' ? '' : 'hidden'; ?>">
         <h2>Histórico de exclusões</h2>
         <p class="muted">Registro de exclusões de cobranças e pendências com motivo informado.</p>
@@ -1093,6 +1247,13 @@ if (!empty($exclusionsLog)) {
             </select>
           </div>
           <div class="form-group">
+            <label>Mensalistas</label>
+            <select id="cashflow-monthly-mode">
+              <option value="subtract">Subtrair mensalistas (Aluno mensalista)</option>
+              <option value="show">Mostrar mensalistas</option>
+            </select>
+          </div>
+          <div class="form-group">
             <label>Não mostrar aluno</label>
             <input id="cashflow-exclude-student" type="text" placeholder="Ex.: Maria + João (ou vírgula)" />
           </div>
@@ -1214,8 +1375,9 @@ if (!empty($exclusionsLog)) {
   <script>
     window.__adminDashboardBooted = false;
     window.__adminStudents = <?php echo json_encode($studentsForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
+    window.__monthlyStudents = <?php echo json_encode($monthlyRowsForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
   </script>
-  <script src="/assets/js/admin-dashboard.js?v=45"></script>
+  <script src="/assets/js/admin-dashboard.js?v=46"></script>
   <script>
     (function () {
       function activateTab(name) {
@@ -1226,6 +1388,7 @@ if (!empty($exclusionsLog)) {
           recebidas: 'tab-recebidas',
           'sem-whatsapp': 'tab-sem-whatsapp',
           pendencias: 'tab-pendencias',
+          mensalistas: 'tab-mensalistas',
           exclusoes: 'tab-exclusoes',
           duplicados: 'tab-duplicados',
           'reset-senha': 'tab-reset-senha',

@@ -4,6 +4,7 @@ date_default_timezone_set('America/Sao_Paulo');
 
 use App\Helpers;
 use App\HttpClient;
+use App\MonthlyStudents;
 use App\SupabaseClient;
 
 function parseDayUseDate(string $date): ?string
@@ -62,11 +63,15 @@ try {
     }
 
     $client = new SupabaseClient(new HttpClient());
+    $monthlyItems = MonthlyStudents::load();
+    $monthlyById = MonthlyStudents::mapByStudentId($monthlyItems);
+    $monthlyByName = MonthlyStudents::mapByNormalizedName($monthlyItems);
     $results = [];
     $today = date('Y-m-d');
 
     foreach ($charges as $charge) {
         $studentName = trim((string) ($charge['student_name'] ?? ''));
+        $studentIdInput = trim((string) ($charge['student_id'] ?? ''));
         $guardianName = trim((string) ($charge['guardian_name'] ?? ''));
         $guardianEmail = trim((string) ($charge['guardian_email'] ?? ''));
         $guardianWhatsapp = trim((string) ($charge['guardian_whatsapp'] ?? ''));
@@ -102,7 +107,17 @@ try {
             continue;
         }
 
-        $studentResult = $client->select('students', 'select=id,name&name=eq.' . urlencode($studentName) . '&limit=1');
+        if ($studentIdInput !== '') {
+            $studentResult = $client->select(
+                'students',
+                'select=id,name&active=eq.true&id=eq.' . urlencode($studentIdInput) . '&limit=1'
+            );
+        } else {
+            $studentResult = $client->select(
+                'students',
+                'select=id,name&active=eq.true&name=eq.' . urlencode($studentName) . '&limit=1'
+            );
+        }
         if (!($studentResult['ok'] ?? false)) {
             $results[] = [
                 'student_name' => $studentName,
@@ -113,12 +128,93 @@ try {
         }
         $studentRow = $studentResult['data'][0] ?? null;
         if (!$studentRow || empty($studentRow['id'])) {
+            if ($studentIdInput !== '') {
+                $studentResult = $client->select(
+                    'students',
+                    'select=id,name&active=eq.true&name=eq.' . urlencode($studentName) . '&limit=1'
+                );
+                $studentRow = (($studentResult['ok'] ?? false) && !empty($studentResult['data'][0]))
+                    ? $studentResult['data'][0]
+                    : null;
+            }
+        }
+        if (!$studentRow || empty($studentRow['id'])) {
             $results[] = [
                 'student_name' => $studentName,
                 'ok' => false,
                 'error' => 'Aluno não encontrado no cadastro.',
             ];
             continue;
+        }
+
+        $requestedDatesIso = [];
+        $invalidDate = null;
+        foreach ($dayUseDates as $rawDate) {
+            $parsed = parseDayUseDate((string) $rawDate);
+            if ($parsed === null) {
+                $invalidDate = (string) $rawDate;
+                break;
+            }
+            $requestedDatesIso[$parsed] = true;
+        }
+        if ($invalidDate !== null) {
+            $results[] = [
+                'student_name' => $studentName,
+                'ok' => false,
+                'error' => 'Data inválida no day-use: ' . $invalidDate,
+            ];
+            continue;
+        }
+        $requestedDatesIso = array_keys($requestedDatesIso);
+        sort($requestedDatesIso);
+        if (empty($requestedDatesIso)) {
+            $results[] = [
+                'student_name' => $studentName,
+                'ok' => false,
+                'error' => 'Informe ao menos uma data válida de day-use.',
+            ];
+            continue;
+        }
+
+        $monthlyPlan = MonthlyStudents::resolvePlan(
+            (string) ($studentRow['id'] ?? ''),
+            (string) ($studentRow['name'] ?? $studentName),
+            $monthlyById,
+            $monthlyByName
+        );
+        $monthlyCoveredDates = [];
+        $monthlyOverflowDates = $requestedDatesIso;
+        if (is_array($monthlyPlan)) {
+            $weeklyDays = (int) ($monthlyPlan['weekly_days'] ?? 0);
+            if (in_array($weeklyDays, [2, 3, 4, 5], true)) {
+                $existingResult = $client->select(
+                    'payments',
+                    'select=id,daily_type,payment_date,status&student_id=eq.'
+                        . urlencode((string) $studentRow['id'])
+                        . '&order=payment_date.asc&limit=5000'
+                );
+                $existingRows = ($existingResult['ok'] ?? false) ? ($existingResult['data'] ?? []) : [];
+                $usedByWeek = MonthlyStudents::collectUsedDatesByWeek($existingRows);
+                $split = MonthlyStudents::splitRequestedDatesByQuota($requestedDatesIso, $weeklyDays, $usedByWeek);
+                $monthlyCoveredDates = $split['covered'] ?? [];
+                $monthlyOverflowDates = $split['overflow'] ?? [];
+
+                if (empty($monthlyOverflowDates)) {
+                    $results[] = [
+                        'student_name' => $studentName,
+                        'ok' => true,
+                        'monthly_covered' => true,
+                        'monthly_days' => $weeklyDays,
+                        'covered_dates' => $monthlyCoveredDates,
+                        'overflow_dates' => [],
+                        'message' => sprintf(
+                            'Aluno mensalista (%d dias). Nenhuma cobrança gerada para as datas dentro da franquia semanal.',
+                            $weeklyDays
+                        ),
+                    ];
+                    continue;
+                }
+            }
         }
 
         $documentDigits = preg_replace('/\D+/', '', $guardianDocument) ?? '';
@@ -176,11 +272,11 @@ try {
             continue;
         }
 
-        $daysCount = count($dayUseDates);
+        $dayUseDatesForPayment = array_map(static fn($isoDate) => date('d/m/Y', strtotime($isoDate)), $monthlyOverflowDates);
+        $daysCount = count($dayUseDatesForPayment);
         $amount = 97.00 * $daysCount;
-        $dailyType = 'emergencial|' . implode(', ', $dayUseDates);
-        $firstDate = parseDayUseDate($dayUseDates[0] ?? '');
-        $paymentDateValue = $firstDate ?: $today;
+        $dailyType = 'emergencial|' . implode(', ', $dayUseDatesForPayment);
+        $paymentDateValue = $monthlyOverflowDates[0] ?? $today;
 
         // Apenas salva localmente em fila para aparecer na aba Inadimplentes.
         $insertPayment = $client->insert('payments', [[
@@ -208,6 +304,9 @@ try {
             'ok' => true,
             'payment_id' => (string) ($paymentRow['id'] ?? ''),
             'queued' => true,
+            'monthly_days' => is_array($monthlyPlan) ? (int) ($monthlyPlan['weekly_days'] ?? 0) : null,
+            'covered_dates' => $monthlyCoveredDates,
+            'overflow_dates' => $monthlyOverflowDates,
         ];
     }
 

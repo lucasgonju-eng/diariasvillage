@@ -13,6 +13,7 @@ date_default_timezone_set('America/Sao_Paulo');
 
 use App\Helpers;
 use App\HttpClient;
+use App\MonthlyStudents;
 use App\SupabaseClient;
 
 function parse_day_type(string $raw): string
@@ -260,6 +261,46 @@ if (empty($payments) && $sessionGuardianId !== '') {
     if ($paymentsFallback['ok'] ?? false) {
         $appendPayments($paymentsFallback['data'] ?? []);
     }
+}
+
+$monthlyItems = MonthlyStudents::load();
+$monthlyById = MonthlyStudents::mapByStudentId($monthlyItems);
+$monthlyByName = MonthlyStudents::mapByNormalizedName($monthlyItems);
+if (!empty($payments) && (!empty($monthlyById) || !empty($monthlyByName))) {
+    $paymentsForQuota = array_values(array_filter($payments, static function ($payment): bool {
+        $status = strtolower(trim((string) ($payment['status'] ?? '')));
+        return !in_array($status, ['canceled', 'refunded', 'deleted'], true);
+    }));
+    $classified = MonthlyStudents::classifyRowsByQuota(
+        $paymentsForQuota,
+        static function (array $payment): array {
+            return [
+                'student_id' => (string) ($payment['student_id'] ?? ''),
+                'student_name' => '',
+                'dates' => MonthlyStudents::extractDatesFromPayment(
+                    (string) ($payment['daily_type'] ?? ''),
+                    (string) ($payment['payment_date'] ?? '')
+                ),
+                'created_at' => (string) ($payment['created_at'] ?? ''),
+            ];
+        },
+        $monthlyById,
+        $monthlyByName
+    );
+    $visibleIds = [];
+    foreach (($classified['visible'] ?? []) as $rowVisible) {
+        $pid = trim((string) ($rowVisible['id'] ?? ''));
+        if ($pid !== '') {
+            $visibleIds[$pid] = true;
+        }
+    }
+    $payments = array_values(array_filter($payments, static function ($payment) use ($visibleIds): bool {
+        $pid = trim((string) ($payment['id'] ?? ''));
+        if ($pid === '') {
+            return true;
+        }
+        return isset($visibleIds[$pid]);
+    }));
 }
 $studentsById = [];
 $studentIds = [];

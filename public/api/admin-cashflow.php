@@ -12,6 +12,7 @@ foreach ($bootstrapCandidates as $bootstrapFile) {
 
 use App\Helpers;
 use App\HttpClient;
+use App\MonthlyStudents;
 use App\SupabaseClient;
 
 if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
@@ -123,6 +124,10 @@ $dayUseTypeFilter = strtolower(trim((string) ($_GET['day_use_type'] ?? '')));
 $studentFilter = normalize_lower((string) ($_GET['student_name'] ?? ''));
 $enrollmentFilter = normalize_lower((string) ($_GET['enrollment'] ?? ''));
 $billingTypeFilter = strtoupper(trim((string) ($_GET['billing_type'] ?? '')));
+$monthlyMode = strtolower(trim((string) ($_GET['monthly_mode'] ?? 'subtract')));
+if (!in_array($monthlyMode, ['subtract', 'show'], true)) {
+    $monthlyMode = 'subtract';
+}
 $excludeStudentTerms = parse_filter_terms((string) ($_GET['exclude_student'] ?? ''));
 $excludeGenericTerms = parse_filter_terms((string) ($_GET['exclude_term'] ?? ''));
 $transitionCutoff = '2026-03-15';
@@ -196,6 +201,12 @@ if (!empty($rows)) {
 $items = [];
 $totalAmount = 0.0;
 $totalPaidAmount = 0.0;
+$monthlyAdjustment = [
+    'mode' => $monthlyMode,
+    'count' => 0,
+    'amount' => 0.0,
+    'description' => 'Aluno mensalista',
+];
 
 foreach ($rows as $row) {
     $student = $studentsById[(string) ($row['student_id'] ?? '')] ?? [];
@@ -245,6 +256,8 @@ foreach ($rows as $row) {
 
     $items[] = [
         'id' => $row['id'] ?? null,
+        'source' => 'payments',
+        'student_id' => (string) ($row['student_id'] ?? ''),
         'student_name' => $studentName !== '' ? $studentName : '-',
         'date' => $dateKey,
         'day_use_type' => $dailyTypeLabel,
@@ -254,12 +267,8 @@ foreach ($rows as $row) {
         'status' => $status !== '' ? $status : '-',
         'billing_type' => $billingType !== '' ? $billingType : '-',
         'paid_at' => $paidAt,
+        'created_at' => $createdAt,
     ];
-
-    $totalAmount += $effectiveAmount;
-    if (strtolower($status) === 'paid') {
-        $totalPaidAmount += $effectiveAmount;
-    }
 }
 
 foreach ($pendencias as $p) {
@@ -304,6 +313,8 @@ foreach ($pendencias as $p) {
 
     $items[] = [
         'id' => $p['id'] ?? null,
+        'source' => 'pendencia',
+        'student_id' => '',
         'student_name' => $studentName !== '' ? $studentName : '-',
         'date' => $dateKey,
         'day_use_type' => $dayUseType,
@@ -312,11 +323,36 @@ foreach ($pendencias as $p) {
         'status' => $status,
         'billing_type' => $billingType,
         'paid_at' => $paidAt,
+        'created_at' => $createdAt,
     ];
+}
 
-    $totalAmount += $amount;
-    if ($status === 'paid') {
-        $totalPaidAmount += $amount;
+if ($monthlyMode === 'subtract') {
+    $monthlyItems = MonthlyStudents::load();
+    $monthlyById = MonthlyStudents::mapByStudentId($monthlyItems);
+    $monthlyByName = MonthlyStudents::mapByNormalizedName($monthlyItems);
+    if (!empty($monthlyById) || !empty($monthlyByName)) {
+        $paymentItems = array_values(array_filter($items, static fn($item): bool => ($item['source'] ?? '') === 'payments'));
+        $otherItems = array_values(array_filter($items, static fn($item): bool => ($item['source'] ?? '') !== 'payments'));
+        $classified = MonthlyStudents::classifyRowsByQuota(
+            $paymentItems,
+            static function (array $item): array {
+                return [
+                    'student_id' => (string) ($item['student_id'] ?? ''),
+                    'student_name' => (string) ($item['student_name'] ?? ''),
+                    'dates' => [(string) ($item['date'] ?? '')],
+                    'created_at' => (string) ($item['created_at'] ?? ''),
+                ];
+            },
+            $monthlyById,
+            $monthlyByName
+        );
+        $covered = $classified['covered'] ?? [];
+        foreach ($covered as $itemCovered) {
+            $monthlyAdjustment['count']++;
+            $monthlyAdjustment['amount'] += (float) ($itemCovered['amount'] ?? 0);
+        }
+        $items = array_merge($classified['visible'] ?? [], $otherItems);
     }
 }
 
@@ -330,6 +366,16 @@ usort($items, static function (array $a, array $b): int {
     return strcmp((string) ($b['date'] ?? ''), (string) ($a['date'] ?? ''));
 });
 
+$totalAmount = 0.0;
+$totalPaidAmount = 0.0;
+foreach ($items as $item) {
+    $value = (float) ($item['amount'] ?? 0);
+    $totalAmount += $value;
+    if (strtolower((string) ($item['status'] ?? '')) === 'paid') {
+        $totalPaidAmount += $value;
+    }
+}
+
 Helpers::json([
     'ok' => true,
     'period' => ['from' => $from, 'to' => $to],
@@ -337,6 +383,12 @@ Helpers::json([
         'count' => count($items),
         'amount' => round($totalAmount, 2),
         'paid_amount' => round($totalPaidAmount, 2),
+    ],
+    'monthly_adjustment' => [
+        'mode' => $monthlyAdjustment['mode'],
+        'count' => (int) $monthlyAdjustment['count'],
+        'amount' => round((float) $monthlyAdjustment['amount'], 2),
+        'description' => (string) $monthlyAdjustment['description'],
     ],
     'warnings' => $warnings,
     'items' => $items,
