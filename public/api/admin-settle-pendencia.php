@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../src/Bootstrap.php';
+require_once dirname(__DIR__, 2) . '/src/Bootstrap.php';
 
 use App\Helpers;
 use App\HttpClient;
@@ -22,7 +22,8 @@ if ($pendenciaId === '') {
 $client = new SupabaseClient(new HttpClient());
 $pendenciaResult = $client->select(
     'pendencia_de_cadastro',
-    'select=id,paid_at,student_name,guardian_name,guardian_cpf,guardian_email&id=eq.' . urlencode($pendenciaId)
+    'select=id,paid_at,student_name,guardian_name,guardian_cpf,guardian_email,student_id,enrollment&id=eq.'
+        . urlencode($pendenciaId)
 );
 if (!$pendenciaResult['ok'] || empty($pendenciaResult['data'])) {
     Helpers::json(['ok' => false, 'error' => 'Pendência não encontrada.'], 404);
@@ -36,18 +37,32 @@ if (!empty($pendenciaRow['paid_at'])) {
 $accessCode = Helpers::randomNumericCode(6);
 $dayUseDate = preg_match('/^\d{4}-\d{2}-\d{2}$/', $paymentDate) ? $paymentDate : date('Y-m-d');
 
-$guardianByCpf = $client->select(
-    'guardians',
-    'select=student_id&parent_document=eq.' . urlencode($pendenciaRow['guardian_cpf'] ?? '') . '&limit=1'
-);
-$enrollment = null;
-$studentId = null;
-if ($guardianByCpf['ok'] && !empty($guardianByCpf['data'])) {
-    $studentId = $guardianByCpf['data'][0]['student_id'] ?? null;
-    if ($studentId) {
-        $studentRes = $client->select('students', 'select=enrollment&id=eq.' . urlencode($studentId));
-        if ($studentRes['ok'] && !empty($studentRes['data'])) {
-            $enrollment = $studentRes['data'][0]['enrollment'] ?? null;
+$studentId = trim((string) ($pendenciaRow['student_id'] ?? ''));
+$studentId = $studentId !== '' ? $studentId : null;
+$enrollment = $pendenciaRow['enrollment'] ?? null;
+if ($enrollment === '') {
+    $enrollment = null;
+}
+
+if ($studentId && $enrollment === null) {
+    $studentRes = $client->select('students', 'select=enrollment&id=eq.' . urlencode($studentId) . '&limit=1');
+    if (($studentRes['ok'] ?? false) && !empty($studentRes['data'])) {
+        $enrollment = $studentRes['data'][0]['enrollment'] ?? null;
+    }
+}
+
+if (!$studentId) {
+    $guardianByCpf = $client->select(
+        'guardians',
+        'select=student_id&parent_document=eq.' . urlencode($pendenciaRow['guardian_cpf'] ?? '') . '&limit=1'
+    );
+    if (($guardianByCpf['ok'] ?? false) && !empty($guardianByCpf['data'])) {
+        $studentId = $guardianByCpf['data'][0]['student_id'] ?? null;
+        if ($studentId && $enrollment === null) {
+            $studentRes = $client->select('students', 'select=enrollment&id=eq.' . urlencode((string) $studentId) . '&limit=1');
+            if (($studentRes['ok'] ?? false) && !empty($studentRes['data'])) {
+                $enrollment = $studentRes['data'][0]['enrollment'] ?? null;
+            }
         }
     }
 }
@@ -73,7 +88,7 @@ $guardianEmail = $pendenciaRow['guardian_email'] ?? '';
 if ($guardianEmail) {
     $studentName = $pendenciaRow['student_name'] ?? 'Aluno';
     $paymentDateFormatted = date('d/m/Y', strtotime($dayUseDate));
-    $portalLink = Helpers::baseUrl() ?: 'https://village.einsteinhub.co';
+    $portalLink = Helpers::baseUrl() ?: 'https://diarias.village.einsteinhub.co';
 
     $template = <<<'HTML'
 <!doctype html>

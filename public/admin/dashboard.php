@@ -60,13 +60,13 @@ $missingWhatsapp = $missingWhatsappResult['data'] ?? [];
 
 $pendenciasResult = $client->select(
     'pendencia_de_cadastro',
-    'select=id,student_name,guardian_name,guardian_cpf,guardian_email,created_at,paid_at,payment_date,access_code,enrollment,asaas_payment_id,asaas_invoice_url&order=created_at.desc&limit=500'
+    'select=id,student_name,student_id,guardian_name,guardian_cpf,guardian_email,created_at,paid_at,payment_date,access_code,enrollment,asaas_payment_id,asaas_invoice_url&order=created_at.desc&limit=500'
 );
 if (!($pendenciasResult['ok'] ?? false)) {
     // Fallback para ambientes com schema antigo sem campos asaas_*.
     $pendenciasResult = $client->select(
         'pendencia_de_cadastro',
-        'select=id,student_name,guardian_name,guardian_cpf,guardian_email,created_at,paid_at,payment_date,access_code,enrollment&order=created_at.desc&limit=500'
+        'select=id,student_name,student_id,guardian_name,guardian_cpf,guardian_email,created_at,paid_at,payment_date,access_code,enrollment&order=created_at.desc&limit=500'
     );
 }
 $pendenciasAll = $pendenciasResult['data'] ?? [];
@@ -320,6 +320,11 @@ if (!empty($exclusionsLog)) {
     .admin-view-user{display:flex;gap:8px;align-items:center}
     .admin-view-user input{width:220px}
     .view-user-form{margin:12px 0;padding:12px;border-radius:12px;background:#FFF7ED;border:1px solid #FED7AA}
+    .pendencia-student-link{font-size:12px;line-height:1.4;color:#0F172A}
+    .pendencia-student-link .pending{color:#B45309;font-weight:700}
+    .pendencia-student-actions{display:grid;gap:8px;min-width:240px}
+    .pendencia-student-actions input{min-width:220px}
+    .pendencia-student-actions .btn{justify-content:center}
     .hidden{display:none}
   </style>
 </head>
@@ -386,7 +391,7 @@ if (!empty($exclusionsLog)) {
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=inadimplentes" data-tab="inadimplentes">Inadimplentes</a>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=recebidas" data-tab="recebidas">Cobranças recebidas</a>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=sem-whatsapp" data-tab="sem-whatsapp">Sem WhatsApp</a>
-        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=pendencias" data-tab="pendencias">Pendências</a>
+        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=pendencias" data-tab="pendencias">Pendência de cadastro</a>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=exclusoes" data-tab="exclusoes">Exclusões</a>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=duplicados" data-tab="duplicados">Duplicados</a>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=reset-senha" data-tab="reset-senha">Resetar senha</a>
@@ -708,11 +713,12 @@ if (!empty($exclusionsLog)) {
 
       <section id="tab-pendencias" class="<?php echo $activeTab === 'pendencias' ? '' : 'hidden'; ?>">
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
-          <h2 style="margin:0;">Pendências de cadastro</h2>
+          <h2 style="margin:0;">Pendência de cadastro</h2>
           <a href="/admin/settle-pendencia.php" class="btn btn-danger btn-sm">Baixa manual (página dedicada)</a>
           <button id="sync-charges-payments-btn" class="btn btn-primary btn-sm" type="button">Atualizar cobranças e pagamentos</button>
         </div>
-        <p class="muted">Solicitações registradas para ajuste manual no cadastro.</p>
+        <p class="muted">Solicitações do formulário de cadastro pendente. Você pode mesclar com aluno existente ou incluir um novo aluno no banco.</p>
+        <datalist id="pendencia-students-list"></datalist>
         <div id="sync-charges-payments-message" class="charge-message"></div>
         <div class="charge-fields" style="margin-bottom:12px;">
           <div class="form-group">
@@ -742,6 +748,8 @@ if (!empty($exclusionsLog)) {
                 <th>E-mail</th>
                 <th>Data do day-use</th>
                 <th>Registrado em</th>
+                <th>Aluno no banco</th>
+                <th>Ações do aluno</th>
                 <th>Status Asaas</th>
                 <th>Pago em</th>
                 <th>Excluir pendência</th>
@@ -750,7 +758,7 @@ if (!empty($exclusionsLog)) {
             <tbody>
               <?php if (empty($pendencias)): ?>
                 <tr>
-                  <td colspan="9">Nenhuma pendência registrada.</td>
+                  <td colspan="11">Nenhuma pendência registrada.</td>
                 </tr>
               <?php else: ?>
                 <?php foreach ($pendencias as $pendencia): ?>
@@ -758,17 +766,58 @@ if (!empty($exclusionsLog)) {
                     $created = $pendencia['created_at'] ? date('d/m/Y H:i', strtotime($pendencia['created_at'])) : '-';
                     $paidAt = $pendencia['paid_at'] ? date('d/m/Y H:i', strtotime($pendencia['paid_at'])) : '-';
                     $dayUseDate = !empty($pendencia['payment_date']) ? date('d/m/Y', strtotime($pendencia['payment_date'])) : 'Não informado';
+                    $linkedEnrollment = trim((string) ($pendencia['enrollment'] ?? ''));
+                    $linkedStudentId = trim((string) ($pendencia['student_id'] ?? ''));
+                    $linkedLabel = $linkedStudentId !== ''
+                        ? 'Vinculado' . ($linkedEnrollment !== '' ? ' • Matrícula ' . $linkedEnrollment : '')
+                        : 'Pendente de vínculo';
                   ?>
-                  <tr data-pendencia-id="<?php echo htmlspecialchars($pendencia['id'], ENT_QUOTES, 'UTF-8'); ?>">
-                    <td><?php echo htmlspecialchars($pendencia['student_name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
+                  <tr
+                    data-pendencia-id="<?php echo htmlspecialchars($pendencia['id'], ENT_QUOTES, 'UTF-8'); ?>"
+                    data-student-id="<?php echo htmlspecialchars($linkedStudentId, ENT_QUOTES, 'UTF-8'); ?>"
+                  >
+                    <td data-col="student-name"><?php echo htmlspecialchars($pendencia['student_name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo htmlspecialchars($pendencia['guardian_name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo htmlspecialchars($pendencia['guardian_cpf'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo htmlspecialchars($pendencia['guardian_email'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo htmlspecialchars($dayUseDate, ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo $created; ?></td>
+                    <td data-col="student-link">
+                      <div class="pendencia-student-link">
+                        <?php if ($linkedStudentId !== ''): ?>
+                          <?php echo htmlspecialchars($linkedLabel, ENT_QUOTES, 'UTF-8'); ?>
+                        <?php else: ?>
+                          <span class="pending">Pendente de vínculo</span>
+                        <?php endif; ?>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="pendencia-student-actions">
+                        <input
+                          type="text"
+                          class="input-sm pendencia-student-lookup"
+                          list="pendencia-students-list"
+                          placeholder="Aluno existente no banco"
+                        />
+                        <button
+                          class="btn btn-ghost btn-sm js-pendencia-link-student"
+                          type="button"
+                          data-id="<?php echo htmlspecialchars($pendencia['id'], ENT_QUOTES, 'UTF-8'); ?>"
+                        >
+                          Mesclar com existente
+                        </button>
+                        <button
+                          class="btn btn-primary btn-sm js-pendencia-create-student"
+                          type="button"
+                          data-id="<?php echo htmlspecialchars($pendencia['id'], ENT_QUOTES, 'UTF-8'); ?>"
+                        >
+                          Incluir aluno no banco
+                        </button>
+                      </div>
+                    </td>
                     <td data-col="asaas-status">-</td>
                     <td data-col="paid-at"><?php echo $paidAt; ?></td>
-                    <td>
+                    <td data-col="action">
                       <?php if (!empty($pendencia['paid_at'])): ?>
                         -
                       <?php else: ?>

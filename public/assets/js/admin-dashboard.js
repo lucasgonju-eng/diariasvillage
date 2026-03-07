@@ -26,6 +26,7 @@ const syncRecebidasButton = document.querySelector('#sync-recebidas-btn');
 const syncRecebidasMessage = document.querySelector('#sync-recebidas-message');
 const viewUserStudentInput = document.querySelector('#admin-view-user-student');
 const viewUserStudentsList = document.querySelector('#admin-students-list');
+const pendenciaStudentsList = document.querySelector('#pendencia-students-list');
 const viewUserButton = document.querySelector('#admin-view-user-btn');
 const addGuardianButton = document.querySelector('#admin-add-guardian-btn');
 const viewUserForm = document.querySelector('#admin-view-user-form');
@@ -42,6 +43,8 @@ const viewUserFormMessage = document.querySelector('#view-user-form-message');
 const selectedStudents = new Set();
 const guardianCache = new Map();
 const studentNames = new Set();
+const studentLookupByLabel = new Map();
+let adminStudents = [];
 
 function setActiveTab(name) {
   if (
@@ -485,23 +488,43 @@ async function addChargeItem(studentName) {
 }
 
 async function loadStudents() {
-  if (!studentList && !viewUserStudentsList) return;
+  if (!studentList && !viewUserStudentsList && !pendenciaStudentsList) return;
   const res = await fetch('/api/students.php');
   const data = await res.json();
   if (!data.ok) return;
+  adminStudents = Array.isArray(data.students) ? data.students : [];
   if (studentList) studentList.innerHTML = '';
   if (viewUserStudentsList) viewUserStudentsList.innerHTML = '';
+  if (pendenciaStudentsList) pendenciaStudentsList.innerHTML = '';
   studentNames.clear();
-  data.students.forEach((student) => {
+  studentLookupByLabel.clear();
+  adminStudents.forEach((student) => {
+    const studentName = (student.name || '').trim();
+    if (!studentName) return;
     const option = document.createElement('option');
-    option.value = student.name;
+    option.value = studentName;
     if (studentList) studentList.appendChild(option);
     if (viewUserStudentsList) {
       const optionView = document.createElement('option');
-      optionView.value = student.name;
+      optionView.value = studentName;
       viewUserStudentsList.appendChild(optionView);
     }
-    studentNames.add(student.name);
+    if (pendenciaStudentsList) {
+      const gradeLabel = student.grade ? `${student.grade}º ano` : '';
+      const classLabel = (student.class_name || '').trim();
+      const enrollmentLabel = (student.enrollment || '').trim();
+      const details = [gradeLabel, classLabel, enrollmentLabel ? `Matrícula ${enrollmentLabel}` : '']
+        .filter(Boolean)
+        .join(' • ');
+      const lookupLabel = details ? `${studentName} • ${details}` : studentName;
+      const optionPendencia = document.createElement('option');
+      optionPendencia.value = lookupLabel;
+      pendenciaStudentsList.appendChild(optionPendencia);
+      if (student.id) {
+        studentLookupByLabel.set(lookupLabel, student);
+      }
+    }
+    studentNames.add(studentName);
   });
 }
 
@@ -886,6 +909,8 @@ const pendenciaAsaasButton = document.querySelector('#check-pendencia-asaas');
 const pendenciaLinkButtons = document.querySelectorAll('.js-link-asaas');
 const pendenciaSettleButtons = document.querySelectorAll('.js-settle-pendencia');
 const pendenciaDeleteButtons = document.querySelectorAll('.js-delete-pendencia');
+const pendenciaLinkStudentButtons = document.querySelectorAll('.js-pendencia-link-student');
+const pendenciaCreateStudentButtons = document.querySelectorAll('.js-pendencia-create-student');
 const syncChargesPaymentsButton = document.querySelector('#sync-charges-payments-btn');
 const syncChargesPaymentsMessage = document.querySelector('#sync-charges-payments-message');
 
@@ -910,6 +935,52 @@ function updatePendenciaRow(row, data) {
       ? data.paid_at
       : date.toLocaleString('pt-BR');
     if (actionCell) actionCell.textContent = '-';
+  }
+}
+
+function findStudentFromLookup(lookupValue) {
+  const value = String(lookupValue || '').trim();
+  if (!value) {
+    return { student: null, error: 'Informe o aluno existente para fazer a mesclagem.' };
+  }
+  const byLabel = studentLookupByLabel.get(value);
+  if (byLabel && byLabel.id) {
+    return { student: byLabel, error: '' };
+  }
+
+  const byName = adminStudents.filter(
+    (student) => String(student.name || '').trim().toLowerCase() === value.toLowerCase(),
+  );
+  if (byName.length === 1 && byName[0]?.id) {
+    return { student: byName[0], error: '' };
+  }
+  if (byName.length > 1) {
+    return {
+      student: null,
+      error: 'Mais de um aluno com esse nome. Selecione pela lista sugerida com série/turma/matrícula.',
+    };
+  }
+  return { student: null, error: 'Aluno não encontrado no banco para mesclagem.' };
+}
+
+function renderPendenciaStudentLink(row, student) {
+  if (!row || !student) return;
+  const studentId = String(student.id || '').trim();
+  const studentName = String(student.name || '').trim();
+  const enrollment = String(student.enrollment || '').trim();
+  if (studentId) {
+    row.dataset.studentId = studentId;
+  }
+  const studentNameCell = row.querySelector('[data-col="student-name"]');
+  if (studentNameCell && studentName) {
+    studentNameCell.textContent = studentName;
+  }
+  const studentLinkCell = row.querySelector('[data-col="student-link"]');
+  if (studentLinkCell) {
+    const label = studentId
+      ? `Vinculado${enrollment ? ` • Matrícula ${enrollment}` : ''}`
+      : 'Pendente de vínculo';
+    studentLinkCell.innerHTML = `<div class="pendencia-student-link">${escapeHtml(label)}</div>`;
   }
 }
 
@@ -1252,6 +1323,178 @@ pendenciaDeleteButtons.forEach((button) => {
     } catch {
       if (pendenciaMessage) {
         pendenciaMessage.textContent = 'Falha ao excluir pendência.';
+        pendenciaMessage.className = 'charge-message error';
+      }
+    } finally {
+      button.removeAttribute('disabled');
+    }
+  });
+});
+
+async function postPendenciaStudentReconcile(payload) {
+  const res = await fetch('/api/admin-reconcile-pendencia-student.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  return { res, data };
+}
+
+pendenciaLinkStudentButtons.forEach((button) => {
+  button.addEventListener('click', async () => {
+    if (!(button instanceof HTMLElement)) return;
+    const pendenciaId = button.dataset.id;
+    const row = button.closest('tr');
+    const lookupInput = row ? row.querySelector('.pendencia-student-lookup') : null;
+    const lookupValue = lookupInput ? lookupInput.value : '';
+    if (!pendenciaId || !row) return;
+
+    const found = findStudentFromLookup(lookupValue);
+    if (!found.student) {
+      if (pendenciaMessage) {
+        pendenciaMessage.textContent = found.error;
+        pendenciaMessage.className = 'charge-message error';
+      }
+      return;
+    }
+
+    button.setAttribute('disabled', 'disabled');
+    if (pendenciaMessage) {
+      pendenciaMessage.textContent = 'Mesclando pendência com aluno existente...';
+      pendenciaMessage.className = 'charge-message';
+    }
+    try {
+      const { res, data } = await postPendenciaStudentReconcile({
+        pendencia_id: pendenciaId,
+        action: 'link_existing',
+        student_id: found.student.id,
+      });
+      if (!res.ok || !data?.ok) {
+        if (pendenciaMessage) {
+          pendenciaMessage.textContent = data?.error || 'Falha ao mesclar pendência com aluno existente.';
+          pendenciaMessage.className = 'charge-message error';
+        }
+        return;
+      }
+      renderPendenciaStudentLink(row, data.student || found.student);
+      if (lookupInput) lookupInput.value = '';
+      if (pendenciaMessage) {
+        pendenciaMessage.textContent = 'Pendência mesclada com aluno existente.';
+        pendenciaMessage.className = 'charge-message success';
+      }
+    } catch {
+      if (pendenciaMessage) {
+        pendenciaMessage.textContent = 'Falha ao mesclar pendência com aluno existente.';
+        pendenciaMessage.className = 'charge-message error';
+      }
+    } finally {
+      button.removeAttribute('disabled');
+    }
+  });
+});
+
+pendenciaCreateStudentButtons.forEach((button) => {
+  button.addEventListener('click', async () => {
+    if (!(button instanceof HTMLElement)) return;
+    const pendenciaId = button.dataset.id;
+    const row = button.closest('tr');
+    if (!pendenciaId || !row) return;
+
+    const rowStudentName = row.querySelector('[data-col="student-name"]')?.textContent?.trim() || '';
+    const studentName = window.prompt('Nome do aluno para incluir no banco:', rowStudentName || '');
+    if (studentName === null) return;
+    const studentNameTrimmed = studentName.trim();
+    if (!studentNameTrimmed) {
+      if (pendenciaMessage) {
+        pendenciaMessage.textContent = 'Informe o nome do aluno para incluir no banco.';
+        pendenciaMessage.className = 'charge-message error';
+      }
+      return;
+    }
+
+    const gradeRaw = window.prompt('Série do aluno (6, 7 ou 8):', '6');
+    if (gradeRaw === null) return;
+    const gradeDigits = String(gradeRaw).replace(/\D/g, '');
+    if (!['6', '7', '8'].includes(gradeDigits)) {
+      if (pendenciaMessage) {
+        pendenciaMessage.textContent = 'Série inválida. Use 6, 7 ou 8.';
+        pendenciaMessage.className = 'charge-message error';
+      }
+      return;
+    }
+
+    const classNameRaw = window.prompt('Turma (opcional, ex: 6º Ano - A):', '');
+    if (classNameRaw === null) return;
+    const enrollmentRaw = window.prompt('Matrícula (opcional):', '');
+    if (enrollmentRaw === null) return;
+
+    button.setAttribute('disabled', 'disabled');
+    if (pendenciaMessage) {
+      pendenciaMessage.textContent = 'Incluindo aluno no banco e vinculando pendência...';
+      pendenciaMessage.className = 'charge-message';
+    }
+    try {
+      const { res, data } = await postPendenciaStudentReconcile({
+        pendencia_id: pendenciaId,
+        action: 'create_student',
+        student_name: studentNameTrimmed,
+        grade: Number(gradeDigits),
+        class_name: String(classNameRaw || '').trim(),
+        enrollment: String(enrollmentRaw || '').trim(),
+      });
+      if (!res.ok || !data?.ok) {
+        if (pendenciaMessage) {
+          pendenciaMessage.textContent = data?.error || 'Falha ao incluir aluno no banco.';
+          pendenciaMessage.className = 'charge-message error';
+        }
+        return;
+      }
+
+      const student = data.student || null;
+      if (student) {
+        renderPendenciaStudentLink(row, student);
+        const newName = String(student.name || '').trim();
+        if (newName && !studentNames.has(newName)) {
+          studentNames.add(newName);
+          adminStudents.push(student);
+          if (studentList) {
+            const option = document.createElement('option');
+            option.value = newName;
+            studentList.appendChild(option);
+          }
+          if (viewUserStudentsList) {
+            const optionView = document.createElement('option');
+            optionView.value = newName;
+            viewUserStudentsList.appendChild(optionView);
+          }
+          if (pendenciaStudentsList) {
+            const gradeLabel = student.grade ? `${student.grade}º ano` : '';
+            const classLabel = String(student.class_name || '').trim();
+            const enrollmentLabel = String(student.enrollment || '').trim();
+            const details = [gradeLabel, classLabel, enrollmentLabel ? `Matrícula ${enrollmentLabel}` : '']
+              .filter(Boolean)
+              .join(' • ');
+            const lookupLabel = details ? `${newName} • ${details}` : newName;
+            const optionPendencia = document.createElement('option');
+            optionPendencia.value = lookupLabel;
+            pendenciaStudentsList.appendChild(optionPendencia);
+            if (student.id) {
+              studentLookupByLabel.set(lookupLabel, student);
+            }
+          }
+        }
+      }
+
+      if (pendenciaMessage) {
+        pendenciaMessage.textContent = data.created_student
+          ? 'Aluno incluído no banco e pendência vinculada com sucesso.'
+          : 'Aluno já existia no banco e a pendência foi vinculada.';
+        pendenciaMessage.className = 'charge-message success';
+      }
+    } catch {
+      if (pendenciaMessage) {
+        pendenciaMessage.textContent = 'Falha ao incluir aluno no banco.';
         pendenciaMessage.className = 'charge-message error';
       }
     } finally {
