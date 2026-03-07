@@ -391,8 +391,8 @@ if (!empty($exclusionsLog)) {
 
     <div class="admin-card">
       <div class="admin-tabs">
-        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=charges" data-tab="charges">Cobrança</a>
-        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=inadimplentes" data-tab="inadimplentes">Inadimplentes</a>
+        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=charges" data-tab="charges">Cobrança manual</a>
+        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=inadimplentes" data-tab="inadimplentes">Cobranças em aberto</a>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=recebidas" data-tab="recebidas">Cobranças recebidas</a>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=sem-whatsapp" data-tab="sem-whatsapp">Sem WhatsApp</a>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=pendencias" data-tab="pendencias">Pendência de cadastro</a>
@@ -484,8 +484,8 @@ if (!empty($exclusionsLog)) {
       </section>
 
       <section id="tab-charges" class="<?php echo $activeTab === 'charges' ? '' : 'hidden'; ?>">
-        <h2>Cobrança</h2>
-        <p class="muted">Selecione alunos e informe os dados do responsável para salvar pendências localmente (sem enviar).</p>
+        <h2>Cobrança manual pós-chamada</h2>
+        <p class="muted">Use quando o aluno frequentou sem pagamento antecipado. Registre a cobrança manual para revisão antes do envio.</p>
 
         <div class="form-group">
           <label>Aluno</label>
@@ -495,18 +495,18 @@ if (!empty($exclusionsLog)) {
 
         <div id="charge-list" class="charge-list"></div>
 
-        <button class="btn btn-primary" id="send-charges" type="button">Salvar pendências (sem enviar)</button>
+        <button class="btn btn-primary" id="send-charges" type="button">Registrar cobranças manuais (sem envio)</button>
         <div id="charge-message" class="charge-message"></div>
       </section>
 
       <section id="tab-inadimplentes" class="<?php echo $activeTab === 'inadimplentes' ? '' : 'hidden'; ?>">
-        <h2>Inadimplentes</h2>
-        <p class="muted">Selecione as pendências em fila para enviar em massa quando finalizar sua revisão.</p>
+        <h2>Cobranças em aberto</h2>
+        <p class="muted">Inclui cobranças da fila de envio e cobranças já enviadas que ainda não foram pagas.</p>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
-          <button id="send-selected-pending" class="btn btn-primary btn-sm" type="button">Enviar cobranças pendentes</button>
+          <button id="send-selected-pending" class="btn btn-primary btn-sm" type="button">Enviar cobranças da fila</button>
           <label style="display:flex;gap:6px;align-items:center;font-size:13px;">
             <input id="select-all-pending" type="checkbox" />
-            Selecionar todas da fila
+            Selecionar todas da fila de envio
           </label>
         </div>
         <div id="send-pending-message" class="charge-message"></div>
@@ -529,7 +529,7 @@ if (!empty($exclusionsLog)) {
             <tbody>
               <?php if (empty($queuedPending) && empty($manualPending)): ?>
                 <tr>
-                  <td colspan="9">Nenhuma cobrança pendente.</td>
+                  <td colspan="9">Nenhuma cobrança em aberto.</td>
                 </tr>
               <?php else: ?>
                 <?php foreach ($queuedPending as $payment): ?>
@@ -620,7 +620,7 @@ if (!empty($exclusionsLog)) {
 
       <section id="tab-recebidas" class="<?php echo $activeTab === 'recebidas' ? '' : 'hidden'; ?>">
         <h2>Cobranças recebidas</h2>
-        <p class="muted">Cobranças pagas e regularizadas.</p>
+        <p class="muted">Apenas conferência de cobranças pagas e regularizadas.</p>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
           <button id="sync-recebidas-btn" class="btn btn-primary btn-sm" type="button">Atualizar recebidas no Asaas</button>
           <div id="sync-recebidas-message" class="charge-message"></div>
@@ -641,7 +641,7 @@ if (!empty($exclusionsLog)) {
             <tbody>
               <?php if (empty($manualPaid) && empty($pendenciasPagas)): ?>
                 <tr>
-                  <td colspan="6">Nenhuma cobrança recebida.</td>
+                  <td colspan="6">Nenhuma cobrança recebida para conferência.</td>
                 </tr>
               <?php else: ?>
                 <?php foreach ($manualPaid as $payment): ?>
@@ -723,7 +723,7 @@ if (!empty($exclusionsLog)) {
           <a href="/admin/settle-pendencia.php" class="btn btn-danger btn-sm">Baixa manual (página dedicada)</a>
           <button id="sync-charges-payments-btn" class="btn btn-primary btn-sm" type="button">Atualizar cobranças e pagamentos</button>
         </div>
-        <p class="muted">Solicitações do formulário de cadastro pendente. Você pode mesclar com aluno existente ou incluir um novo aluno no banco.</p>
+        <p class="muted">Esta aba deve receber apenas solicitações do botão Abrir Formulário no primeiro cadastro. Você pode mesclar com aluno existente ou incluir um novo aluno no banco.</p>
         <datalist id="pendencia-students-list"></datalist>
         <div id="sync-charges-payments-message" class="charge-message"></div>
         <div class="charge-fields" style="margin-bottom:12px;">

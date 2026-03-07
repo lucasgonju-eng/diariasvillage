@@ -633,7 +633,7 @@ if (sendChargesButton) {
     }
 
     sendChargesButton.disabled = true;
-    sendChargesButton.textContent = 'Enviando...';
+    sendChargesButton.textContent = 'Registrando...';
     showChargeMessage('');
 
     try {
@@ -669,14 +669,14 @@ if (sendChargesButton) {
       }
       if (!data?.ok) {
         const statusInfo = !res.ok ? ` (HTTP ${res.status})` : '';
-        showChargeMessage((data?.error || 'Falha ao enviar cobranças.') + statusInfo, true);
+        showChargeMessage((data?.error || 'Falha ao registrar cobranças manuais.') + statusInfo, true);
       } else {
         const results = Array.isArray(data.results) ? data.results : [];
         const failures = results.filter((item) => !item.ok);
         if (failures.length) {
-          showChargeMessage('Algumas pendências não foram salvas. Verifique os dados.', true);
+          showChargeMessage('Algumas cobranças manuais não foram registradas. Verifique os dados.', true);
         } else {
-          showChargeMessage('Pendências salvas no SaaS (sem envio). Abrindo Inadimplentes...');
+          showChargeMessage('Cobranças manuais registradas na fila (sem envio). Abrindo Cobranças em aberto...');
           resetChargeForm();
           setTimeout(() => {
             window.location.href = '/admin/dashboard.php?tab=inadimplentes';
@@ -684,10 +684,10 @@ if (sendChargesButton) {
         }
       }
     } catch (err) {
-      showChargeMessage('Falha ao enviar cobranças.', true);
+      showChargeMessage('Falha ao registrar cobranças manuais.', true);
     } finally {
       sendChargesButton.disabled = false;
-      sendChargesButton.textContent = 'Salvar pendências (sem enviar)';
+      sendChargesButton.textContent = 'Registrar cobranças manuais (sem envio)';
     }
   });
 }
@@ -735,7 +735,7 @@ if (sendSelectedPendingButton) {
         showSendPendingMessage(data?.error || 'Falha ao enviar cobranças pendentes.', true);
         return;
       }
-      showSendPendingMessage('Cobranças pendentes enviadas com sucesso.');
+      showSendPendingMessage('Cobranças da fila enviadas com sucesso.');
       window.location.reload();
     } catch {
       showSendPendingMessage('Falha ao enviar cobranças pendentes.', true);
@@ -797,7 +797,7 @@ function maybeAlertInadimplentesDuplicates(force = false) {
   highlightInadimplentesDuplicates(duplicates);
 
   const lines = [
-    'ATENÇÃO: existem cobranças em duplicidade na aba Inadimplentes.',
+    'ATENÇÃO: existem cobranças em duplicidade na aba Cobranças em aberto.',
     'Verifique os casos abaixo e exclua uma das cobranças duplicadas.',
     '',
   ];
