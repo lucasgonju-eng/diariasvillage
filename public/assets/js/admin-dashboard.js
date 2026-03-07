@@ -98,6 +98,158 @@ const asaasPaidTbody = document.querySelector('#asaas-paid-tbody');
 const asaasPendingTbody = document.querySelector('#asaas-pending-tbody');
 const asaasOverdueTbody = document.querySelector('#asaas-overdue-tbody');
 let asaasDataLoaded = false;
+let adminDialogInstance = null;
+
+function ensureAdminDialog() {
+  if (adminDialogInstance) return adminDialogInstance;
+
+  if (!document.getElementById('admin-dialog-style')) {
+    const style = document.createElement('style');
+    style.id = 'admin-dialog-style';
+    style.textContent = `
+      .admin-dialog-overlay{
+        position:fixed;inset:0;z-index:9999;
+        background:rgba(10,15,26,.55);
+        display:flex;align-items:center;justify-content:center;
+        padding:16px;
+      }
+      .admin-dialog-overlay.hidden{display:none}
+      .admin-dialog-panel{
+        width:min(720px,100%);
+        max-height:85vh;
+        overflow:auto;
+        background:#fff;
+        border:1px solid #E5E7EB;
+        border-radius:16px;
+        box-shadow:0 24px 60px rgba(10,15,26,.35);
+        padding:16px;
+      }
+      .admin-dialog-title{
+        margin:0 0 10px 0;
+        font-size:18px;
+        font-weight:800;
+        color:#0F172A;
+      }
+      .admin-dialog-message{
+        margin:0;
+        padding:12px;
+        border:1px solid #E2E8F0;
+        border-radius:12px;
+        background:#F8FAFC;
+        color:#0F172A;
+        font-size:13px;
+        line-height:1.5;
+        white-space:pre-wrap;
+      }
+      .admin-dialog-actions{
+        margin-top:12px;
+        display:flex;
+        justify-content:flex-end;
+        gap:8px;
+      }
+      .admin-dialog-actions .hidden{display:none}
+    `;
+    document.head.appendChild(style);
+  }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'admin-dialog-overlay hidden';
+  overlay.innerHTML = `
+    <div class="admin-dialog-panel" role="dialog" aria-modal="true" aria-labelledby="admin-dialog-title">
+      <h3 id="admin-dialog-title" class="admin-dialog-title"></h3>
+      <p class="admin-dialog-message"></p>
+      <div class="admin-dialog-actions">
+        <button type="button" class="btn btn-ghost btn-sm admin-dialog-cancel">Cancelar</button>
+        <button type="button" class="btn btn-primary btn-sm admin-dialog-confirm">Confirmar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  adminDialogInstance = {
+    overlay,
+    panel: overlay.querySelector('.admin-dialog-panel'),
+    title: overlay.querySelector('.admin-dialog-title'),
+    message: overlay.querySelector('.admin-dialog-message'),
+    cancel: overlay.querySelector('.admin-dialog-cancel'),
+    confirm: overlay.querySelector('.admin-dialog-confirm'),
+  };
+  return adminDialogInstance;
+}
+
+function openAdminDialog({
+  title = 'Confirmação',
+  message = '',
+  confirmText = 'Confirmar',
+  cancelText = 'Cancelar',
+  showCancel = true,
+}) {
+  const ui = ensureAdminDialog();
+  ui.title.textContent = title;
+  ui.message.textContent = String(message || '');
+  ui.confirm.textContent = confirmText;
+  ui.cancel.textContent = cancelText;
+  ui.cancel.classList.toggle('hidden', !showCancel);
+  ui.overlay.classList.remove('hidden');
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = (result) => {
+      if (settled) return;
+      settled = true;
+      ui.overlay.classList.add('hidden');
+      ui.confirm.removeEventListener('click', onConfirm);
+      ui.cancel.removeEventListener('click', onCancel);
+      ui.overlay.removeEventListener('click', onOverlayClick);
+      document.removeEventListener('keydown', onKeyDown);
+      resolve(result);
+    };
+    const onConfirm = () => settle(true);
+    const onCancel = () => settle(false);
+    const onOverlayClick = (event) => {
+      if (event.target === ui.overlay) {
+        settle(showCancel ? false : true);
+      }
+    };
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        settle(showCancel ? false : true);
+        return;
+      }
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        settle(true);
+      }
+    };
+
+    ui.confirm.addEventListener('click', onConfirm);
+    ui.cancel.addEventListener('click', onCancel);
+    ui.overlay.addEventListener('click', onOverlayClick);
+    document.addEventListener('keydown', onKeyDown);
+    ui.confirm.focus();
+  });
+}
+
+function showAdminConfirm(message, options = {}) {
+  return openAdminDialog({
+    title: options.title || 'Confirmar ação',
+    message,
+    confirmText: options.confirmText || 'Confirmar',
+    cancelText: options.cancelText || 'Cancelar',
+    showCancel: true,
+  });
+}
+
+function showAdminAlert(message, options = {}) {
+  return openAdminDialog({
+    title: options.title || 'Atenção',
+    message,
+    confirmText: options.confirmText || 'OK',
+    cancelText: 'Cancelar',
+    showCancel: false,
+  });
+}
 
 function getCashflowDefaultFromDate() {
   const now = new Date();
@@ -649,7 +801,10 @@ if (sendChargesButton) {
         return;
       }
       if (duplicates.length > 0) {
-        const wantsToContinue = window.confirm(buildDuplicatesPopupMessage(duplicates));
+        const wantsToContinue = await showAdminConfirm(
+          buildDuplicatesPopupMessage(duplicates),
+          { title: 'Possíveis coincidências de cobrança', confirmText: 'Continuar assim' },
+        );
         if (!wantsToContinue) {
           showChargeMessage('Envio cancelado para revisão de coincidências.', true);
           return;
@@ -847,7 +1002,7 @@ function maybeAlertInadimplentesDuplicates(force = false) {
   }
   lines.push('');
   lines.push('Use o botão Excluir e selecione o motivo: COBRANÇA EM DUPLICIDADE.');
-  window.alert(lines.join('\n'));
+  showAdminAlert(lines.join('\n'), { title: 'Cobranças em duplicidade' });
 }
 
 pendingDeleteButtons.forEach((button) => {
@@ -862,12 +1017,16 @@ pendingDeleteButtons.forEach((button) => {
     const amountRaw = Number(row.getAttribute('data-amount') || 0);
     const amount = formatCurrency(amountRaw);
 
-    const chooseReason = window.confirm(
+    const chooseReason = await showAdminConfirm(
       `Excluir cobrança?\n\nAluno: ${student}\nDatas do day-use: ${dayUseDates}\nValor: ${amount}\n\nMotivo: COBRANÇA EM DUPLICIDADE`,
+      { title: 'Excluir cobrança' },
     );
     if (!chooseReason) return;
 
-    const confirmDelete = window.confirm('Confirmar exclusão desta cobrança em duplicidade?');
+    const confirmDelete = await showAdminConfirm(
+      'Confirmar exclusão desta cobrança em duplicidade?',
+      { title: 'Confirmação final', confirmText: 'Excluir cobrança' },
+    );
     if (!confirmDelete) return;
 
     button.setAttribute('disabled', 'disabled');
@@ -1269,7 +1428,11 @@ pendenciaSettleButtons.forEach((button) => {
   button.addEventListener('click', async () => {
     const pendenciaId = button.dataset.id;
     if (!pendenciaId) return;
-    if (!confirm('Confirmar baixa manual desta pendência?')) return;
+    const confirmSettle = await showAdminConfirm(
+      'Confirmar baixa manual desta pendência?',
+      { title: 'Baixa manual', confirmText: 'Confirmar baixa' },
+    );
+    if (!confirmSettle) return;
 
     button.setAttribute('disabled', 'disabled');
     if (pendenciaMessage) {
@@ -1319,13 +1482,15 @@ pendenciaDeleteButtons.forEach((button) => {
     const guardian = row.children?.[1]?.textContent?.trim() || 'Responsável';
     const dayUseDate = row.children?.[4]?.textContent?.trim() || '-';
 
-    const chooseReason = window.confirm(
+    const chooseReason = await showAdminConfirm(
       `Excluir pendência?\n\nAluno: ${student}\nResponsável: ${guardian}\nData do day-use: ${dayUseDate}\n\nOpção: DIÁRIA NÃO USADA`,
+      { title: 'Excluir pendência' },
     );
     if (!chooseReason) return;
 
-    const confirmDelete = window.confirm(
+    const confirmDelete = await showAdminConfirm(
       'CONFIRMAR EXCLUSÃO DA PENDÊNCIA?\n\nLEMBRETE: EXCLUA TAMBÉM A COBRANÇA NO ASAAS.',
+      { title: 'Confirmação final', confirmText: 'Excluir pendência' },
     );
     if (!confirmDelete) return;
 
@@ -1355,7 +1520,10 @@ pendenciaDeleteButtons.forEach((button) => {
         pendenciaMessage.textContent = 'Pendência excluída. LEMBRETE: EXCLUA TAMBÉM A COBRANÇA NO ASAAS.';
         pendenciaMessage.className = 'charge-message success';
       }
-      window.alert('PENDÊNCIA EXCLUÍDA.\nLEMBRETE: EXCLUA TAMBÉM A COBRANÇA NO ASAAS.');
+      await showAdminAlert(
+        'PENDÊNCIA EXCLUÍDA.\nLEMBRETE: EXCLUA TAMBÉM A COBRANÇA NO ASAAS.',
+        { title: 'Pendência excluída' },
+      );
     } catch {
       if (pendenciaMessage) {
         pendenciaMessage.textContent = 'Falha ao excluir pendência.';
@@ -1639,7 +1807,10 @@ if (syncChargesPaymentsButton) {
         : [];
       let syncPayload = {};
       if (duplicateItems.length > 0) {
-        const wantsToRemove = window.confirm(buildSyncDuplicateDayUsePopupMessage(duplicateItems));
+        const wantsToRemove = await showAdminConfirm(
+          buildSyncDuplicateDayUsePopupMessage(duplicateItems),
+          { title: 'Duplicidades em pendências', confirmText: 'Remover duplicidades' },
+        );
         if (!wantsToRemove) {
           if (syncChargesPaymentsMessage) {
             syncChargesPaymentsMessage.textContent =
@@ -1651,8 +1822,9 @@ if (syncChargesPaymentsButton) {
         syncPayload = { confirm_remove_duplicate_dayuse: true };
       }
       if (duplicatePaymentItems.length > 0) {
-        const wantsToRemovePayments = window.confirm(
+        const wantsToRemovePayments = await showAdminConfirm(
           buildSyncDuplicatePaymentsPopupMessage(duplicatePaymentItems),
+          { title: 'Duplicidades em cobranças', confirmText: 'Excluir extras' },
         );
         if (!wantsToRemovePayments) {
           if (syncChargesPaymentsMessage) {
@@ -1910,11 +2082,11 @@ if (viewUserButton && viewUserStudentInput) {
   viewUserButton.addEventListener('click', async () => {
     const studentName = viewUserStudentInput.value.trim();
     if (!studentName) {
-      alert('Selecione um aluno para abrir o modo usuário.');
+      await showAdminAlert('Selecione um aluno para abrir o modo usuário.');
       return;
     }
     if (!studentNames.has(studentName)) {
-      alert('Aluno não encontrado na lista.');
+      await showAdminAlert('Aluno não encontrado na lista.');
       return;
     }
 
@@ -1933,7 +2105,7 @@ if (viewUserButton && viewUserStudentInput) {
             showViewUserForm(data.student?.name || studentName, 'open_user');
           return;
         }
-        alert(data.error || 'Falha ao abrir visão de usuário.');
+        await showAdminAlert(data.error || 'Falha ao abrir visão de usuário.');
         return;
       }
       const url = data.url || '/dashboard.php';
@@ -1942,7 +2114,7 @@ if (viewUserButton && viewUserStudentInput) {
         window.location.href = url;
       }
     } catch {
-      alert('Falha ao abrir visão de usuário.');
+      await showAdminAlert('Falha ao abrir visão de usuário.');
     } finally {
       viewUserButton.removeAttribute('disabled');
       viewUserButton.textContent = originalText;
@@ -1956,14 +2128,14 @@ if (viewUserButton && viewUserStudentInput) {
   }
 
   if (addGuardianButton) {
-    addGuardianButton.addEventListener('click', () => {
+    addGuardianButton.addEventListener('click', async () => {
       const studentName = viewUserStudentInput.value.trim();
       if (!studentName) {
-        alert('Selecione um aluno para cadastrar responsável.');
+        await showAdminAlert('Selecione um aluno para cadastrar responsável.');
         return;
       }
       if (!studentNames.has(studentName)) {
-        alert('Aluno não encontrado na lista.');
+        await showAdminAlert('Aluno não encontrado na lista.');
         return;
       }
       showViewUserForm(studentName, 'create_more');
