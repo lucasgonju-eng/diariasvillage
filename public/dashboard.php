@@ -14,9 +14,16 @@ date_default_timezone_set('America/Sao_Paulo');
 use App\Helpers;
 
 $user = Helpers::requireAuthWeb();
-$today = date('Y-m-d');
-$hour = (int) date('H');
-$minDate = $hour >= 16 ? date('Y-m-d', strtotime('+1 day')) : $today;
+$nowDt = new DateTimeImmutable('now', new DateTimeZone('America/Sao_Paulo'));
+$nextBusinessDay = static function (DateTimeImmutable $date): DateTimeImmutable {
+    $candidate = $date;
+    while (in_array((int) $candidate->format('N'), [6, 7], true)) {
+        $candidate = $candidate->modify('+1 day');
+    }
+    return $candidate;
+};
+$candidateDt = ((int) $nowDt->format('H') >= 16) ? $nowDt->modify('+1 day') : $nowDt;
+$minDate = $nextBusinessDay($candidateDt)->format('Y-m-d');
 $dashboardError = isset($_SESSION['dashboard_error']) ? (string) $_SESSION['dashboard_error'] : '';
 unset($_SESSION['dashboard_error']);
 ?>
