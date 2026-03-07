@@ -16,15 +16,21 @@ use App\SupabaseClient;
 
 function monthly_storage_path(): string
 {
-    $root = dirname(__DIR__, 2);
+    // Deploy atual coloca /api na raiz pública. Então a base correta é dirname(__DIR__).
+    $root = dirname(__DIR__);
+    $parentRoot = dirname($root);
     $preferred = $root . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'monthly_students.json';
     $legacy = $root . DIRECTORY_SEPARATOR . 'monthly_students.json';
-    if (is_file($preferred)) {
-        return $preferred;
+    $oldWrongPreferred = $parentRoot . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'monthly_students.json';
+    $oldWrongLegacy = $parentRoot . DIRECTORY_SEPARATOR . 'monthly_students.json';
+
+    $candidates = [$preferred, $legacy, $oldWrongPreferred, $oldWrongLegacy];
+    foreach ($candidates as $candidate) {
+        if (is_file($candidate)) {
+            return $candidate;
+        }
     }
-    if (is_file($legacy)) {
-        return $legacy;
-    }
+
     return $preferred;
 }
 

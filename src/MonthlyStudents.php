@@ -7,14 +7,17 @@ class MonthlyStudents
     public static function storagePath(): string
     {
         $projectRoot = dirname(__DIR__);
+        $parentRoot = dirname($projectRoot);
         $preferred = $projectRoot . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'monthly_students.json';
         $legacy = $projectRoot . DIRECTORY_SEPARATOR . 'monthly_students.json';
+        $oldWrongPreferred = $parentRoot . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'monthly_students.json';
+        $oldWrongLegacy = $parentRoot . DIRECTORY_SEPARATOR . 'monthly_students.json';
 
-        if (is_file($preferred)) {
-            return $preferred;
-        }
-        if (is_file($legacy)) {
-            return $legacy;
+        $candidates = [$preferred, $legacy, $oldWrongPreferred, $oldWrongLegacy];
+        foreach ($candidates as $candidate) {
+            if (is_file($candidate)) {
+                return $candidate;
+            }
         }
 
         return $preferred;
