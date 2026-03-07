@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../src/Bootstrap.php';
+require_once dirname(__DIR__, 2) . '/src/Bootstrap.php';
 
 use App\Helpers;
 use App\HttpClient;
@@ -7,6 +7,9 @@ use App\SupabaseClient;
 
 if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
     Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
+}
+if (($_SESSION['admin_user'] ?? '') !== 'admin') {
+    Helpers::json(['ok' => false, 'error' => 'Recurso disponível apenas para o admin principal.'], 403);
 }
 
 Helpers::requirePost();

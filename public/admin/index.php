@@ -16,7 +16,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($isAdmin || $isSecretaria) {
         $_SESSION['admin_authenticated'] = true;
         $_SESSION['admin_user'] = $username;
-        header('Location: /admin/dashboard.php');
+        header('Location: /admin/dashboard.php?tab=entries');
         exit;
     }
     $error = 'Usuário ou senha inválidos.';
@@ -41,7 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <?php if (isset($_SESSION['admin_authenticated']) && $_SESSION['admin_authenticated'] === true): ?>
         <p class="subtitle">Escolha uma opção abaixo.</p>
         <div class="nav">
-          <a class="button" href="/admin/dashboard.php">Entradas confirmadas</a>
+          <a class="button" href="/admin/dashboard.php?tab=entries">Entradas confirmadas</a>
           <a class="button secondary" href="/admin/import.php">Importar alunos</a>
         </div>
       <?php else: ?>

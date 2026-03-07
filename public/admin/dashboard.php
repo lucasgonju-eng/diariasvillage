@@ -10,7 +10,11 @@ if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated']
     exit;
 }
 $canViewAsUser = (($_SESSION['admin_user'] ?? '') === 'admin');
-$allowedTabs = ['charges', 'inadimplentes', 'recebidas', 'sem-whatsapp', 'pendencias', 'exclusoes', 'duplicados', 'reset-senha', 'fluxo-caixa', 'dados-asaas', 'entries'];
+$canMergeDuplicates = (($_SESSION['admin_user'] ?? '') === 'admin');
+$allowedTabs = ['charges', 'inadimplentes', 'recebidas', 'sem-whatsapp', 'pendencias', 'exclusoes', 'reset-senha', 'fluxo-caixa', 'dados-asaas', 'entries'];
+if ($canMergeDuplicates) {
+    $allowedTabs[] = 'duplicados';
+}
 $activeTab = trim((string) ($_GET['tab'] ?? 'charges'));
 if (!in_array($activeTab, $allowedTabs, true)) {
     $activeTab = 'charges';
@@ -393,7 +397,9 @@ if (!empty($exclusionsLog)) {
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=sem-whatsapp" data-tab="sem-whatsapp">Sem WhatsApp</a>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=pendencias" data-tab="pendencias">Pendência de cadastro</a>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=exclusoes" data-tab="exclusoes">Exclusões</a>
-        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=duplicados" data-tab="duplicados">Duplicados</a>
+        <?php if ($canMergeDuplicates): ?>
+          <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=duplicados" data-tab="duplicados">Duplicados</a>
+        <?php endif; ?>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=reset-senha" data-tab="reset-senha">Resetar senha</a>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=fluxo-caixa" data-tab="fluxo-caixa">Fluxo de Caixa</a>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=dados-asaas" data-tab="dados-asaas">Dados do Asaas</a>
@@ -885,6 +891,7 @@ if (!empty($exclusionsLog)) {
         </div>
       </section>
 
+      <?php if ($canMergeDuplicates): ?>
       <section id="tab-duplicados" class="<?php echo $activeTab === 'duplicados' ? '' : 'hidden'; ?>">
         <h2>Alunos duplicados</h2>
         <p class="muted">Mescla automática por nome ou matrícula (mantém o registro mais antigo). Abaixo listamos possíveis duplicados por CPF do responsável.</p>
@@ -992,6 +999,7 @@ if (!empty($exclusionsLog)) {
         <?php endif; ?>
         <div class="charge-message" id="merge-message"></div>
       </section>
+      <?php endif; ?>
 
       <section id="tab-reset-senha" class="<?php echo $activeTab === 'reset-senha' ? '' : 'hidden'; ?>">
         <h2>Resetar senha do usuário</h2>

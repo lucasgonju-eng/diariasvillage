@@ -1,18 +1,13 @@
 <?php
-require_once __DIR__ . '/../src/Bootstrap.php';
-
-use App\Env;
+require_once dirname(__DIR__, 2) . '/src/Bootstrap.php';
 use App\Helpers;
 use App\HttpClient;
 use App\SupabaseClient;
 
-$key = $_GET['key'] ?? '';
 $returnHtml = ($_GET['return'] ?? '') === 'html';
 
 $sessionOk = isset($_SESSION['admin_authenticated']) && $_SESSION['admin_authenticated'] === true;
-$keyOk = $key !== '' && $key === Env::get('ADMIN_SECRET', '');
-
-if (!$sessionOk && !$keyOk) {
+if (!$sessionOk) {
     Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
 }
 

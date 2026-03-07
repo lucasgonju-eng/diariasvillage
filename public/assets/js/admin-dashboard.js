@@ -53,7 +53,6 @@ function setActiveTab(name) {
     !tabInadimplentes ||
     !tabRecebidas ||
     !tabSemWhatsapp ||
-    !tabDuplicados ||
     !tabPendencias
   ) {
     return;
@@ -63,7 +62,7 @@ function setActiveTab(name) {
   tabInadimplentes.classList.toggle('hidden', name !== 'inadimplentes');
   tabRecebidas.classList.toggle('hidden', name !== 'recebidas');
   tabSemWhatsapp.classList.toggle('hidden', name !== 'sem-whatsapp');
-  tabDuplicados.classList.toggle('hidden', name !== 'duplicados');
+  if (tabDuplicados) tabDuplicados.classList.toggle('hidden', name !== 'duplicados');
   tabPendencias.classList.toggle('hidden', name !== 'pendencias');
   if (tabExclusoes) tabExclusoes.classList.toggle('hidden', name !== 'exclusoes');
   if (tabResetSenha) tabResetSenha.classList.toggle('hidden', name !== 'reset-senha');
