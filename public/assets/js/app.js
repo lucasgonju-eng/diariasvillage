@@ -46,6 +46,7 @@ if (form) {
     try {
       const payload = {
         cpf: document.querySelector('#cpf').value.trim(),
+        enrollment: document.querySelector('#enrollment').value.trim(),
         email: document.querySelector('#email').value.trim(),
         password: document.querySelector('#password').value,
         password_confirm: document.querySelector('#password-confirm').value,

@@ -1,5 +1,14 @@
 <?php
-require_once dirname(__DIR__) . '/src/Bootstrap.php';
+$bootstrapCandidates = [
+    __DIR__ . '/src/Bootstrap.php',
+    dirname(__DIR__) . '/src/Bootstrap.php',
+];
+foreach ($bootstrapCandidates as $bootstrapFile) {
+    if (is_file($bootstrapFile)) {
+        require_once $bootstrapFile;
+        break;
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -46,13 +55,19 @@ require_once dirname(__DIR__) . '/src/Bootstrap.php';
 
         <aside class="hero-card" aria-label="Cadastro do responsável">
           <h3>Cadastro do responsável</h3>
-          <p class="muted">CPF, e-mail e senha. O CPF deve estar no cadastro da escola.</p>
+          <p class="muted">CPF, matrícula do aluno(a), e-mail e senha.</p>
 
           <form id="register-form">
             <div class="form-group">
               <label>CPF do responsável</label>
               <input type="text" id="cpf" placeholder="000.000.000-00" inputmode="numeric" required />
-              <div class="small">O CPF deve estar no cadastro da escola.</div>
+              <div class="small">Informe o CPF do responsável exatamente como no cadastro.</div>
+            </div>
+
+            <div class="form-group">
+              <label>Matrícula do aluno(a)</label>
+              <input type="text" id="enrollment" placeholder="Ex.: 12345" required />
+              <div class="small">Usamos a matrícula para validar o vínculo do CPF com o aluno(a).</div>
             </div>
 
             <div class="form-group">
@@ -125,8 +140,8 @@ require_once dirname(__DIR__) . '/src/Bootstrap.php';
           <div class="step">
             <div class="step-n">1</div>
             <div>
-              <div class="step-t">Informe CPF e e-mail</div>
-              <div class="muted">O CPF deve estar no cadastro da escola.</div>
+              <div class="step-t">Informe CPF e matrícula do aluno(a)</div>
+              <div class="muted">Os dados devem corresponder ao vínculo cadastrado.</div>
             </div>
           </div>
           <div class="step">

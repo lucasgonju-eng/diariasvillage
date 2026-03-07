@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../src/Bootstrap.php';
+require_once dirname(__DIR__, 2) . '/src/Bootstrap.php';
 
 use App\Helpers;
 use App\HttpClient;
@@ -11,12 +11,13 @@ Helpers::requirePost();
 $payload = json_decode(file_get_contents('php://input'), true);
 
 $cpf = trim($payload['cpf'] ?? '');
+$enrollment = trim((string) ($payload['enrollment'] ?? ''));
 $email = trim($payload['email'] ?? '');
 $password = $payload['password'] ?? '';
 $passwordConfirm = $payload['password_confirm'] ?? '';
 
-if ($cpf === '' || $email === '' || $password === '') {
-    Helpers::json(['ok' => false, 'error' => 'Preencha CPF, e-mail e senha.'], 422);
+if ($cpf === '' || $enrollment === '' || $email === '' || $password === '') {
+    Helpers::json(['ok' => false, 'error' => 'Preencha CPF, matrícula do aluno(a), e-mail e senha.'], 422);
 }
 
 if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -33,9 +34,25 @@ if (strlen($cpfDigits) !== 11) {
 }
 
 $client = new SupabaseClient(new HttpClient());
+$studentResult = $client->select(
+    'students',
+    'select=id,name,enrollment,active&enrollment=eq.' . urlencode($enrollment) . '&limit=1'
+);
+if (!$studentResult['ok'] || empty($studentResult['data'])) {
+    Helpers::json(['ok' => false, 'error' => 'Matrícula não encontrada.'], 404);
+}
+$student = $studentResult['data'][0];
+if (!(bool) ($student['active'] ?? true)) {
+    Helpers::json(['ok' => false, 'error' => 'Aluno(a) inativo. Procure a secretaria.'], 422);
+}
+$studentId = (string) ($student['id'] ?? '');
+if ($studentId === '') {
+    Helpers::json(['ok' => false, 'error' => 'Aluno(a) inválido.'], 500);
+}
+
 $guardianResult = $client->select(
     'guardians',
-    'select=id,email,parent_name,parent_document&parent_document=eq.' . urlencode($cpfDigits) . '&limit=1'
+    'select=id,email,parent_name,parent_document,student_id&parent_document=eq.' . urlencode($cpfDigits) . '&limit=1'
 );
 
 if (!$guardianResult['ok'] || empty($guardianResult['data'])) {
@@ -43,6 +60,10 @@ if (!$guardianResult['ok'] || empty($guardianResult['data'])) {
 }
 
 $guardian = $guardianResult['data'][0];
+$guardianStudentId = (string) ($guardian['student_id'] ?? '');
+if ($guardianStudentId === '' || $guardianStudentId !== $studentId) {
+    Helpers::json(['ok' => false, 'error' => 'CPF não está vinculado à matrícula informada.'], 422);
+}
 $guardianName = $guardian['parent_name'] ?? 'Responsável';
 
 // Verifica se o e-mail já está em uso por outro responsável (CPF diferente)
@@ -102,7 +123,7 @@ if (!$createResult['ok']) {
 // Atualiza guardians (email e verified_at)
 $updateGuardian = $client->update(
     'guardians',
-    'parent_document=eq.' . urlencode($cpfDigits),
+    'id=eq.' . urlencode((string) ($guardian['id'] ?? '')),
     [
         'email' => $email,
         'verified_at' => date('c'),
