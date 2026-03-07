@@ -203,11 +203,13 @@ $template = <<<'HTML'
               <div style="font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0B1020;">
                 <div style="font-size:26px;font-weight:800;line-height:1.15;">Conta criada com sucesso!</div>
                 <div style="margin-top:10px;font-size:15px;line-height:1.65;color:#1B2333;">
-                  Olá, {{nome}}! Seu cadastro foi concluído.
+                  Olá, {{nome_responsavel}}! Seu cadastro foi concluído.
                 </div>
                 <div style="margin-top:20px;background:#F6F8FC;border:1px solid #E6E9F2;border-radius:14px;padding:18px;">
                   <div style="font-size:16px;font-weight:800;margin-bottom:10px;color:#0B1020;">Você já pode acessar</div>
                   <div style="font-size:14px;line-height:1.7;color:#1B2333;">
+                    Responsável: <b>{{nome_responsavel}}</b><br>
+                    Aluno(a): <b>{{nome_aluno}}</b><br>
                     Faça login com seu CPF e a senha que você criou para agendar e pagar as diárias.
                   </div>
                 </div>
@@ -238,7 +240,8 @@ HTML;
 
 $baseUrl = Helpers::baseUrl();
 $html = strtr($template, [
-    '{{nome}}' => htmlspecialchars($guardianName, ENT_QUOTES, 'UTF-8'),
+    '{{nome_responsavel}}' => htmlspecialchars((string) $guardianName, ENT_QUOTES, 'UTF-8'),
+    '{{nome_aluno}}' => htmlspecialchars((string) ($student['name'] ?? 'Aluno(a)'), ENT_QUOTES, 'UTF-8'),
     '{{base_url}}' => htmlspecialchars($baseUrl, ENT_QUOTES, 'UTF-8'),
 ]);
 

@@ -156,7 +156,7 @@ if ($date === $today) {
 }
 
 $asaas = new AsaasClient(new HttpClient());
-$portalLink = Helpers::baseUrl() ?: 'https://village.einsteinhub.co';
+$portalLink = Helpers::baseUrl() ?: 'https://diarias.village.einsteinhub.co';
 $successUrl = $portalLink . '/pagamento-retorno.php?diariaId=' . rawurlencode($diariaId);
 $isCallbackUrlValida = (bool) filter_var($successUrl, FILTER_VALIDATE_URL)
     && str_starts_with(strtolower($successUrl), 'https://')
@@ -346,9 +346,19 @@ $invoiceUrl = $paymentData['invoiceUrl'] ?? $paymentData['bankSlipUrl'] ?? '#';
 $paymentDate = date('d/m/Y', strtotime($date));
 $dailyLabel = $dailyType === 'emergencial' ? 'Emergencial' : 'Planejada';
 $amountFormatted = number_format((float) $amount, 2, ',', '.');
-$studentName = $guardianData['student_name']
-    ?? ($guardianData['student'] ?? null)
-    ?? 'Aluno';
+$guardianName = trim((string) ($guardianData['parent_name'] ?? ''));
+$guardianName = $guardianName !== '' ? $guardianName : 'Responsável';
+$studentName = trim((string) (($guardianData['student_name'] ?? ($guardianData['student'] ?? ''))));
+$studentIdForEmail = trim((string) ($studentIdForPayment ?? ''));
+if ($studentName === '' && $studentIdForEmail !== '') {
+    $studentResult = $client->select('students', 'select=name&id=eq.' . rawurlencode($studentIdForEmail) . '&limit=1');
+    if (($studentResult['ok'] ?? false) && !empty($studentResult['data'][0]['name'])) {
+        $studentName = (string) $studentResult['data'][0]['name'];
+    }
+}
+if ($studentName === '') {
+    $studentName = 'Aluno(a)';
+}
 $dayNamesByPrefix = [
     'SEG' => 'Segunda-feira',
     'TER' => 'Terça-feira',
@@ -491,6 +501,7 @@ $template = <<<'HTML'
                   </div>
 
                   <div style="font-size:14px;line-height:1.7;color:#1B2333;">
+                    Responsável: <b>{{nome_responsavel}}</b><br>
                     Aluno: <b>{{nome_aluno}}</b><br>
                     Data da diária: <b>{{data_diaria}}</b><br>
                     Tipo: <b>{{tipo_diaria}}</b><br>
@@ -575,6 +586,7 @@ $template = <<<'HTML'
 HTML;
 
 $replace = [
+    '{{nome_responsavel}}' => htmlspecialchars($guardianName, ENT_QUOTES, 'UTF-8'),
     '{{nome_aluno}}' => htmlspecialchars($studentName, ENT_QUOTES, 'UTF-8'),
     '{{data_diaria}}' => $paymentDate,
     '{{tipo_diaria}}' => $dailyLabel,
