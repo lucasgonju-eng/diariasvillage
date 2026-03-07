@@ -61,16 +61,22 @@ if ($studentId === '') {
 
 $guardianResult = $client->select(
     'guardians',
-    'select=id,email,parent_name,parent_document,student_id&parent_document=eq.' . urlencode($cpfDigits) . '&limit=1'
+    'select=id,email,parent_name,parent_document,student_id&parent_document=eq.' . urlencode($cpfDigits) . '&limit=200'
 );
 
 if (!$guardianResult['ok'] || empty($guardianResult['data'])) {
     Helpers::json(['ok' => false, 'error' => 'CPF não encontrado no cadastro. Entre em contato com a secretaria ou use o formulário de pendência.'], 404);
 }
 
-$guardian = $guardianResult['data'][0];
-$guardianStudentId = (string) ($guardian['student_id'] ?? '');
-if ($guardianStudentId === '' || $guardianStudentId !== $studentId) {
+$guardian = null;
+foreach ($guardianResult['data'] as $guardianRow) {
+    $guardianStudentId = (string) ($guardianRow['student_id'] ?? '');
+    if ($guardianStudentId !== '' && $guardianStudentId === $studentId) {
+        $guardian = $guardianRow;
+        break;
+    }
+}
+if (!$guardian) {
     Helpers::json(['ok' => false, 'error' => 'CPF não está vinculado à matrícula informada.'], 422);
 }
 $guardianName = $guardian['parent_name'] ?? 'Responsável';
@@ -129,10 +135,10 @@ if (!$createResult['ok']) {
     }
 }
 
-// Atualiza guardians (email e verified_at)
+// Atualiza guardians de todo o CPF (caso de responsável com mais de um aluno)
 $updateGuardian = $client->update(
     'guardians',
-    'id=eq.' . urlencode((string) ($guardian['id'] ?? '')),
+    'parent_document=eq.' . urlencode($cpfDigits),
     [
         'email' => $email,
         'verified_at' => date('c'),
