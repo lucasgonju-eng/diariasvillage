@@ -1194,7 +1194,7 @@ if (!empty($exclusionsLog)) {
   </div>
 
   <script>window.__adminDashboardBooted = false;</script>
-  <script src="/assets/js/admin-dashboard.js?v=43"></script>
+  <script src="/assets/js/admin-dashboard.js?v=44"></script>
   <script>
     (function () {
       function activateTab(name) {

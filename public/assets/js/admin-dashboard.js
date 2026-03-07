@@ -724,9 +724,28 @@ async function addChargeItem(studentName) {
 
 async function loadStudents() {
   if (!studentList && !viewUserStudentsList && !pendenciaStudentsList) return;
-  const res = await fetch('/api/students.php');
-  const data = await res.json();
-  if (!data.ok) return;
+  let data = null;
+  try {
+    const res = await fetch('/api/students.php', {
+      headers: { Accept: 'application/json' },
+    });
+    try {
+      data = await res.json();
+    } catch {
+      data = null;
+    }
+    if (!res.ok || !data?.ok) {
+      console.error('[admin-dashboard] loadStudents falhou', {
+        status: res.status,
+        payload: data,
+      });
+      return;
+    }
+  } catch (error) {
+    console.error('[admin-dashboard] loadStudents erro de rede', error);
+    return;
+  }
+
   adminStudents = Array.isArray(data.students) ? data.students : [];
   if (studentList) studentList.innerHTML = '';
   if (viewUserStudentsList) viewUserStudentsList.innerHTML = '';
