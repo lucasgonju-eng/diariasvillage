@@ -426,6 +426,15 @@ foreach ($rows as $row) {
     $totalBase += (float) ($row['base_amount'] ?? 0);
     $totalEffective += (float) ($row['effective_amount'] ?? 0);
 }
+$pendingBase = 0.0;
+$pendingEffective = 0.0;
+foreach ($rows as $row) {
+    if (strtolower(trim((string) ($row['status'] ?? ''))) !== 'pendente') {
+        continue;
+    }
+    $pendingBase += (float) ($row['base_amount'] ?? 0);
+    $pendingEffective += (float) ($row['effective_amount'] ?? 0);
+}
 
 $economy = max(0, $totalBase - $totalEffective);
 ?>
@@ -554,10 +563,10 @@ $economy = max(0, $totalBase - $totalEffective);
             <?php if (!empty($rows)): ?>
               <tfoot>
                 <tr style="font-weight:800;background:#f8fafc;">
-                  <td colspan="3">Soma final</td>
-                  <td><?php echo htmlspecialchars(money($totalBase), ENT_QUOTES, 'UTF-8'); ?></td>
-                  <td><?php echo htmlspecialchars(money($totalEffective), ENT_QUOTES, 'UTF-8'); ?></td>
-                  <td>-</td>
+                  <td colspan="3">Pendente</td>
+                  <td><?php echo htmlspecialchars(money($pendingBase), ENT_QUOTES, 'UTF-8'); ?></td>
+                  <td><?php echo htmlspecialchars(money($pendingEffective), ENT_QUOTES, 'UTF-8'); ?></td>
+                  <td>Pendente</td>
                 </tr>
               </tfoot>
             <?php endif; ?>
