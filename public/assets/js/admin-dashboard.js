@@ -302,6 +302,11 @@ function formatCurrency(value) {
 
 function formatDateBR(value) {
   if (!value) return '-';
+  const isoOnlyDate = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(isoOnlyDate)) {
+    const [year, month, day] = isoOnlyDate.split('-');
+    return `${day}/${month}/${year}`;
+  }
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString('pt-BR');
