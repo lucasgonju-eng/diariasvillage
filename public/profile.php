@@ -2,8 +2,50 @@
 require_once __DIR__ . '/src/Bootstrap.php';
 
 use App\Helpers;
+use App\HttpClient;
+use App\SupabaseClient;
 
 $user = Helpers::requireAuthWeb();
+$client = new SupabaseClient(new HttpClient());
+$studentId = trim((string) ($user['student_id'] ?? ''));
+if ($studentId === '') {
+    $userId = trim((string) ($user['id'] ?? ''));
+    if ($userId !== '') {
+        $guardianCurrent = $client->select(
+            'guardians',
+            'select=student_id&id=eq.' . urlencode($userId) . '&limit=1'
+        );
+        if (($guardianCurrent['ok'] ?? false) && !empty($guardianCurrent['data'][0])) {
+            $studentId = trim((string) ($guardianCurrent['data'][0]['student_id'] ?? ''));
+        }
+    }
+}
+if ($studentId === '') {
+    $userEmail = trim((string) ($user['email'] ?? ''));
+    if ($userEmail !== '') {
+        $guardianByEmail = $client->select(
+            'guardians',
+            'select=student_id&email=eq.' . urlencode($userEmail) . '&limit=1'
+        );
+        if (($guardianByEmail['ok'] ?? false) && !empty($guardianByEmail['data'][0])) {
+            $studentId = trim((string) ($guardianByEmail['data'][0]['student_id'] ?? ''));
+        }
+    }
+}
+$studentRow = [];
+if ($studentId !== '') {
+    $studentResult = $client->select(
+        'students',
+        'select=id,name,enrollment,grade,class_name,class&id=eq.' . urlencode($studentId) . '&limit=1'
+    );
+    if (($studentResult['ok'] ?? false) && !empty($studentResult['data'][0]) && is_array($studentResult['data'][0])) {
+        $studentRow = $studentResult['data'][0];
+    }
+}
+$studentName = trim((string) ($studentRow['name'] ?? 'Aluno(a)'));
+$studentEnrollment = trim((string) ($studentRow['enrollment'] ?? ''));
+$studentGrade = trim((string) ($studentRow['grade'] ?? ''));
+$studentClass = trim((string) (($studentRow['class_name'] ?? '') ?: ($studentRow['class'] ?? '')));
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -52,6 +94,18 @@ $user = Helpers::requireAuthWeb();
         <aside class="hero-card" aria-label="Formulario do perfil">
           <h3>Editar perfil</h3>
           <p class="muted">Atualize os dados do responsável.</p>
+
+          <div style="margin-bottom:14px;padding:12px 14px;border:1px solid #D6B25E;border-radius:12px;background:#FFF9EA;">
+            <div style="font-size:12px;font-weight:800;letter-spacing:.04em;color:#8A671E;margin-bottom:6px;">DADOS DO ALUNO(A)</div>
+            <div style="font-size:16px;font-weight:800;color:#1A2133;margin-bottom:6px;">
+              <?php echo htmlspecialchars($studentName, ENT_QUOTES, 'UTF-8'); ?>
+            </div>
+            <div class="muted" style="font-size:13px;">
+              <?php if ($studentEnrollment !== ''): ?>Matrícula: <strong><?php echo htmlspecialchars($studentEnrollment, ENT_QUOTES, 'UTF-8'); ?></strong><?php endif; ?>
+              <?php if ($studentGrade !== ''): ?> <?php if ($studentEnrollment !== ''): ?>•<?php endif; ?> Série: <strong><?php echo htmlspecialchars($studentGrade, ENT_QUOTES, 'UTF-8'); ?></strong><?php endif; ?>
+              <?php if ($studentClass !== ''): ?> <?php if ($studentEnrollment !== '' || $studentGrade !== ''): ?>•<?php endif; ?> Turma: <strong><?php echo htmlspecialchars($studentClass, ENT_QUOTES, 'UTF-8'); ?></strong><?php endif; ?>
+            </div>
+          </div>
 
           <form id="profile-form">
             <div class="form-group">

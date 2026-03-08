@@ -12,8 +12,47 @@ foreach ($bootstrapCandidates as $bootstrapFile) {
 date_default_timezone_set('America/Sao_Paulo');
 
 use App\Helpers;
+use App\HttpClient;
+use App\SupabaseClient;
 
 $user = Helpers::requireAuthWeb();
+$client = new SupabaseClient(new HttpClient());
+$studentId = trim((string) ($user['student_id'] ?? ''));
+if ($studentId === '') {
+    $userId = trim((string) ($user['id'] ?? ''));
+    if ($userId !== '') {
+        $guardianCurrent = $client->select(
+            'guardians',
+            'select=student_id&id=eq.' . urlencode($userId) . '&limit=1'
+        );
+        if (($guardianCurrent['ok'] ?? false) && !empty($guardianCurrent['data'][0])) {
+            $studentId = trim((string) ($guardianCurrent['data'][0]['student_id'] ?? ''));
+        }
+    }
+}
+if ($studentId === '') {
+    $userEmail = trim((string) ($user['email'] ?? ''));
+    if ($userEmail !== '') {
+        $guardianByEmail = $client->select(
+            'guardians',
+            'select=student_id&email=eq.' . urlencode($userEmail) . '&limit=1'
+        );
+        if (($guardianByEmail['ok'] ?? false) && !empty($guardianByEmail['data'][0])) {
+            $studentId = trim((string) ($guardianByEmail['data'][0]['student_id'] ?? ''));
+        }
+    }
+}
+$studentRow = [];
+if ($studentId !== '') {
+    $studentResult = $client->select(
+        'students',
+        'select=id,name,enrollment,grade,class_name,class&id=eq.' . urlencode($studentId) . '&limit=1'
+    );
+    if (($studentResult['ok'] ?? false) && !empty($studentResult['data'][0]) && is_array($studentResult['data'][0])) {
+        $studentRow = $studentResult['data'][0];
+    }
+}
+$studentName = trim((string) ($studentRow['name'] ?? 'aluno'));
 $nowDt = new DateTimeImmutable('now', new DateTimeZone('America/Sao_Paulo'));
 $nextBusinessDay = static function (DateTimeImmutable $date): DateTimeImmutable {
     $candidate = $date;
@@ -62,7 +101,10 @@ unset($_SESSION['dashboard_error']);
       <div class="hero-grid">
         <div class="hero-left">
           <div class="pill">Dashboard</div>
-          <h1>Bem-vindo!</h1>
+          <h1>Bem-vindo(a)!</h1>
+          <p class="lead" style="margin-top:-6px;font-weight:700;color:#FFE7A6;">
+            Pode entrar, <?php echo htmlspecialchars($studentName, ENT_QUOTES, 'UTF-8'); ?>, a casa é sua!
+          </p>
           <p class="lead">Escolha a diária do dia com praticidade.</p>
 
           <div class="microchips" role="list">
