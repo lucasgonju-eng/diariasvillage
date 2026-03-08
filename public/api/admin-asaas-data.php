@@ -72,6 +72,33 @@ function normalize_asaas_transaction(array $tx): array
     ];
 }
 
+function is_realizacao_inter_ci(array $item): bool
+{
+    $value = (float) ($item['value'] ?? 0);
+    if ($value >= 0) {
+        return false;
+    }
+
+    $type = strtoupper(trim((string) ($item['type'] ?? '')));
+    $description = strtoupper(trim((string) ($item['description'] ?? '')));
+
+    if (str_contains($type, 'FEE') || str_contains($type, 'REVERSAL')) {
+        return false;
+    }
+
+    // Regra principal: transação Pix para a conta Inter CI (empresa).
+    if (str_contains($description, 'CENTRO INTEGRADO DE EDUCACAO LIVRE E EVENTOS LTDA')) {
+        return true;
+    }
+
+    // Fallback para transferências operacionais sem taxa/reversão.
+    if (in_array($type, ['PIX_TRANSACTION_DEBIT', 'TRANSFER', 'INTERNAL_TRANSFER_DEBIT'], true)) {
+        return true;
+    }
+
+    return false;
+}
+
 function pick_payment_date(array $payment): string
 {
     foreach (['clientPaymentDate', 'paymentDate', 'confirmedDate', 'dueDate', 'dateCreated'] as $key) {
@@ -250,19 +277,7 @@ function build_analytics(array $extrato, array $paidPayments, array $openPayment
         return $row;
     }, $topInadimplentes), 0, 10);
 
-    $realizationTotal = 0.0;
-    foreach (($extrato['items'] ?? []) as $item) {
-        $type = strtoupper(trim((string) ($item['type'] ?? '')));
-        $value = (float) ($item['value'] ?? 0);
-        if (
-            $value < 0
-            && str_contains($type, 'TRANSFER')
-            && !str_contains($type, 'FEE')
-            && !str_contains($type, 'REVERSAL')
-        ) {
-            $realizationTotal += abs($value);
-        }
-    }
+    $realizationTotal = (float) ($extrato['realization_total'] ?? 0);
 
     return [
         'kpis' => [
@@ -320,9 +335,12 @@ function fetch_asaas_transactions(
 
     $creditItems = [];
     $debitItems = [];
+    $realizationItems = [];
     $feeItems = [];
     $credits = 0.0;
     $debits = 0.0;
+    $debitsExcludingRealization = 0.0;
+    $realizationTotal = 0.0;
     foreach ($items as $item) {
         $value = (float) ($item['value'] ?? 0);
         if ($value >= 0) {
@@ -330,7 +348,15 @@ function fetch_asaas_transactions(
             $creditItems[] = $item;
         } else {
             $debits += $value;
-            $debitItems[] = $item;
+            if (is_realizacao_inter_ci($item)) {
+                $item['is_realizacao_inter_ci'] = true;
+                $item['description'] = 'REALIZAÇÃO INTER CI';
+                $realizationItems[] = $item;
+                $realizationTotal += abs($value);
+            } else {
+                $debitItems[] = $item;
+                $debitsExcludingRealization += $value;
+            }
         }
 
         $type = strtoupper((string) ($item['type'] ?? ''));
@@ -346,6 +372,8 @@ function fetch_asaas_transactions(
         'total_value' => round($credits + $debits, 2),
         'credits_total' => round($credits, 2),
         'debits_total' => round($debits, 2),
+        'debits_excluding_realization_total' => round($debitsExcludingRealization, 2),
+        'realization_total' => round($realizationTotal, 2),
         'net_total' => round($credits + $debits, 2),
         'total_net_value' => round($credits + $debits, 2),
         'total_fee_value' => round(array_reduce($feeItems, static function (float $acc, array $item): float {
@@ -356,6 +384,7 @@ function fetch_asaas_transactions(
         'items' => $items,
         'credit_items' => $creditItems,
         'debit_items' => $debitItems,
+        'realization_items' => $realizationItems,
         'fee_items' => $feeItems,
     ];
 }
@@ -390,8 +419,13 @@ try {
     ];
     $debitos = [
         'count' => count($extrato['debit_items']),
-        'total_value' => $extrato['debits_total'],
+        'total_value' => $extrato['debits_excluding_realization_total'],
         'items' => $extrato['debit_items'],
+    ];
+    $realizacoes = [
+        'count' => count($extrato['realization_items']),
+        'total_value' => $extrato['realization_total'],
+        'items' => $extrato['realization_items'],
     ];
     $taxas = [
         'count' => count($extrato['fee_items']),
@@ -430,7 +464,7 @@ try {
             $paymentMap[$pid] = $p;
         }
     }
-    foreach (['credit_items', 'debit_items', 'fee_items'] as $bucket) {
+    foreach (['credit_items', 'debit_items', 'realization_items', 'fee_items'] as $bucket) {
         foreach ($extrato[$bucket] as &$tx) {
             $pid = trim((string) ($tx['payment_id'] ?? ''));
             if ($pid === '' || !isset($paymentMap[$pid])) {
@@ -456,13 +490,15 @@ try {
         'extrato' => [
             'count' => $extrato['count'],
             'credits_total' => $extrato['credits_total'],
-            'debits_total' => $extrato['debits_total'],
+            'debits_total' => $extrato['debits_excluding_realization_total'],
+            'realization_total' => $extrato['realization_total'],
             'net_total' => $extrato['net_total'],
             'total_fee_value' => $extrato['total_fee_value'],
             'balance_available' => $balance,
         ],
         'groups' => [
             'creditos' => $creditos,
+            'realizacoes' => $realizacoes,
             'debitos' => $debitos,
             'taxas' => $taxas,
         ],

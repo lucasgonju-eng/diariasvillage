@@ -1628,7 +1628,7 @@ if (!empty($exclusionsLog)) {
           </table>
         </div>
 
-        <h3 style="margin-top:18px;">Realizações / transferências e outros débitos</h3>
+        <h3 style="margin-top:18px;">Realizações / transferências Inter CI</h3>
         <div style="overflow-x:auto;">
           <table class="admin-table">
             <thead>

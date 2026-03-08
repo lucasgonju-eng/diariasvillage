@@ -783,7 +783,7 @@ function renderAsaasGroupRows(tbody, items) {
       const dueDate = item.due_date || item.date || '-';
       const billingType = item.billing_type || item.payment_id || '-';
       const value = Number(item.value || 0);
-      const rowClass = value < 0 ? 'asaas-row-debit' : '';
+      const rowClass = value < 0 && !item.is_realizacao_inter_ci ? 'asaas-row-debit' : '';
       return `
       <tr class="${rowClass}">
         <td>${escapeHtml(item.id || '-')}</td>
@@ -900,6 +900,7 @@ function renderAsaasSummary(groups, generatedAt, warnings) {
   const taxas = groups?.taxas || {};
   const creditsTotal = Number(extrato.credits_total ?? creditos.total_value ?? 0);
   const debitsTotal = Number(extrato.debits_total ?? debitos.total_value ?? 0);
+  const realizationTotal = Number(extrato.realization_total ?? 0);
   const netTotal = Number(extrato.net_total ?? 0);
   const feeTotal = Number(extrato.total_fee_value ?? 0);
   const balanceAvailable = Number.isFinite(Number(extrato.balance_available))
@@ -912,7 +913,8 @@ function renderAsaasSummary(groups, generatedAt, warnings) {
   asaasDataSummary.innerHTML = `
     <span class="cashflow-pill">Atualizado em: ${formatDateTimeBR(generatedAt)}</span>
     <span class="cashflow-pill">Créditos extrato: ${formatCurrency(creditsTotal)}</span>
-    <span class="cashflow-pill">Realizações/transferências + débitos: ${formatCurrency(debitsTotal)}</span>
+    <span class="cashflow-pill">Realizações Inter CI: ${formatCurrency(realizationTotal)}</span>
+    <span class="cashflow-pill">Outros débitos: ${formatCurrency(debitsTotal)}</span>
     <span class="cashflow-pill">Taxas no período: ${formatCurrency(feeTotal)}</span>
     <span class="cashflow-pill">Líquido do período: ${formatCurrency(netTotal)}</span>
     <span class="cashflow-pill">${balanceLabel}</span>
@@ -1022,6 +1024,7 @@ function asaasBuildExportRows(payload) {
   };
 
   addSection('Transacoes - Creditos', creditos);
+  addSection('Transacoes - Realizacoes Inter CI', groups?.realizacoes?.items || []);
   addSection('Transacoes - Debitos', debitos);
   addSection('Transacoes - Taxas e descontos', taxas);
 
@@ -1083,7 +1086,7 @@ async function loadAsaasData(force = false) {
     const groups = data.groups || {};
     const summaryGroups = { ...groups, __extrato: data.extrato || {} };
     renderAsaasGroupRows(asaasPaidTbody, groups?.creditos?.items || []);
-    renderAsaasGroupRows(asaasPendingTbody, groups?.debitos?.items || []);
+    renderAsaasGroupRows(asaasPendingTbody, groups?.realizacoes?.items || []);
     renderAsaasGroupRows(asaasOverdueTbody, groups?.taxas?.items || []);
     renderAsaasSummary(summaryGroups, data.generated_at, data.warnings || []);
     renderAsaasAnalytics(data.analytics || null);
