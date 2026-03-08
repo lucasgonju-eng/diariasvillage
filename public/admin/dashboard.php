@@ -608,7 +608,7 @@ if (!empty($exclusionsLog)) {
             <input id="attendance-office" type="text" list="attendance-offices-list" placeholder="Autocomplete do mês corrente" autocomplete="off" />
           </div>
           <div class="form-group" style="display:flex;align-items:flex-end;gap:8px;">
-            <button id="attendance-add-btn" class="btn btn-ghost btn-sm" type="button">Adicionar aluno ao dia</button>
+            <button id="attendance-add-btn" class="btn btn-primary btn-sm" type="button">Adicionar aluno ao dia</button>
             <button id="attendance-close-day-btn" class="btn btn-primary btn-sm" type="button">Fechar dia de chamada</button>
           </div>
         </div>
