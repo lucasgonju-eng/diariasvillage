@@ -37,6 +37,7 @@ function normalize_asaas_payment(array $payment): array
 {
     $value = (float) ($payment['value'] ?? 0);
     $netValue = (float) ($payment['netValue'] ?? 0);
+    $feeValue = max(0.0, $value - $netValue);
     $paidAt = pick_asaas_value($payment, ['clientPaymentDate', 'paymentDate', 'confirmedDate']);
     $invoiceUrl = pick_asaas_value($payment, ['invoiceUrl', 'bankSlipUrl']);
     $dueDate = trim((string) ($payment['dueDate'] ?? ''));
@@ -52,6 +53,7 @@ function normalize_asaas_payment(array $payment): array
         'billing_type' => trim((string) ($payment['billingType'] ?? '')),
         'value' => $value,
         'net_value' => $netValue,
+        'fee_value' => $feeValue,
         'due_date' => $dueDate,
         'paid_at' => $paidAt,
         'invoice_url' => $invoiceUrl,
@@ -102,13 +104,22 @@ function fetch_asaas_group(AsaasClient $asaas, array $statuses, int $maxPages, a
     });
 
     $totalValue = 0.0;
+    $totalNetValue = 0.0;
+    $totalFeeValue = 0.0;
     foreach ($items as $item) {
-        $totalValue += (float) ($item['value'] ?? 0);
+        $value = (float) ($item['value'] ?? 0);
+        $netValue = (float) ($item['net_value'] ?? 0);
+        $feeValue = (float) ($item['fee_value'] ?? max(0.0, $value - $netValue));
+        $totalValue += $value;
+        $totalNetValue += $netValue;
+        $totalFeeValue += $feeValue;
     }
 
     return [
         'count' => count($items),
         'total_value' => $totalValue,
+        'total_net_value' => $totalNetValue,
+        'total_fee_value' => $totalFeeValue,
         'status_counts' => $statusCounts,
         'fetched_total' => $fetchedTotal,
         'items' => $items,

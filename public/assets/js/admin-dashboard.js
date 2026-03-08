@@ -145,6 +145,9 @@ const cashflowClearButton = document.querySelector('#cashflow-clear');
 const cashflowMessage = document.querySelector('#cashflow-message');
 const cashflowSummary = document.querySelector('#cashflow-summary');
 const cashflowTbody = document.querySelector('#cashflow-tbody');
+const cashflowTotalAmountCell = document.querySelector('#cashflow-total-amount');
+const cashflowTotalPaidCell = document.querySelector('#cashflow-total-paid');
+const cashflowTotalCountCell = document.querySelector('#cashflow-total-count');
 let cashflowLoaded = false;
 const asaasDataRefreshButton = document.querySelector('#asaas-data-refresh');
 const asaasDataMessage = document.querySelector('#asaas-data-message');
@@ -632,12 +635,22 @@ function renderCashflowRows(items) {
     .join('');
 }
 
+function renderCashflowFooterTotals(totals) {
+  if (!cashflowTotalAmountCell || !cashflowTotalPaidCell || !cashflowTotalCountCell) return;
+  const normalizedTotals = totals || { count: 0, amount: 0, paid_amount: 0 };
+  cashflowTotalAmountCell.textContent = formatCurrency(normalizedTotals.amount || 0);
+  cashflowTotalPaidCell.textContent = `Pago: ${formatCurrency(normalizedTotals.paid_amount || 0)}`;
+  cashflowTotalCountCell.textContent = `${normalizedTotals.count || 0} registro(s)`;
+}
+
 function renderCashflowSummary(totals, period, monthlyAdjustment = null) {
+  const normalizedTotals = totals || { count: 0, amount: 0, paid_amount: 0 };
+  renderCashflowFooterTotals(normalizedTotals);
   if (!cashflowSummary) return;
-  if (!totals) {
-    cashflowSummary.innerHTML = '';
-    return;
-  }
+  const paidByAccount = normalizedTotals.paid_by_account || {};
+  const interManual = Number(paidByAccount.inter_pix_manual || 0);
+  const boleto = Number(paidByAccount.boleto || 0);
+  const asaas = Number(paidByAccount.asaas || 0);
   const monthlyCount = Number(monthlyAdjustment?.count || 0);
   const monthlyAmount = Number(monthlyAdjustment?.amount || 0);
   const monthlyLabel = monthlyCount > 0
@@ -645,9 +658,12 @@ function renderCashflowSummary(totals, period, monthlyAdjustment = null) {
     : '';
   cashflowSummary.innerHTML = `
     <span class="cashflow-pill">Período: ${formatDateBR(period?.from)} até ${formatDateBR(period?.to)}</span>
-    <span class="cashflow-pill">Registros: ${totals.count || 0}</span>
-    <span class="cashflow-pill">Total geral: ${formatCurrency(totals.amount || 0)}</span>
-    <span class="cashflow-pill">Total pago: ${formatCurrency(totals.paid_amount || 0)}</span>
+    <span class="cashflow-pill">Registros: ${normalizedTotals.count || 0}</span>
+    <span class="cashflow-pill">Total geral: ${formatCurrency(normalizedTotals.amount || 0)}</span>
+    <span class="cashflow-pill">Total pago: ${formatCurrency(normalizedTotals.paid_amount || 0)}</span>
+    <span class="cashflow-pill">Conta Inter CI (PIX_MANUAL): ${formatCurrency(interManual)}</span>
+    <span class="cashflow-pill">Boleto: ${formatCurrency(boleto)}</span>
+    <span class="cashflow-pill">Asaas: ${formatCurrency(asaas)}</span>
     ${monthlyLabel}
   `;
 }
@@ -694,7 +710,10 @@ async function loadCashflow() {
     if (!data.ok) {
       setCashflowMessage(data.error || 'Falha ao carregar fluxo de caixa.', true);
       renderCashflowRows([]);
-      renderCashflowSummary(null, null, null);
+      renderCashflowSummary({ count: 0, amount: 0, paid_amount: 0 }, {
+        from: cashflowFromInput?.value || '',
+        to: cashflowToInput?.value || '',
+      }, null);
       return;
     }
     renderCashflowRows(data.items || []);
@@ -704,7 +723,10 @@ async function loadCashflow() {
   } catch {
     setCashflowMessage('Falha ao carregar fluxo de caixa.', true);
     renderCashflowRows([]);
-    renderCashflowSummary(null, null, null);
+    renderCashflowSummary({ count: 0, amount: 0, paid_amount: 0 }, {
+      from: cashflowFromInput?.value || '',
+      to: cashflowToInput?.value || '',
+    }, null);
   } finally {
     cashflowSearchButton.removeAttribute('disabled');
   }
@@ -727,7 +749,7 @@ function renderAsaasGroupRows(tbody, items) {
   if (!tbody) return;
   const list = Array.isArray(items) ? items : [];
   if (!list.length) {
-    tbody.innerHTML = '<tr><td colspan="9">Nenhum registro.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10">Nenhum registro.</td></tr>';
     return;
   }
   tbody.innerHTML = list
@@ -736,6 +758,7 @@ function renderAsaasGroupRows(tbody, items) {
         ? `<a href="${escapeHtml(item.invoice_url)}" target="_blank" rel="noopener">Abrir</a>`
         : '-';
       const customer = [item.customer_name, item.customer_id].filter(Boolean).join(' • ') || '-';
+      const fee = Number(item.fee_value || 0);
       return `
       <tr>
         <td>${escapeHtml(item.id || '-')}</td>
@@ -746,6 +769,7 @@ function renderAsaasGroupRows(tbody, items) {
         <td>${formatDateTimeBR(item.paid_at)}</td>
         <td>${escapeHtml(item.billing_type || '-')}</td>
         <td>${formatCurrency(item.value)}</td>
+        <td>${formatCurrency(fee)}</td>
         <td>${link}</td>
       </tr>
       `;
@@ -758,10 +782,14 @@ function renderAsaasSummary(groups, generatedAt, warnings) {
   const pagos = groups?.pagos || {};
   const pendentes = groups?.pendentes || {};
   const vencidos = groups?.vencidos || {};
+  const totalFee = Number(pagos.total_fee_value || 0);
+  const totalNet = Number(pagos.total_net_value || 0);
   const warnCount = Array.isArray(warnings) ? warnings.length : 0;
   asaasDataSummary.innerHTML = `
     <span class="cashflow-pill">Atualizado em: ${formatDateTimeBR(generatedAt)}</span>
     <span class="cashflow-pill">Pagos: ${pagos.count || 0} (${formatCurrency(pagos.total_value || 0)})</span>
+    <span class="cashflow-pill">Taxas Asaas (pagos): ${formatCurrency(totalFee)}</span>
+    <span class="cashflow-pill">Saldo líquido esperado Asaas: ${formatCurrency(totalNet)}</span>
     <span class="cashflow-pill">Pendentes: ${pendentes.count || 0} (${formatCurrency(pendentes.total_value || 0)})</span>
     <span class="cashflow-pill">Vencidos: ${vencidos.count || 0} (${formatCurrency(vencidos.total_value || 0)})</span>
     <span class="cashflow-pill">Avisos: ${warnCount}</span>
@@ -3395,6 +3423,11 @@ if (cashflowFromInput && cashflowToInput) {
   const todayIso = new Date().toISOString().slice(0, 10);
   if (!cashflowFromInput.value) cashflowFromInput.value = getCashflowDefaultFromDate();
   if (!cashflowToInput.value) cashflowToInput.value = todayIso;
+  renderCashflowSummary(
+    { count: 0, amount: 0, paid_amount: 0 },
+    { from: cashflowFromInput.value, to: cashflowToInput.value },
+    null,
+  );
 }
 
 if (cashflowSearchButton) {

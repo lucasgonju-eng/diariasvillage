@@ -1,0 +1,24 @@
+aluno,fonte,status,valor,metodo_pagamento,data_pagamento_utc,data_referencia,numero_operacao_asaas,payment_id_interno,observacao
+Antonella Ambrozio Carvelo,payments,paid,5.00,PIX,2026-02-03 03:00:00+00,2026-02-04,pay_lgehcgtmq015brv4,86089dd8-1e9a-471c-ab08-2152728ba503,daily_type=planejada|04/02/26
+Antonella Ambrozio Carvelo,payments,paid,5.00,PIX,2026-02-03 03:00:00+00,2026-02-04,pay_l2rf01h7nimu89fq,c61523b2-6635-4ebb-a4a4-0bc98ad3f31b,daily_type=planejada|04/02/26
+Antonella Ambrozio Carvelo,payments,paid,5.00,PIX,2026-02-03 03:00:00+00,2026-02-04,pay_bwejbmvg47t4wy2j,0d45fda9-7bae-46de-aea6-128fdcf52483,daily_type=planejada|04/02/26
+Antonella Ambrozio Carvelo,payments,paid,5.00,PIX,2026-02-03 03:00:00+00,2026-02-04,pay_xy1hyoj293t7bjqh,5f74f9f8-c2c6-4691-822d-3b3f868388bb,daily_type=planejada|04/02/26
+Antonella Ambrozio Carvelo,payments,paid,5.00,PIX,2026-02-03 03:00:00+00,2026-02-04,pay_el7sxq7pfsqf00lm,d16b74eb-a516-4a0e-9365-c59e8f210927,daily_type=planejada|04/02/26
+Antonella Ambrozio Carvelo,payments,paid,77.00,PIX,2026-02-07 05:13:50+00,2026-02-07,pay_s7h0ui1ocj80i4vf,e897b43f-1ea3-45d1-ba48-cc4dc237b0b0,daily_type=planejada
+Antonella Ambrozio Carvelo,payments,paid,97.00,PIX_MANUAL,2026-02-07 06:57:43+00,2026-02-06,pay_d1zmzfkc8fs3411m,2da93f2d-b718-4d3d-a733-9bb985777e92,daily_type=emergencial|06/02/26
+Antonella Ambrozio Carvelo,payments,paid,77.00,PIX,2026-02-11 03:00:00+00,2026-02-11,pay_s8styslnt5wzfgus,7040d02f-086e-4e7e-91e3-70595be3a7ce,daily_type=pendencia|11/02/26
+Antonella Ambrozio Carvelo,payments,paid,77.00,PIX,2026-02-12 00:16:33+00,2026-02-12,pay_afz0304ub4gtwa7y,d5fe45c3-f859-4deb-a2dd-d5ead508dcbe,daily_type=planejada
+Antonella Ambrozio Carvelo,payments,paid,5.00,PIX,2026-02-18 03:00:00+00,2026-02-19,pay_6qp9z1hahsuaq650,4ba3040e-15bc-4bfd-ab59-c20e2a48264e,daily_type=planejada|19/02/26
+Antonella Ambrozio Carvelo,payments,paid,5.00,PIX,2026-02-18 03:00:00+00,2026-02-19,pay_6xd7yx5xfwstx6k9,af267216-9ed7-47b6-b67e-94e4c3c68279,daily_type=planejada|19/02/26
+Antonella Ambrozio Carvelo,payments,paid,5.00,PIX,2026-02-18 03:00:00+00,2026-02-19,pay_6vs2ae2vh1qp328k,a206f197-7cd8-4a50-af28-2880dae8dbd2,daily_type=planejada|19/02/26
+Antonella Ambrozio Carvelo,payments,paid,5.00,PIX,2026-02-18 03:00:00+00,2026-02-19,pay_gyftgzbuzqgbh62r,951b6bcf-04ab-4296-b3ba-65e53864f589,daily_type=planejada|19/02/26
+Antonella Ambrozio Carvelo,payments,paid,5.00,PIX,2026-02-18 03:00:00+00,2026-02-19,pay_926kapv1sttldzju,fe5bf44c-571e-48ec-ab49-e4514061cc97,daily_type=planejada|19/02/26
+Antonella Ambrozio Carvelo,payments,paid,5.00,PIX,2026-02-19 03:00:00+00,2026-02-19,pay_7qn7bmvqgyizwv50,10e477f1-c5b1-489a-a59f-462e80cfdb86,daily_type=planejada|19/02/26
+Antonella Ambrozio Carvelo,payments,paid,77.00,PIX,2026-02-19 04:05:43+00,2026-02-19,pay_3qn4qetlzai7lyxi,82e4a087-ad5e-4f19-9478-ed1aae654360,daily_type=planejada
+Antonella Ambrozio Carvelo,payments,paid,77.00,PIX,2026-02-19 04:19:20+00,2026-02-20,pay_8v1lsp8p67qc1vyr,08894d0d-37e0-4b0a-ac63-05024a76c9f8,daily_type=planejada
+Antonella Ambrozio Carvelo,payments,paid,77.00,PIX,2026-02-19 06:15:22+00,2026-02-23,pay_9lqmy800p3lymvmi,a979dc4e-f33f-4f36-abce-d2fbc7d79315,daily_type=planejada
+Antonella Ambrozio Carvelo,payments,paid,5.00,PIX,2026-03-07 18:47:29+00,2026-03-09,pay_1yvnyaw4j9cqkwod,4f7eebf2-9ccd-486c-843d-71609af68c23,daily_type=planejada
+Gael Goncalves,pendencia_de_cadastro,pago_pendencia,77.00,PIX,2026-02-11 19:47:02+00,,NAO_DISPONIVEL,d81b3a4e-70ab-4ce4-b8b0-7723832b5915,pendencia paga; nao ha numero_operacao_asaas no registro
+TOTAL_ANTONELLA,,,,619.00,,,,,19 pagamentos em payments
+TOTAL_GAEL,,,,77.00,,,,,1 pendencia paga
+TOTAL_GERAL,,,,696.00,,,,,soma de Antonella + Gael

@@ -368,11 +368,23 @@ usort($items, static function (array $a, array $b): int {
 
 $totalAmount = 0.0;
 $totalPaidAmount = 0.0;
+$paidInterManual = 0.0;
+$paidBoleto = 0.0;
+$paidAsaas = 0.0;
 foreach ($items as $item) {
     $value = (float) ($item['amount'] ?? 0);
     $totalAmount += $value;
     if (strtolower((string) ($item['status'] ?? '')) === 'paid') {
         $totalPaidAmount += $value;
+        $billingType = strtoupper(trim((string) ($item['billing_type'] ?? '')));
+        if ($billingType === 'PIX_MANUAL') {
+            $paidInterManual += $value;
+        } elseif ($billingType === 'BOLETO') {
+            $paidBoleto += $value;
+        } else {
+            // Demais recebimentos entram na conta Asaas.
+            $paidAsaas += $value;
+        }
     }
 }
 
@@ -383,6 +395,11 @@ Helpers::json([
         'count' => count($items),
         'amount' => round($totalAmount, 2),
         'paid_amount' => round($totalPaidAmount, 2),
+        'paid_by_account' => [
+            'inter_pix_manual' => round($paidInterManual, 2),
+            'boleto' => round($paidBoleto, 2),
+            'asaas' => round($paidAsaas, 2),
+        ],
     ],
     'monthly_adjustment' => [
         'mode' => $monthlyAdjustment['mode'],

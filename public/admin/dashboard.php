@@ -1535,6 +1535,14 @@ if (!empty($exclusionsLog)) {
                 <td colspan="7">Clique em "Buscar" para carregar.</td>
               </tr>
             </tbody>
+            <tfoot>
+              <tr style="font-weight:700;background:#F8FAFC;">
+                <td colspan="4">Totais do filtro</td>
+                <td id="cashflow-total-amount">R$ 0,00</td>
+                <td id="cashflow-total-paid">Pago: R$ 0,00</td>
+                <td id="cashflow-total-count">0 registro(s)</td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </section>
@@ -1561,11 +1569,12 @@ if (!empty($exclusionsLog)) {
                 <th>Pago em</th>
                 <th>Forma</th>
                 <th>Valor</th>
+                <th>Taxa Asaas</th>
                 <th>Link</th>
               </tr>
             </thead>
             <tbody id="asaas-paid-tbody">
-              <tr><td colspan="9">Clique em "Atualizar direto do Asaas".</td></tr>
+              <tr><td colspan="10">Clique em "Atualizar direto do Asaas".</td></tr>
             </tbody>
           </table>
         </div>
@@ -1583,11 +1592,12 @@ if (!empty($exclusionsLog)) {
                 <th>Pago em</th>
                 <th>Forma</th>
                 <th>Valor</th>
+                <th>Taxa Asaas</th>
                 <th>Link</th>
               </tr>
             </thead>
             <tbody id="asaas-pending-tbody">
-              <tr><td colspan="9">Clique em "Atualizar direto do Asaas".</td></tr>
+              <tr><td colspan="10">Clique em "Atualizar direto do Asaas".</td></tr>
             </tbody>
           </table>
         </div>
@@ -1605,11 +1615,12 @@ if (!empty($exclusionsLog)) {
                 <th>Pago em</th>
                 <th>Forma</th>
                 <th>Valor</th>
+                <th>Taxa Asaas</th>
                 <th>Link</th>
               </tr>
             </thead>
             <tbody id="asaas-overdue-tbody">
-              <tr><td colspan="9">Clique em "Atualizar direto do Asaas".</td></tr>
+              <tr><td colspan="10">Clique em "Atualizar direto do Asaas".</td></tr>
             </tbody>
           </table>
         </div>
