@@ -71,6 +71,150 @@ function normalize_asaas_transaction(array $tx): array
     ];
 }
 
+function pick_payment_date(array $payment): string
+{
+    foreach (['clientPaymentDate', 'paymentDate', 'confirmedDate', 'dueDate', 'dateCreated'] as $key) {
+        $value = trim((string) ($payment[$key] ?? ''));
+        if ($value !== '') {
+            $ts = strtotime($value);
+            if ($ts !== false) {
+                return date('Y-m-d', $ts);
+            }
+        }
+    }
+    return '';
+}
+
+function fetch_asaas_payments_by_statuses(
+    AsaasClient $asaas,
+    array $statuses,
+    int $maxPages,
+    array &$warnings
+): array {
+    $items = [];
+    foreach ($statuses as $status) {
+        $offset = 0;
+        for ($page = 0; $page < $maxPages; $page++) {
+            $res = $asaas->listPaymentsByStatus((string) $status, 100, $offset);
+            if (!($res['ok'] ?? false)) {
+                $warnings[] = 'Falha ao consultar pagamentos no Asaas (status ' . $status . ').';
+                break;
+            }
+            $list = is_array($res['data']['data'] ?? null) ? $res['data']['data'] : [];
+            if (empty($list)) {
+                break;
+            }
+            foreach ($list as $payment) {
+                if (!is_array($payment)) {
+                    continue;
+                }
+                $items[] = [
+                    'id' => trim((string) ($payment['id'] ?? '')),
+                    'status' => strtoupper(trim((string) ($payment['status'] ?? ''))),
+                    'customer_name' => trim((string) ($payment['customerName'] ?? '')),
+                    'customer_id' => trim((string) ($payment['customer'] ?? '')),
+                    'value' => (float) ($payment['value'] ?? 0),
+                    'net_value' => (float) ($payment['netValue'] ?? 0),
+                    'billing_type' => trim((string) ($payment['billingType'] ?? '')),
+                    'date' => pick_payment_date($payment),
+                ];
+            }
+            if (count($list) < 100) {
+                break;
+            }
+            $offset += 100;
+        }
+    }
+    return $items;
+}
+
+function build_analytics(array $extrato, array $paidPayments, array $openPayments): array
+{
+    $daily = [];
+    foreach (($extrato['items'] ?? []) as $item) {
+        $date = trim((string) ($item['date'] ?? ''));
+        if ($date === '') {
+            continue;
+        }
+        if (!isset($daily[$date])) {
+            $daily[$date] = ['date' => $date, 'credits' => 0.0, 'debits' => 0.0, 'net' => 0.0];
+        }
+        $value = (float) ($item['value'] ?? 0);
+        if ($value >= 0) {
+            $daily[$date]['credits'] += $value;
+        } else {
+            $daily[$date]['debits'] += $value;
+        }
+        $daily[$date]['net'] += $value;
+    }
+    ksort($daily);
+    $dailySeries = array_values(array_map(static function (array $row): array {
+        $row['credits'] = round((float) $row['credits'], 2);
+        $row['debits'] = round((float) $row['debits'], 2);
+        $row['net'] = round((float) $row['net'], 2);
+        return $row;
+    }, $daily));
+
+    $good = [];
+    foreach ($paidPayments as $p) {
+        $name = trim((string) ($p['customer_name'] ?? ''));
+        $id = trim((string) ($p['customer_id'] ?? ''));
+        $key = $name !== '' ? $name : ($id !== '' ? $id : 'Sem identificação');
+        if (!isset($good[$key])) {
+            $good[$key] = ['customer' => $key, 'paid_count' => 0, 'paid_total' => 0.0, 'open_count' => 0, 'open_total' => 0.0];
+        }
+        $good[$key]['paid_count']++;
+        $good[$key]['paid_total'] += (float) ($p['value'] ?? 0);
+    }
+
+    $bad = [];
+    foreach ($openPayments as $p) {
+        $name = trim((string) ($p['customer_name'] ?? ''));
+        $id = trim((string) ($p['customer_id'] ?? ''));
+        $key = $name !== '' ? $name : ($id !== '' ? $id : 'Sem identificação');
+        if (!isset($bad[$key])) {
+            $bad[$key] = ['customer' => $key, 'open_count' => 0, 'open_total' => 0.0];
+        }
+        $bad[$key]['open_count']++;
+        $bad[$key]['open_total'] += (float) ($p['value'] ?? 0);
+    }
+
+    $topAdimplentes = array_values($good);
+    usort($topAdimplentes, static function (array $a, array $b): int {
+        $cmp = $b['paid_total'] <=> $a['paid_total'];
+        return $cmp !== 0 ? $cmp : ($b['paid_count'] <=> $a['paid_count']);
+    });
+    $topAdimplentes = array_slice(array_map(static function (array $row): array {
+        $row['paid_total'] = round((float) $row['paid_total'], 2);
+        return $row;
+    }, $topAdimplentes), 0, 10);
+
+    $topInadimplentes = array_values($bad);
+    usort($topInadimplentes, static function (array $a, array $b): int {
+        $cmp = $b['open_total'] <=> $a['open_total'];
+        return $cmp !== 0 ? $cmp : ($b['open_count'] <=> $a['open_count']);
+    });
+    $topInadimplentes = array_slice(array_map(static function (array $row): array {
+        $row['open_total'] = round((float) $row['open_total'], 2);
+        return $row;
+    }, $topInadimplentes), 0, 10);
+
+    return [
+        'kpis' => [
+            'entries_total' => round((float) ($extrato['credits_total'] ?? 0), 2),
+            'exits_total' => round(abs((float) ($extrato['debits_total'] ?? 0)), 2),
+            'fees_total' => round((float) ($extrato['total_fee_value'] ?? 0), 2),
+            'net_total' => round((float) ($extrato['net_total'] ?? 0), 2),
+            'balance_available' => isset($extrato['balance_available']) ? (float) $extrato['balance_available'] : null,
+            'paid_count' => count($paidPayments),
+            'open_count' => count($openPayments),
+        ],
+        'daily_series' => $dailySeries,
+        'top_adimplentes' => $topAdimplentes,
+        'top_inadimplentes' => $topInadimplentes,
+    ];
+}
+
 function fetch_asaas_transactions(
     AsaasClient $asaas,
     string $from,
@@ -197,6 +341,22 @@ try {
         ], 502);
     }
 
+    $paidStatuses = ['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH', 'PAID'];
+    $openStatuses = ['PENDING', 'OVERDUE', 'AWAITING_RISK_ANALYSIS'];
+    $paidPaymentsAll = fetch_asaas_payments_by_statuses($asaas, $paidStatuses, $maxPages, $warnings);
+    $openPaymentsAll = fetch_asaas_payments_by_statuses($asaas, $openStatuses, $maxPages, $warnings);
+    $paidPayments = array_values(array_filter($paidPaymentsAll, static function (array $p) use ($from, $to): bool {
+        $date = (string) ($p['date'] ?? '');
+        return $date !== '' && $date >= $from && $date <= $to;
+    }));
+    $openPayments = array_values(array_filter($openPaymentsAll, static function (array $p) use ($from, $to): bool {
+        $date = (string) ($p['date'] ?? '');
+        return $date !== '' && $date >= $from && $date <= $to;
+    }));
+
+    $extrato['balance_available'] = $balance;
+    $analytics = build_analytics($extrato, $paidPayments, $openPayments);
+
     Helpers::json([
         'ok' => true,
         'source' => 'asaas_financial_transactions',
@@ -215,6 +375,7 @@ try {
             'debitos' => $debitos,
             'taxas' => $taxas,
         ],
+        'analytics' => $analytics,
         'warnings' => $warnings,
     ]);
 } catch (\Throwable $e) {

@@ -409,6 +409,33 @@ if (!empty($exclusionsLog)) {
     .cashflow-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:10px 0 14px}
     .cashflow-summary{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 14px}
     .cashflow-pill{background:#F3F6FB;border:1px solid #E2E8F5;border-radius:999px;padding:7px 12px;font-size:12px;color:#1a2133}
+    .asaas-kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:10px 0 14px}
+    .asaas-kpi-card{background:linear-gradient(180deg,#ffffff,#f8fbff);border:1px solid #dbe7ff;border-radius:14px;padding:12px}
+    .asaas-kpi-label{font-size:12px;color:#475569;text-transform:uppercase;letter-spacing:.04em}
+    .asaas-kpi-value{font-size:22px;font-weight:800;color:#0f172a;margin-top:6px}
+    .asaas-kpi-card.danger{border-color:#fecaca;background:linear-gradient(180deg,#fff,#fff5f5)}
+    .asaas-kpi-card.danger .asaas-kpi-value{color:#b91c1c}
+    .asaas-analytics-grid{display:grid;grid-template-columns:2fr 1fr;gap:12px;margin:10px 0 16px}
+    .asaas-chart-card{background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;padding:12px}
+    .asaas-chart-title{font-weight:700;color:#0f172a;margin-bottom:8px}
+    .asaas-bars{display:grid;gap:8px}
+    .asaas-bar-row{display:grid;grid-template-columns:120px 1fr auto;align-items:center;gap:8px;font-size:12px}
+    .asaas-bar-track{height:10px;border-radius:999px;background:#eef2ff;overflow:hidden}
+    .asaas-bar-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#2563eb,#38bdf8)}
+    .asaas-bar-fill.red{background:linear-gradient(90deg,#ef4444,#f97316)}
+    .asaas-ranking-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:8px 0 14px}
+    .asaas-ranking-card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:12px}
+    .asaas-ranking-list{display:grid;gap:6px}
+    .asaas-ranking-item{display:grid;grid-template-columns:26px 1fr auto;gap:8px;align-items:center;padding:6px 8px;border-radius:10px;background:#f8fafc;font-size:13px}
+    .asaas-ranking-item .idx{font-weight:800;color:#1d4ed8}
+    .asaas-ranking-item.bad .idx{color:#b91c1c}
+    .asaas-ranking-item .name{color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .asaas-ranking-item .value{font-weight:700;color:#0f172a}
+    .asaas-row-debit{background:#fff5f5;color:#991b1b}
+    .asaas-row-debit td{color:#991b1b}
+    @media (max-width: 980px){
+      .asaas-analytics-grid,.asaas-ranking-grid{grid-template-columns:1fr}
+    }
     .admin-view-user{display:flex;gap:8px;align-items:center}
     .admin-view-user input{width:220px}
     .view-user-form{margin:12px 0;padding:12px;border-radius:12px;background:#FFF7ED;border:1px solid #FED7AA}
@@ -1551,10 +1578,32 @@ if (!empty($exclusionsLog)) {
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <h2 style="margin:0;">Dados do Asaas</h2>
           <button id="asaas-data-refresh" class="btn btn-primary btn-sm" type="button">Atualizar direto do Asaas</button>
+          <button id="asaas-data-export" class="btn btn-ghost btn-sm" type="button">Exportar Excel</button>
         </div>
         <p class="muted">Aba separada de conferência direta no Asaas (não altera dados locais).</p>
         <div id="asaas-data-message" class="charge-message"></div>
         <div id="asaas-data-summary" class="cashflow-summary"></div>
+        <div id="asaas-kpis" class="asaas-kpi-grid"></div>
+        <div class="asaas-analytics-grid">
+          <div class="asaas-chart-card">
+            <div class="asaas-chart-title">Evolução diária (entradas x saídas)</div>
+            <div id="asaas-daily-bars" class="asaas-bars"></div>
+          </div>
+          <div class="asaas-chart-card">
+            <div class="asaas-chart-title">Composição do período</div>
+            <div id="asaas-composition-bars" class="asaas-bars"></div>
+          </div>
+        </div>
+        <div class="asaas-ranking-grid">
+          <div class="asaas-ranking-card">
+            <div class="asaas-chart-title">Top 10 adimplentes</div>
+            <div id="asaas-top-adimplentes" class="asaas-ranking-list"></div>
+          </div>
+          <div class="asaas-ranking-card">
+            <div class="asaas-chart-title">Top 10 inadimplentes</div>
+            <div id="asaas-top-inadimplentes" class="asaas-ranking-list"></div>
+          </div>
+        </div>
 
         <h3 style="margin-top:12px;">Créditos do extrato</h3>
         <div style="overflow-x:auto;">
@@ -1636,7 +1685,7 @@ if (!empty($exclusionsLog)) {
     window.__monthlyStudents = <?php echo json_encode($monthlyRowsForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
     window.__adminCanApproveAttendance = <?php echo $canAttendanceApprove ? 'true' : 'false'; ?>;
   </script>
-  <script src="/assets/js/admin-dashboard.js?v=54"></script>
+  <script src="/assets/js/admin-dashboard.js?v=55"></script>
   <script>
     (function () {
       function activateTab(name) {

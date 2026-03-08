@@ -150,12 +150,19 @@ const cashflowTotalPaidCell = document.querySelector('#cashflow-total-paid');
 const cashflowTotalCountCell = document.querySelector('#cashflow-total-count');
 let cashflowLoaded = false;
 const asaasDataRefreshButton = document.querySelector('#asaas-data-refresh');
+const asaasDataExportButton = document.querySelector('#asaas-data-export');
 const asaasDataMessage = document.querySelector('#asaas-data-message');
 const asaasDataSummary = document.querySelector('#asaas-data-summary');
 const asaasPaidTbody = document.querySelector('#asaas-paid-tbody');
 const asaasPendingTbody = document.querySelector('#asaas-pending-tbody');
 const asaasOverdueTbody = document.querySelector('#asaas-overdue-tbody');
+const asaasKpis = document.querySelector('#asaas-kpis');
+const asaasDailyBars = document.querySelector('#asaas-daily-bars');
+const asaasCompositionBars = document.querySelector('#asaas-composition-bars');
+const asaasTopAdimplentes = document.querySelector('#asaas-top-adimplentes');
+const asaasTopInadimplentes = document.querySelector('#asaas-top-inadimplentes');
 let asaasDataLoaded = false;
+let asaasDataLastPayload = null;
 let adminDialogInstance = null;
 
 function ensureAdminDialog() {
@@ -777,8 +784,10 @@ function renderAsaasGroupRows(tbody, items) {
       const paidAt = item.paid_at || item.date || '-';
       const dueDate = item.due_date || item.date || '-';
       const billingType = item.billing_type || item.payment_id || '-';
+      const value = Number(item.value || 0);
+      const rowClass = value < 0 ? 'asaas-row-debit' : '';
       return `
-      <tr>
+      <tr class="${rowClass}">
         <td>${escapeHtml(item.id || '-')}</td>
         <td>${escapeHtml(item.status || '-')}</td>
         <td>${customer}</td>
@@ -792,6 +801,93 @@ function renderAsaasGroupRows(tbody, items) {
       </tr>
       `;
     })
+    .join('');
+}
+
+function renderAsaasKpis(analytics) {
+  if (!asaasKpis) return;
+  const k = analytics?.kpis || {};
+  const entries = Number(k.entries_total || 0);
+  const exits = Number(k.exits_total || 0);
+  const fees = Number(k.fees_total || 0);
+  const net = Number(k.net_total || 0);
+  const balance = Number.isFinite(Number(k.balance_available)) ? Number(k.balance_available) : null;
+  const paidCount = Number(k.paid_count || 0);
+  const openCount = Number(k.open_count || 0);
+  asaasKpis.innerHTML = `
+    <div class="asaas-kpi-card"><div class="asaas-kpi-label">Entradas no período</div><div class="asaas-kpi-value">${formatCurrency(entries)}</div></div>
+    <div class="asaas-kpi-card danger"><div class="asaas-kpi-label">Saídas no período</div><div class="asaas-kpi-value">${formatCurrency(exits)}</div></div>
+    <div class="asaas-kpi-card danger"><div class="asaas-kpi-label">Taxas no período</div><div class="asaas-kpi-value">${formatCurrency(fees)}</div></div>
+    <div class="asaas-kpi-card"><div class="asaas-kpi-label">Líquido no período</div><div class="asaas-kpi-value">${formatCurrency(net)}</div></div>
+    <div class="asaas-kpi-card"><div class="asaas-kpi-label">Saldo disponível</div><div class="asaas-kpi-value">${balance === null ? 'n/d' : formatCurrency(balance)}</div></div>
+    <div class="asaas-kpi-card"><div class="asaas-kpi-label">Pagas x Em aberto</div><div class="asaas-kpi-value">${paidCount} / ${openCount}</div></div>
+  `;
+}
+
+function renderSimpleBars(container, rows, valueKey, labelKey, maxItems = 12, red = false) {
+  if (!container) return;
+  const list = Array.isArray(rows) ? rows.slice(-maxItems) : [];
+  if (!list.length) {
+    container.innerHTML = '<div class="muted">Sem dados para o período.</div>';
+    return;
+  }
+  const max = Math.max(...list.map((r) => Math.abs(Number(r?.[valueKey] || 0))), 1);
+  container.innerHTML = list
+    .map((row) => {
+      const value = Number(row?.[valueKey] || 0);
+      const width = Math.max(2, Math.round((Math.abs(value) / max) * 100));
+      const label = String(row?.[labelKey] || '-');
+      const rowRed = red || Boolean(row?._red);
+      return `
+        <div class="asaas-bar-row">
+          <div>${escapeHtml(label)}</div>
+          <div class="asaas-bar-track"><div class="asaas-bar-fill ${rowRed ? 'red' : ''}" style="width:${width}%"></div></div>
+          <div>${formatCurrency(value)}</div>
+        </div>
+      `;
+    })
+    .join('');
+}
+
+function renderCompositionBars(analytics) {
+  const k = analytics?.kpis || {};
+  const rows = [
+    { label: 'Entradas', value: Number(k.entries_total || 0), red: false },
+    { label: 'Saídas', value: Number(k.exits_total || 0), red: true },
+    { label: 'Taxas', value: Number(k.fees_total || 0), red: true },
+    { label: 'Líquido', value: Number(k.net_total || 0), red: Number(k.net_total || 0) < 0 },
+  ];
+  if (!asaasCompositionBars) return;
+  const max = Math.max(...rows.map((r) => Math.abs(r.value)), 1);
+  asaasCompositionBars.innerHTML = rows
+    .map((r) => {
+      const width = Math.max(4, Math.round((Math.abs(r.value) / max) * 100));
+      return `
+        <div class="asaas-bar-row">
+          <div>${escapeHtml(r.label)}</div>
+          <div class="asaas-bar-track"><div class="asaas-bar-fill ${r.red ? 'red' : ''}" style="width:${width}%"></div></div>
+          <div>${formatCurrency(r.value)}</div>
+        </div>
+      `;
+    })
+    .join('');
+}
+
+function renderRanking(container, rows, valueKey, countKey, bad = false) {
+  if (!container) return;
+  const list = Array.isArray(rows) ? rows : [];
+  if (!list.length) {
+    container.innerHTML = '<div class="muted">Sem dados no período.</div>';
+    return;
+  }
+  container.innerHTML = list
+    .map((row, idx) => `
+      <div class="asaas-ranking-item ${bad ? 'bad' : ''}">
+        <div class="idx">${idx + 1}</div>
+        <div class="name" title="${escapeHtml(row.customer || '-')}" >${escapeHtml(row.customer || '-')} (${Number(row[countKey] || 0)})</div>
+        <div class="value">${formatCurrency(row[valueKey] || 0)}</div>
+      </div>
+    `)
     .join('');
 }
 
@@ -824,6 +920,136 @@ function renderAsaasSummary(groups, generatedAt, warnings) {
   `;
 }
 
+function renderAsaasAnalytics(analytics) {
+  renderAsaasKpis(analytics);
+  const daily = Array.isArray(analytics?.daily_series) ? analytics.daily_series : [];
+  const dailyRows = daily.map((row) => ({
+    date: formatDateBR(row.date),
+    value: Number(row.credits || 0) + Number(row.debits || 0),
+    _red: (Number(row.credits || 0) + Number(row.debits || 0)) < 0,
+  }));
+  renderSimpleBars(asaasDailyBars, dailyRows, 'value', 'date', 14, false);
+  renderCompositionBars(analytics);
+  renderRanking(asaasTopAdimplentes, analytics?.top_adimplentes || [], 'paid_total', 'paid_count', false);
+  renderRanking(asaasTopInadimplentes, analytics?.top_inadimplentes || [], 'open_total', 'open_count', true);
+}
+
+function clearAsaasAnalytics() {
+  if (asaasKpis) asaasKpis.innerHTML = '';
+  if (asaasDailyBars) asaasDailyBars.innerHTML = '<div class="muted">Sem dados para o período.</div>';
+  if (asaasCompositionBars) asaasCompositionBars.innerHTML = '<div class="muted">Sem dados para o período.</div>';
+  if (asaasTopAdimplentes) asaasTopAdimplentes.innerHTML = '<div class="muted">Sem dados no período.</div>';
+  if (asaasTopInadimplentes) asaasTopInadimplentes.innerHTML = '<div class="muted">Sem dados no período.</div>';
+}
+
+function csvEscape(value) {
+  const text = String(value ?? '');
+  if (text.includes('"') || text.includes(';') || text.includes('\n')) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+  return text;
+}
+
+function asaasBuildExportRows(payload) {
+  const rows = [];
+  const now = new Date().toLocaleString('pt-BR');
+  const period = payload?.period || {};
+  const analytics = payload?.analytics || {};
+  const kpis = analytics?.kpis || {};
+  const groups = payload?.groups || {};
+  const creditos = groups?.creditos?.items || [];
+  const debitos = groups?.debitos?.items || [];
+  const taxas = groups?.taxas?.items || [];
+  const topAdimplentes = analytics?.top_adimplentes || [];
+  const topInadimplentes = analytics?.top_inadimplentes || [];
+  const dailySeries = analytics?.daily_series || [];
+
+  rows.push(['Relatorio', 'Dashboard Asaas']);
+  rows.push(['Gerado em', now]);
+  rows.push(['Periodo de', period.from || '-']);
+  rows.push(['Periodo ate', period.to || '-']);
+  rows.push([]);
+
+  rows.push(['KPIs', 'Valor']);
+  rows.push(['Entradas no periodo', Number(kpis.entries_total || 0)]);
+  rows.push(['Saidas no periodo', Number(kpis.exits_total || 0)]);
+  rows.push(['Taxas no periodo', Number(kpis.fees_total || 0)]);
+  rows.push(['Liquido no periodo', Number(kpis.net_total || 0)]);
+  rows.push(['Saldo disponivel', kpis.balance_available == null ? 'n/d' : Number(kpis.balance_available)]);
+  rows.push(['Pagas', Number(kpis.paid_count || 0)]);
+  rows.push(['Em aberto', Number(kpis.open_count || 0)]);
+  rows.push([]);
+
+  rows.push(['Evolucao diaria']);
+  rows.push(['Data', 'Entradas', 'Saidas', 'Liquido']);
+  dailySeries.forEach((item) => {
+    rows.push([item.date || '-', Number(item.credits || 0), Number(item.debits || 0), Number(item.net || 0)]);
+  });
+  rows.push([]);
+
+  rows.push(['Top adimplentes']);
+  rows.push(['Posicao', 'Cliente', 'Qtde pagas', 'Total pago']);
+  topAdimplentes.forEach((item, idx) => {
+    rows.push([idx + 1, item.customer || '-', Number(item.paid_count || 0), Number(item.paid_total || 0)]);
+  });
+  rows.push([]);
+
+  rows.push(['Top inadimplentes']);
+  rows.push(['Posicao', 'Cliente', 'Qtde em aberto', 'Total em aberto']);
+  topInadimplentes.forEach((item, idx) => {
+    rows.push([idx + 1, item.customer || '-', Number(item.open_count || 0), Number(item.open_total || 0)]);
+  });
+  rows.push([]);
+
+  const addSection = (title, list) => {
+    rows.push([title]);
+    rows.push(['ID', 'Status', 'Tipo', 'Descricao', 'Data', 'Valor', 'Taxa', 'Payment ID']);
+    list.forEach((item) => {
+      rows.push([
+        item.id || '-',
+        item.status || '-',
+        item.type || '-',
+        item.description || '-',
+        item.date || item.paid_at || '-',
+        Number(item.value || 0),
+        Number(item.fee_value || 0),
+        item.payment_id || item.external_reference || '-',
+      ]);
+    });
+    rows.push([]);
+  };
+
+  addSection('Transacoes - Creditos', creditos);
+  addSection('Transacoes - Debitos', debitos);
+  addSection('Transacoes - Taxas e descontos', taxas);
+
+  return rows;
+}
+
+function exportAsaasExcelCsv() {
+  if (!asaasDataLastPayload) {
+    setAsaasDataMessage('Carregue os dados do Asaas antes de exportar.', true);
+    return;
+  }
+  const rows = asaasBuildExportRows(asaasDataLastPayload);
+  const csvContent = rows
+    .map((row) => row.map((cell) => csvEscape(cell)).join(';'))
+    .join('\r\n');
+  const bom = '\uFEFF';
+  const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const period = asaasDataLastPayload?.period || {};
+  const fileName = `dashboard-asaas-${period.from || 'inicio'}-a-${period.to || 'hoje'}.csv`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  setAsaasDataMessage('Exportação concluída. Abra o CSV no Excel.');
+}
+
 async function loadAsaasData(force = false) {
   if (!asaasPaidTbody || !asaasPendingTbody || !asaasOverdueTbody) {
     return;
@@ -837,6 +1063,7 @@ async function loadAsaasData(force = false) {
   renderAsaasGroupRows(asaasPaidTbody, []);
   renderAsaasGroupRows(asaasPendingTbody, []);
   renderAsaasGroupRows(asaasOverdueTbody, []);
+  clearAsaasAnalytics();
 
   try {
     const params = new URLSearchParams({ ts: String(Date.now()) });
@@ -847,6 +1074,7 @@ async function loadAsaasData(force = false) {
     if (!res.ok || !data?.ok) {
       const warningsText = Array.isArray(data?.warnings) ? ` ${data.warnings.join(' | ')}` : '';
       setAsaasDataMessage((data?.error || 'Falha ao carregar dados do Asaas.') + warningsText, true);
+      clearAsaasAnalytics();
       return;
     }
 
@@ -856,6 +1084,8 @@ async function loadAsaasData(force = false) {
     renderAsaasGroupRows(asaasPendingTbody, groups?.debitos?.items || []);
     renderAsaasGroupRows(asaasOverdueTbody, groups?.taxas?.items || []);
     renderAsaasSummary(summaryGroups, data.generated_at, data.warnings || []);
+    renderAsaasAnalytics(data.analytics || null);
+    asaasDataLastPayload = data;
     const warningsText = Array.isArray(data.warnings) && data.warnings.length
       ? ` (com avisos: ${data.warnings.join(' | ')})`
       : '';
@@ -863,6 +1093,8 @@ async function loadAsaasData(force = false) {
     asaasDataLoaded = true;
   } catch {
     setAsaasDataMessage('Falha ao carregar dados do Asaas.', true);
+    clearAsaasAnalytics();
+    asaasDataLastPayload = null;
   } finally {
     if (asaasDataRefreshButton) asaasDataRefreshButton.removeAttribute('disabled');
   }
@@ -3485,6 +3717,12 @@ if (cashflowClearButton) {
 if (asaasDataRefreshButton) {
   asaasDataRefreshButton.addEventListener('click', () => {
     loadAsaasData(true);
+  });
+}
+
+if (asaasDataExportButton) {
+  asaasDataExportButton.addEventListener('click', () => {
+    exportAsaasExcelCsv();
   });
 }
 
