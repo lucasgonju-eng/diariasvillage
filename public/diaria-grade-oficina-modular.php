@@ -214,6 +214,16 @@ $normalizarOficinaExcel = static function (string $nomeOriginal) use ($mapaPasso
 
     return $mapaPasso6Excel[1];
 };
+$extrairProfessorDescricao = static function (string $descricao): string {
+    $texto = trim($descricao);
+    if ($texto === '') {
+        return '';
+    }
+    if (preg_match('/^\[PROFESSOR\]\s*(.+)$/mi', $texto, $match)) {
+        return trim((string) ($match[1] ?? ''));
+    }
+    return '';
+};
 
 foreach ($oficinas as $oficina) {
     $ofId = (string) ($oficina['id'] ?? '');
@@ -236,6 +246,7 @@ foreach ($oficinas as $oficina) {
     }
     $nomeOriginal = (string) ($oficina['nome'] ?? 'Oficina');
     $nomeNormalizado = $normalizarOficinaExcel($nomeOriginal);
+    $professorOficina = $extrairProfessorDescricao($descricaoOficina);
     if ($nomeNormalizado === '') {
         continue;
     }
@@ -304,6 +315,7 @@ foreach ($oficinas as $oficina) {
                 'capacidade' => $capacidade,
                 'total_confirmadas' => $totalConfirmadas,
                 'vagas_restantes' => $vagasRestantes,
+                'teacher_name' => $professorOficina,
                 'possui_segundo_encontro' => $segundoDia !== null,
                 'segundo_dia_semana' => $segundoDia,
                 'segundo_horario_label' => $segundoHorario,
@@ -323,6 +335,7 @@ foreach ($oficinas as $oficina) {
             'capacidade' => $capacidade,
             'total_confirmadas' => 0,
             'vagas_restantes' => null,
+            'teacher_name' => $professorOficina,
             'possui_segundo_encontro' => $segundoDia !== null,
             'segundo_dia_semana' => $segundoDia,
             'segundo_horario_label' => $segundoHorario,
@@ -766,6 +779,12 @@ if (!empty($oficinasUi)) {
       return 'Professor(a) responsável informado(a) pela coordenação';
     }
 
+    function getProfessorDisplay(oficina) {
+      const teacherFromDb = String(oficina?.teacher_name || '').trim();
+      if (teacherFromDb) return teacherFromDb;
+      return getProfessorByNome(oficina?.nome || '');
+    }
+
     function getHabilidadesByNome(nome) {
       const normalized = normalizeText(nome);
       if (normalized.includes('trilha do conhecimento') || normalized.includes('trilhas do conhecimento')) {
@@ -901,7 +920,7 @@ if (!empty($oficinasUi)) {
             <div class="small-muted" style="margin-top:6px">
               ${of.horario_dia_label ? `Hoje: ${escapeHtml(of.horario_dia_label)}` : 'Acontece em outro dia'}
             </div>
-            <div class="small-muted">${of.is_orientadora ? 'Orientação da escola' : `Professor(a): <strong>${escapeHtml(getProfessorByNome(of.nome || ''))}</strong>`}</div>
+            <div class="small-muted">${of.is_orientadora ? 'Orientação da escola' : `Professor(a): <strong>${escapeHtml(getProfessorDisplay(of))}</strong>`}</div>
             ${Number(of.capacidade || 0) > 0 ? `<div class="small-muted">Vagas restantes: <strong>${escapeHtml(of.vagas_restantes)}</strong></div>` : ''}
             <div class="row" style="margin-top:8px">${buttonByStatus(of)}</div>
             ${of.status_ui === 'FORA_DO_DIA' ? `<div class="warn">${escapeHtml(of.fora_do_dia_message || '')}</div><div class="small-muted" style="margin-top:6px"><button type="button" class="btn btn-ghost btn-sm js-upsell-fora-dia">${escapeHtml(of.fora_do_dia_cta || 'Adicionar diária nesse dia')}</button></div>` : ''}
@@ -1346,7 +1365,7 @@ if (!empty($oficinasUi)) {
       }
       const nomeNormalizado = normalizeText(of.nome || '');
       const isTrilhasConhecimento = nomeNormalizado.includes('trilha do conhecimento') || nomeNormalizado.includes('trilhas do conhecimento');
-      const professorDaOm = getProfessorByNome(of.nome || '');
+      const professorDaOm = getProfessorDisplay(of);
       modalTitle.textContent = of.nome || 'Oficina';
       modalSub.textContent = of.horario_dia_label ? `Hoje: ${of.horario_dia_label}` : 'Sem encontro no dia da diária';
       if (Number(of.capacidade || 0) > 0) {
