@@ -83,13 +83,13 @@ if (!empty($studentIds)) {
     if (count($studentIds) === 1) {
         $studentResult = $client->select(
             'students',
-            'select=id,name,enrollment,grade,class_name,class&id=eq.' . urlencode($studentIds[0]) . '&limit=1'
+            'select=id,name,enrollment,grade,class_name&id=eq.' . urlencode($studentIds[0]) . '&limit=1'
         );
     } else {
         $quotedStudentIds = array_map(static fn($id) => '"' . str_replace('"', '', $id) . '"', $studentIds);
         $studentResult = $client->select(
             'students',
-            'select=id,name,enrollment,grade,class_name,class&id=in.(' . implode(',', $quotedStudentIds) . ')&order=name.asc&limit=20'
+            'select=id,name,enrollment,grade,class_name&id=in.(' . implode(',', $quotedStudentIds) . ')&order=name.asc&limit=20'
         );
     }
     if (($studentResult['ok'] ?? false) && !empty($studentResult['data']) && is_array($studentResult['data'])) {
