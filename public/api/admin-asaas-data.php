@@ -13,6 +13,7 @@ foreach ($bootstrapCandidates as $bootstrapFile) {
 use App\AsaasClient;
 use App\Helpers;
 use App\HttpClient;
+use App\SupabaseClient;
 
 if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
     Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
@@ -85,8 +86,52 @@ function pick_payment_date(array $payment): string
     return '';
 }
 
+function build_customer_student_map(SupabaseClient $client, array &$warnings): array
+{
+    $map = [];
+    $res = $client->select(
+        'guardians',
+        'select=asaas_customer_id,students(name)&asaas_customer_id=not.is.null&limit=10000'
+    );
+    if (!($res['ok'] ?? false)) {
+        $warnings[] = 'Não foi possível mapear clientes Asaas para alunos.';
+        return $map;
+    }
+    $rows = is_array($res['data'] ?? null) ? $res['data'] : [];
+    foreach ($rows as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $customerId = trim((string) ($row['asaas_customer_id'] ?? ''));
+        if ($customerId === '') {
+            continue;
+        }
+        $studentRaw = $row['students'] ?? null;
+        $studentName = '';
+        if (is_array($studentRaw)) {
+            $studentName = trim((string) ($studentRaw['name'] ?? ''));
+        }
+        if ($studentName === '') {
+            continue;
+        }
+        if (!isset($map[$customerId])) {
+            $map[$customerId] = [];
+        }
+        $map[$customerId][$studentName] = true;
+    }
+
+    $labels = [];
+    foreach ($map as $customerId => $namesSet) {
+        $names = array_keys($namesSet);
+        sort($names, SORT_NATURAL | SORT_FLAG_CASE);
+        $labels[$customerId] = implode(' | ', $names);
+    }
+    return $labels;
+}
+
 function fetch_asaas_payments_by_statuses(
     AsaasClient $asaas,
+    array $customerStudentMap,
     array $statuses,
     int $maxPages,
     array &$warnings
@@ -108,11 +153,17 @@ function fetch_asaas_payments_by_statuses(
                 if (!is_array($payment)) {
                     continue;
                 }
+                $customerId = trim((string) ($payment['customer'] ?? ''));
+                $studentName = trim((string) ($customerStudentMap[$customerId] ?? ''));
+                $customerName = trim((string) ($payment['customerName'] ?? ''));
+                $customerLabel = $studentName !== '' ? $studentName : ($customerName !== '' ? $customerName : $customerId);
                 $items[] = [
                     'id' => trim((string) ($payment['id'] ?? '')),
                     'status' => strtoupper(trim((string) ($payment['status'] ?? ''))),
-                    'customer_name' => trim((string) ($payment['customerName'] ?? '')),
-                    'customer_id' => trim((string) ($payment['customer'] ?? '')),
+                    'student_name' => $studentName,
+                    'customer_label' => $customerLabel,
+                    'customer_name' => $customerName,
+                    'customer_id' => $customerId,
                     'value' => (float) ($payment['value'] ?? 0),
                     'net_value' => (float) ($payment['netValue'] ?? 0),
                     'billing_type' => trim((string) ($payment['billingType'] ?? '')),
@@ -157,7 +208,7 @@ function build_analytics(array $extrato, array $paidPayments, array $openPayment
 
     $good = [];
     foreach ($paidPayments as $p) {
-        $name = trim((string) ($p['customer_name'] ?? ''));
+        $name = trim((string) ($p['customer_label'] ?? ''));
         $id = trim((string) ($p['customer_id'] ?? ''));
         $key = $name !== '' ? $name : ($id !== '' ? $id : 'Sem identificação');
         if (!isset($good[$key])) {
@@ -169,7 +220,7 @@ function build_analytics(array $extrato, array $paidPayments, array $openPayment
 
     $bad = [];
     foreach ($openPayments as $p) {
-        $name = trim((string) ($p['customer_name'] ?? ''));
+        $name = trim((string) ($p['customer_label'] ?? ''));
         $id = trim((string) ($p['customer_id'] ?? ''));
         $key = $name !== '' ? $name : ($id !== '' ? $id : 'Sem identificação');
         if (!isset($bad[$key])) {
@@ -199,10 +250,25 @@ function build_analytics(array $extrato, array $paidPayments, array $openPayment
         return $row;
     }, $topInadimplentes), 0, 10);
 
+    $realizationTotal = 0.0;
+    foreach (($extrato['items'] ?? []) as $item) {
+        $type = strtoupper(trim((string) ($item['type'] ?? '')));
+        $value = (float) ($item['value'] ?? 0);
+        if (
+            $value < 0
+            && str_contains($type, 'TRANSFER')
+            && !str_contains($type, 'FEE')
+            && !str_contains($type, 'REVERSAL')
+        ) {
+            $realizationTotal += abs($value);
+        }
+    }
+
     return [
         'kpis' => [
             'entries_total' => round((float) ($extrato['credits_total'] ?? 0), 2),
-            'exits_total' => round(abs((float) ($extrato['debits_total'] ?? 0)), 2),
+            'debit_total' => round(abs((float) ($extrato['debits_total'] ?? 0)), 2),
+            'realization_total' => round($realizationTotal, 2),
             'fees_total' => round((float) ($extrato['total_fee_value'] ?? 0), 2),
             'net_total' => round((float) ($extrato['net_total'] ?? 0), 2),
             'balance_available' => isset($extrato['balance_available']) ? (float) $extrato['balance_available'] : null,
@@ -296,7 +362,10 @@ function fetch_asaas_transactions(
 
 try {
     $asaas = new AsaasClient(new HttpClient());
+    $supabase = new SupabaseClient(new HttpClient());
     $warnings = [];
+    $customerStudentMap = build_customer_student_map($supabase, $warnings);
+
     $maxPages = 60;
     $from = normalize_date((string) ($_GET['from'] ?? '')) ?? (date('Y') . '-01-01');
     $to = normalize_date((string) ($_GET['to'] ?? '')) ?? date('Y-m-d');
@@ -343,8 +412,8 @@ try {
 
     $paidStatuses = ['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH', 'PAID'];
     $openStatuses = ['PENDING', 'OVERDUE', 'AWAITING_RISK_ANALYSIS'];
-    $paidPaymentsAll = fetch_asaas_payments_by_statuses($asaas, $paidStatuses, $maxPages, $warnings);
-    $openPaymentsAll = fetch_asaas_payments_by_statuses($asaas, $openStatuses, $maxPages, $warnings);
+    $paidPaymentsAll = fetch_asaas_payments_by_statuses($asaas, $customerStudentMap, $paidStatuses, $maxPages, $warnings);
+    $openPaymentsAll = fetch_asaas_payments_by_statuses($asaas, $customerStudentMap, $openStatuses, $maxPages, $warnings);
     $paidPayments = array_values(array_filter($paidPaymentsAll, static function (array $p) use ($from, $to): bool {
         $date = (string) ($p['date'] ?? '');
         return $date !== '' && $date >= $from && $date <= $to;
@@ -353,6 +422,28 @@ try {
         $date = (string) ($p['date'] ?? '');
         return $date !== '' && $date >= $from && $date <= $to;
     }));
+
+    $paymentMap = [];
+    foreach (array_merge($paidPaymentsAll, $openPaymentsAll) as $p) {
+        $pid = trim((string) ($p['id'] ?? ''));
+        if ($pid !== '') {
+            $paymentMap[$pid] = $p;
+        }
+    }
+    foreach (['credit_items', 'debit_items', 'fee_items'] as $bucket) {
+        foreach ($extrato[$bucket] as &$tx) {
+            $pid = trim((string) ($tx['payment_id'] ?? ''));
+            if ($pid === '' || !isset($paymentMap[$pid])) {
+                continue;
+            }
+            $p = $paymentMap[$pid];
+            $tx['customer_id'] = (string) ($p['customer_id'] ?? '');
+            $tx['customer_name'] = (string) (($p['customer_label'] ?? '') ?: ($p['customer_name'] ?? ''));
+            $tx['billing_type'] = (string) (($p['billing_type'] ?? '') ?: ($tx['billing_type'] ?? '-'));
+            $tx['student_name'] = (string) ($p['student_name'] ?? '');
+        }
+        unset($tx);
+    }
 
     $extrato['balance_available'] = $balance;
     $analytics = build_analytics($extrato, $paidPayments, $openPayments);

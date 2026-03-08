@@ -777,9 +777,7 @@ function renderAsaasGroupRows(tbody, items) {
       const link = item.invoice_url
         ? `<a href="${escapeHtml(item.invoice_url)}" target="_blank" rel="noopener">Abrir</a>`
         : '-';
-      const customer = item.type
-        ? escapeHtml(item.type)
-        : ([item.customer_name, item.customer_id].filter(Boolean).join(' • ') || '-');
+      const customer = [item.student_name, item.customer_name, item.customer_id].filter(Boolean).join(' • ') || '-';
       const fee = Number(item.fee_value || 0);
       const paidAt = item.paid_at || item.date || '-';
       const dueDate = item.due_date || item.date || '-';
@@ -808,7 +806,8 @@ function renderAsaasKpis(analytics) {
   if (!asaasKpis) return;
   const k = analytics?.kpis || {};
   const entries = Number(k.entries_total || 0);
-  const exits = Number(k.exits_total || 0);
+  const debitTotal = Number(k.debit_total || 0);
+  const realization = Number(k.realization_total || 0);
   const fees = Number(k.fees_total || 0);
   const net = Number(k.net_total || 0);
   const balance = Number.isFinite(Number(k.balance_available)) ? Number(k.balance_available) : null;
@@ -816,7 +815,8 @@ function renderAsaasKpis(analytics) {
   const openCount = Number(k.open_count || 0);
   asaasKpis.innerHTML = `
     <div class="asaas-kpi-card"><div class="asaas-kpi-label">Entradas no período</div><div class="asaas-kpi-value">${formatCurrency(entries)}</div></div>
-    <div class="asaas-kpi-card danger"><div class="asaas-kpi-label">Saídas no período</div><div class="asaas-kpi-value">${formatCurrency(exits)}</div></div>
+    <div class="asaas-kpi-card"><div class="asaas-kpi-label">Realização (Transferência p/ Inter CI)</div><div class="asaas-kpi-value">${formatCurrency(realization)}</div></div>
+    <div class="asaas-kpi-card danger"><div class="asaas-kpi-label">Movimentos de débito</div><div class="asaas-kpi-value">${formatCurrency(debitTotal)}</div></div>
     <div class="asaas-kpi-card danger"><div class="asaas-kpi-label">Taxas no período</div><div class="asaas-kpi-value">${formatCurrency(fees)}</div></div>
     <div class="asaas-kpi-card"><div class="asaas-kpi-label">Líquido no período</div><div class="asaas-kpi-value">${formatCurrency(net)}</div></div>
     <div class="asaas-kpi-card"><div class="asaas-kpi-label">Saldo disponível</div><div class="asaas-kpi-value">${balance === null ? 'n/d' : formatCurrency(balance)}</div></div>
@@ -853,7 +853,8 @@ function renderCompositionBars(analytics) {
   const k = analytics?.kpis || {};
   const rows = [
     { label: 'Entradas', value: Number(k.entries_total || 0), red: false },
-    { label: 'Saídas', value: Number(k.exits_total || 0), red: true },
+    { label: 'Realização Inter CI', value: Number(k.realization_total || 0), red: true },
+    { label: 'Débitos totais', value: Number(k.debit_total || 0), red: true },
     { label: 'Taxas', value: Number(k.fees_total || 0), red: true },
     { label: 'Líquido', value: Number(k.net_total || 0), red: Number(k.net_total || 0) < 0 },
   ];
@@ -911,7 +912,7 @@ function renderAsaasSummary(groups, generatedAt, warnings) {
   asaasDataSummary.innerHTML = `
     <span class="cashflow-pill">Atualizado em: ${formatDateTimeBR(generatedAt)}</span>
     <span class="cashflow-pill">Créditos extrato: ${formatCurrency(creditsTotal)}</span>
-    <span class="cashflow-pill">Débitos extrato: ${formatCurrency(debitsTotal)}</span>
+    <span class="cashflow-pill">Realizações/transferências + débitos: ${formatCurrency(debitsTotal)}</span>
     <span class="cashflow-pill">Taxas no período: ${formatCurrency(feeTotal)}</span>
     <span class="cashflow-pill">Líquido do período: ${formatCurrency(netTotal)}</span>
     <span class="cashflow-pill">${balanceLabel}</span>
@@ -972,7 +973,8 @@ function asaasBuildExportRows(payload) {
 
   rows.push(['KPIs', 'Valor']);
   rows.push(['Entradas no periodo', Number(kpis.entries_total || 0)]);
-  rows.push(['Saidas no periodo', Number(kpis.exits_total || 0)]);
+  rows.push(['Realizacao Transferencia Inter CI', Number(kpis.realization_total || 0)]);
+  rows.push(['Movimentos de debito', Number(kpis.debit_total || 0)]);
   rows.push(['Taxas no periodo', Number(kpis.fees_total || 0)]);
   rows.push(['Liquido no periodo', Number(kpis.net_total || 0)]);
   rows.push(['Saldo disponivel', kpis.balance_available == null ? 'n/d' : Number(kpis.balance_available)]);
