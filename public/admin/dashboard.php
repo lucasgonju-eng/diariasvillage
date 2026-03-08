@@ -1464,7 +1464,7 @@ if (!empty($exclusionsLog)) {
     window.__monthlyStudents = <?php echo json_encode($monthlyRowsForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
     window.__adminCanApproveAttendance = <?php echo $canAttendanceApprove ? 'true' : 'false'; ?>;
   </script>
-  <script src="/assets/js/admin-dashboard.js?v=49"></script>
+  <script src="/assets/js/admin-dashboard.js?v=50"></script>
   <script>
     (function () {
       function activateTab(name) {
