@@ -228,9 +228,10 @@ foreach ($oficinas as $oficina) {
     if ($tipoOficina !== 'OCASIONAL_30D') {
         continue;
     }
+    $hoje = date('Y-m-d');
     $inicioValidade = trim((string) ($oficina['data_inicio_validade'] ?? ''));
     $fimValidade = trim((string) ($oficina['data_fim_validade'] ?? ''));
-    if ($inicioValidade === '' || $fimValidade === '' || !($dataDiaria >= $inicioValidade && $dataDiaria <= $fimValidade)) {
+    if ($inicioValidade === '' || $fimValidade === '' || !($hoje >= $inicioValidade && $hoje <= $fimValidade)) {
         continue;
     }
     $nomeOriginal = (string) ($oficina['nome'] ?? 'Oficina');
