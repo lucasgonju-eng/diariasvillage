@@ -91,6 +91,28 @@ class AsaasClient
         return $this->http->request('GET', $url, $this->headers());
     }
 
+    public function listFinancialTransactions(
+        string $startDate,
+        string $finishDate,
+        int $limit = 100,
+        int $offset = 0,
+        string $order = 'asc'
+    ): array {
+        $order = strtolower(trim($order)) === 'desc' ? 'desc' : 'asc';
+        $url = $this->baseUrl . '/financialTransactions'
+            . '?startDate=' . urlencode($startDate)
+            . '&finishDate=' . urlencode($finishDate)
+            . '&limit=' . max(1, min(100, $limit))
+            . '&offset=' . max(0, $offset)
+            . '&order=' . urlencode($order);
+        return $this->http->request('GET', $url, $this->headers());
+    }
+
+    public function getFinanceBalance(): array
+    {
+        return $this->http->request('GET', $this->baseUrl . '/finance/balance', $this->headers());
+    }
+
     public function getCustomer(string $customerId): array
     {
         return $this->http->request('GET', $this->baseUrl . '/customers/' . urlencode($customerId), $this->headers());

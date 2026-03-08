@@ -1556,7 +1556,7 @@ if (!empty($exclusionsLog)) {
         <div id="asaas-data-message" class="charge-message"></div>
         <div id="asaas-data-summary" class="cashflow-summary"></div>
 
-        <h3 style="margin-top:12px;">Pagos</h3>
+        <h3 style="margin-top:12px;">Créditos do extrato</h3>
         <div style="overflow-x:auto;">
           <table class="admin-table">
             <thead>
@@ -1579,7 +1579,7 @@ if (!empty($exclusionsLog)) {
           </table>
         </div>
 
-        <h3 style="margin-top:18px;">Pendentes</h3>
+        <h3 style="margin-top:18px;">Débitos do extrato</h3>
         <div style="overflow-x:auto;">
           <table class="admin-table">
             <thead>
@@ -1602,7 +1602,7 @@ if (!empty($exclusionsLog)) {
           </table>
         </div>
 
-        <h3 style="margin-top:18px;">Vencidos</h3>
+        <h3 style="margin-top:18px;">Taxas e descontos</h3>
         <div style="overflow-x:auto;">
           <table class="admin-table">
             <thead>

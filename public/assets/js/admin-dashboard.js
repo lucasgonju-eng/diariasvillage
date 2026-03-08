@@ -650,7 +650,16 @@ function renderCashflowSummary(totals, period, monthlyAdjustment = null) {
   const paidByAccount = normalizedTotals.paid_by_account || {};
   const interManual = Number(paidByAccount.inter_pix_manual || 0);
   const boleto = Number(paidByAccount.boleto || 0);
-  const asaas = Number(paidByAccount.asaas || 0);
+  const asaasNet = Number(paidByAccount.asaas || 0);
+  const asaasCredit = Number(paidByAccount.asaas_extrato_credit || 0);
+  const asaasDebit = Number(paidByAccount.asaas_extrato_debit || 0);
+  const asaasFees = Number(paidByAccount.asaas_extrato_fees || 0);
+  const asaasBalanceAvailable = Number.isFinite(Number(paidByAccount.asaas_balance_available))
+    ? Number(paidByAccount.asaas_balance_available)
+    : null;
+  const asaasBalanceLabel = asaasBalanceAvailable === null
+    ? 'n/d'
+    : formatCurrency(asaasBalanceAvailable);
   const monthlyCount = Number(monthlyAdjustment?.count || 0);
   const monthlyAmount = Number(monthlyAdjustment?.amount || 0);
   const monthlyLabel = monthlyCount > 0
@@ -663,7 +672,11 @@ function renderCashflowSummary(totals, period, monthlyAdjustment = null) {
     <span class="cashflow-pill">Total pago: ${formatCurrency(normalizedTotals.paid_amount || 0)}</span>
     <span class="cashflow-pill">Conta Inter CI (PIX_MANUAL): ${formatCurrency(interManual)}</span>
     <span class="cashflow-pill">Boleto: ${formatCurrency(boleto)}</span>
-    <span class="cashflow-pill">Asaas: ${formatCurrency(asaas)}</span>
+    <span class="cashflow-pill">Asaas créditos extrato: ${formatCurrency(asaasCredit)}</span>
+    <span class="cashflow-pill">Asaas débitos extrato: ${formatCurrency(asaasDebit)}</span>
+    <span class="cashflow-pill">Asaas taxas (débito): ${formatCurrency(asaasFees)}</span>
+    <span class="cashflow-pill">Asaas líquido período: ${formatCurrency(asaasNet)}</span>
+    <span class="cashflow-pill">Asaas saldo disponível: ${asaasBalanceLabel}</span>
     ${monthlyLabel}
   `;
 }
@@ -757,17 +770,22 @@ function renderAsaasGroupRows(tbody, items) {
       const link = item.invoice_url
         ? `<a href="${escapeHtml(item.invoice_url)}" target="_blank" rel="noopener">Abrir</a>`
         : '-';
-      const customer = [item.customer_name, item.customer_id].filter(Boolean).join(' • ') || '-';
+      const customer = item.type
+        ? escapeHtml(item.type)
+        : ([item.customer_name, item.customer_id].filter(Boolean).join(' • ') || '-');
       const fee = Number(item.fee_value || 0);
+      const paidAt = item.paid_at || item.date || '-';
+      const dueDate = item.due_date || item.date || '-';
+      const billingType = item.billing_type || item.payment_id || '-';
       return `
       <tr>
         <td>${escapeHtml(item.id || '-')}</td>
         <td>${escapeHtml(item.status || '-')}</td>
-        <td>${escapeHtml(customer)}</td>
+        <td>${customer}</td>
         <td>${escapeHtml(item.description || '-')}</td>
-        <td>${formatDateBR(item.due_date)}</td>
-        <td>${formatDateTimeBR(item.paid_at)}</td>
-        <td>${escapeHtml(item.billing_type || '-')}</td>
+        <td>${formatDateBR(dueDate)}</td>
+        <td>${formatDateTimeBR(paidAt)}</td>
+        <td>${escapeHtml(billingType)}</td>
         <td>${formatCurrency(item.value)}</td>
         <td>${formatCurrency(fee)}</td>
         <td>${link}</td>
@@ -779,19 +797,29 @@ function renderAsaasGroupRows(tbody, items) {
 
 function renderAsaasSummary(groups, generatedAt, warnings) {
   if (!asaasDataSummary) return;
-  const pagos = groups?.pagos || {};
-  const pendentes = groups?.pendentes || {};
-  const vencidos = groups?.vencidos || {};
-  const totalFee = Number(pagos.total_fee_value || 0);
-  const totalNet = Number(pagos.total_net_value || 0);
+  const extrato = groups?.__extrato || {};
+  const creditos = groups?.creditos || {};
+  const debitos = groups?.debitos || {};
+  const taxas = groups?.taxas || {};
+  const creditsTotal = Number(extrato.credits_total ?? creditos.total_value ?? 0);
+  const debitsTotal = Number(extrato.debits_total ?? debitos.total_value ?? 0);
+  const netTotal = Number(extrato.net_total ?? 0);
+  const feeTotal = Number(extrato.total_fee_value ?? 0);
+  const balanceAvailable = Number.isFinite(Number(extrato.balance_available))
+    ? Number(extrato.balance_available)
+    : null;
   const warnCount = Array.isArray(warnings) ? warnings.length : 0;
+  const balanceLabel = balanceAvailable === null
+    ? 'Saldo disponível Asaas: n/d'
+    : `Saldo disponível Asaas: ${formatCurrency(balanceAvailable)}`;
   asaasDataSummary.innerHTML = `
     <span class="cashflow-pill">Atualizado em: ${formatDateTimeBR(generatedAt)}</span>
-    <span class="cashflow-pill">Pagos: ${pagos.count || 0} (${formatCurrency(pagos.total_value || 0)})</span>
-    <span class="cashflow-pill">Taxas Asaas (pagos): ${formatCurrency(totalFee)}</span>
-    <span class="cashflow-pill">Saldo líquido esperado Asaas: ${formatCurrency(totalNet)}</span>
-    <span class="cashflow-pill">Pendentes: ${pendentes.count || 0} (${formatCurrency(pendentes.total_value || 0)})</span>
-    <span class="cashflow-pill">Vencidos: ${vencidos.count || 0} (${formatCurrency(vencidos.total_value || 0)})</span>
+    <span class="cashflow-pill">Créditos extrato: ${formatCurrency(creditsTotal)}</span>
+    <span class="cashflow-pill">Débitos extrato: ${formatCurrency(debitsTotal)}</span>
+    <span class="cashflow-pill">Taxas no período: ${formatCurrency(feeTotal)}</span>
+    <span class="cashflow-pill">Líquido do período: ${formatCurrency(netTotal)}</span>
+    <span class="cashflow-pill">${balanceLabel}</span>
+    <span class="cashflow-pill">Itens de taxa/desconto: ${taxas.count || 0}</span>
     <span class="cashflow-pill">Avisos: ${warnCount}</span>
   `;
 }
@@ -811,7 +839,10 @@ async function loadAsaasData(force = false) {
   renderAsaasGroupRows(asaasOverdueTbody, []);
 
   try {
-    const res = await fetch(`/api/admin-asaas-data.php?ts=${Date.now()}`);
+    const params = new URLSearchParams({ ts: String(Date.now()) });
+    if (cashflowFromInput?.value) params.set('from', cashflowFromInput.value);
+    if (cashflowToInput?.value) params.set('to', cashflowToInput.value);
+    const res = await fetch(`/api/admin-asaas-data.php?${params.toString()}`);
     const data = await res.json();
     if (!res.ok || !data?.ok) {
       const warningsText = Array.isArray(data?.warnings) ? ` ${data.warnings.join(' | ')}` : '';
@@ -820,10 +851,11 @@ async function loadAsaasData(force = false) {
     }
 
     const groups = data.groups || {};
-    renderAsaasGroupRows(asaasPaidTbody, groups?.pagos?.items || []);
-    renderAsaasGroupRows(asaasPendingTbody, groups?.pendentes?.items || []);
-    renderAsaasGroupRows(asaasOverdueTbody, groups?.vencidos?.items || []);
-    renderAsaasSummary(groups, data.generated_at, data.warnings || []);
+    const summaryGroups = { ...groups, __extrato: data.extrato || {} };
+    renderAsaasGroupRows(asaasPaidTbody, groups?.creditos?.items || []);
+    renderAsaasGroupRows(asaasPendingTbody, groups?.debitos?.items || []);
+    renderAsaasGroupRows(asaasOverdueTbody, groups?.taxas?.items || []);
+    renderAsaasSummary(summaryGroups, data.generated_at, data.warnings || []);
     const warningsText = Array.isArray(data.warnings) && data.warnings.length
       ? ` (com avisos: ${data.warnings.join(' | ')})`
       : '';

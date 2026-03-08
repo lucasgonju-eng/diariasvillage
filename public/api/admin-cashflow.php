@@ -11,6 +11,7 @@ foreach ($bootstrapCandidates as $bootstrapFile) {
 }
 
 use App\Helpers;
+use App\AsaasClient;
 use App\HttpClient;
 use App\MonthlyStudents;
 use App\SupabaseClient;
@@ -110,6 +111,70 @@ function matches_any_term(string $haystack, array $terms): bool
         }
     }
     return false;
+}
+
+function fetch_asaas_extrato_summary(string $from, string $to): array
+{
+    $asaas = new AsaasClient(new HttpClient());
+    $warnings = [];
+    $credits = 0.0;
+    $debits = 0.0;
+    $feeDebit = 0.0;
+    $count = 0;
+    $offset = 0;
+    $maxPages = 60;
+
+    for ($page = 0; $page < $maxPages; $page++) {
+        $res = $asaas->listFinancialTransactions($from, $to, 100, $offset, 'asc');
+        if (!($res['ok'] ?? false)) {
+            $warnings[] = 'Falha ao consultar extrato financeiro no Asaas.';
+            break;
+        }
+        $list = is_array($res['data']['data'] ?? null) ? $res['data']['data'] : [];
+        if (empty($list)) {
+            break;
+        }
+
+        foreach ($list as $tx) {
+            if (!is_array($tx)) {
+                continue;
+            }
+            $count++;
+            $value = (float) ($tx['value'] ?? 0);
+            if ($value >= 0) {
+                $credits += $value;
+            } else {
+                $debits += $value;
+            }
+            $type = strtoupper(trim((string) ($tx['type'] ?? '')));
+            if ($value < 0 && (str_contains($type, 'FEE') || str_contains($type, 'PROMOTIONAL_CODE'))) {
+                $feeDebit += abs($value);
+            }
+        }
+
+        if (count($list) < 100) {
+            break;
+        }
+        $offset += 100;
+    }
+
+    $balanceAvailable = null;
+    $balanceRes = $asaas->getFinanceBalance();
+    if ($balanceRes['ok'] ?? false) {
+        $balanceAvailable = isset($balanceRes['data']['balance']) ? (float) $balanceRes['data']['balance'] : null;
+    } else {
+        $warnings[] = 'Não foi possível consultar saldo disponível no Asaas.';
+    }
+
+    return [
+        'count' => $count,
+        'credits' => round($credits, 2),
+        'debits' => round($debits, 2),
+        'net' => round($credits + $debits, 2),
+        'fees' => round($feeDebit, 2),
+        'balance_available' => $balanceAvailable !== null ? round((float) $balanceAvailable, 2) : null,
+        'warnings' => $warnings,
+    ];
 }
 
 $from = normalize_date($_GET['from'] ?? '') ?? date('Y') . '-01-05';
@@ -370,7 +435,7 @@ $totalAmount = 0.0;
 $totalPaidAmount = 0.0;
 $paidInterManual = 0.0;
 $paidBoleto = 0.0;
-$paidAsaas = 0.0;
+$paidAsaasLocal = 0.0;
 foreach ($items as $item) {
     $value = (float) ($item['amount'] ?? 0);
     $totalAmount += $value;
@@ -382,11 +447,14 @@ foreach ($items as $item) {
         } elseif ($billingType === 'BOLETO') {
             $paidBoleto += $value;
         } else {
-            // Demais recebimentos entram na conta Asaas.
-            $paidAsaas += $value;
+            // Classificação local por billing_type, sem considerar débitos/taxas do extrato.
+            $paidAsaasLocal += $value;
         }
     }
 }
+
+$asaasExtrato = fetch_asaas_extrato_summary($from, $to);
+$warnings = array_merge($warnings, $asaasExtrato['warnings'] ?? []);
 
 Helpers::json([
     'ok' => true,
@@ -398,7 +466,12 @@ Helpers::json([
         'paid_by_account' => [
             'inter_pix_manual' => round($paidInterManual, 2),
             'boleto' => round($paidBoleto, 2),
-            'asaas' => round($paidAsaas, 2),
+            'asaas_local' => round($paidAsaasLocal, 2),
+            'asaas' => (float) ($asaasExtrato['net'] ?? 0.0),
+            'asaas_extrato_credit' => (float) ($asaasExtrato['credits'] ?? 0.0),
+            'asaas_extrato_debit' => (float) ($asaasExtrato['debits'] ?? 0.0),
+            'asaas_extrato_fees' => (float) ($asaasExtrato['fees'] ?? 0.0),
+            'asaas_balance_available' => $asaasExtrato['balance_available'] ?? null,
         ],
     ],
     'monthly_adjustment' => [

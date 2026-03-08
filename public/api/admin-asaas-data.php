@@ -22,107 +22,131 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
     Helpers::json(['ok' => false, 'error' => 'Método inválido.'], 405);
 }
 
-function pick_asaas_value(array $data, array $keys): string
+function normalize_date(string $raw): ?string
 {
-    foreach ($keys as $key) {
-        $value = trim((string) ($data[$key] ?? ''));
-        if ($value !== '') {
-            return $value;
-        }
+    $raw = trim($raw);
+    if ($raw === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $raw)) {
+        return null;
     }
-    return '';
+    $time = strtotime($raw . ' 00:00:00');
+    if ($time === false) {
+        return null;
+    }
+    return date('Y-m-d', $time);
 }
 
-function normalize_asaas_payment(array $payment): array
+function normalize_asaas_transaction(array $tx): array
 {
-    $value = (float) ($payment['value'] ?? 0);
-    $netValue = (float) ($payment['netValue'] ?? 0);
-    $feeValue = max(0.0, $value - $netValue);
-    $paidAt = pick_asaas_value($payment, ['clientPaymentDate', 'paymentDate', 'confirmedDate']);
-    $invoiceUrl = pick_asaas_value($payment, ['invoiceUrl', 'bankSlipUrl']);
-    $dueDate = trim((string) ($payment['dueDate'] ?? ''));
-    $customerId = trim((string) ($payment['customer'] ?? ''));
-    $customerName = trim((string) ($payment['customerName'] ?? ''));
+    $value = (float) ($tx['value'] ?? 0);
+    $type = trim((string) ($tx['type'] ?? ''));
+    $description = trim((string) ($tx['description'] ?? ''));
+    $date = trim((string) ($tx['date'] ?? ''));
+    $paymentId = trim((string) ($tx['paymentId'] ?? ''));
+    $balance = isset($tx['balance']) ? (float) $tx['balance'] : null;
+
+    $typeUpper = strtoupper($type);
+    $feeValue = ($value < 0 && (str_contains($typeUpper, 'FEE') || str_contains($typeUpper, 'PROMOTIONAL_CODE')))
+        ? abs($value)
+        : 0.0;
 
     return [
-        'id' => trim((string) ($payment['id'] ?? '')),
-        'status' => trim((string) ($payment['status'] ?? '')),
-        'customer_id' => $customerId,
-        'customer_name' => $customerName,
-        'description' => trim((string) ($payment['description'] ?? '')),
-        'billing_type' => trim((string) ($payment['billingType'] ?? '')),
+        'id' => trim((string) ($tx['id'] ?? '')),
+        'status' => $value >= 0 ? 'CREDITO' : 'DEBITO',
+        'type' => $type,
+        'customer_id' => '',
+        'customer_name' => '',
+        'description' => $description !== '' ? $description : $type,
+        'billing_type' => '-',
         'value' => $value,
-        'net_value' => $netValue,
+        'net_value' => $value,
         'fee_value' => $feeValue,
-        'due_date' => $dueDate,
-        'paid_at' => $paidAt,
-        'invoice_url' => $invoiceUrl,
-        'external_reference' => trim((string) ($payment['externalReference'] ?? '')),
-        'date_created' => trim((string) ($payment['dateCreated'] ?? '')),
+        'due_date' => $date,
+        'paid_at' => $date,
+        'invoice_url' => '',
+        'external_reference' => $paymentId,
+        'date_created' => $date,
+        'date' => $date,
+        'balance' => $balance,
+        'payment_id' => $paymentId,
     ];
 }
 
-function fetch_asaas_group(AsaasClient $asaas, array $statuses, int $maxPages, array &$warnings): array
+function fetch_asaas_transactions(
+    AsaasClient $asaas,
+    string $from,
+    string $to,
+    int $maxPages,
+    array &$warnings
+): array
 {
     $items = [];
-    $statusCounts = [];
+    $offset = 0;
     $fetchedTotal = 0;
 
-    foreach ($statuses as $status) {
-        $offset = 0;
-        for ($page = 0; $page < $maxPages; $page++) {
-            $res = $asaas->listPaymentsByStatus($status, 100, $offset);
-            if (!($res['ok'] ?? false)) {
-                $warnings[] = 'Falha ao consultar status ' . $status . ' no Asaas: ' . (($res['error'] ?? '') ?: 'sem detalhes');
-                break;
-            }
-            $list = is_array($res['data']['data'] ?? null) ? $res['data']['data'] : [];
-            if (empty($list)) {
-                break;
-            }
-
-            foreach ($list as $payment) {
-                if (!is_array($payment)) {
-                    continue;
-                }
-                $items[] = normalize_asaas_payment($payment);
-                $statusCounts[$status] = ($statusCounts[$status] ?? 0) + 1;
-            }
-            $fetchedTotal += count($list);
-
-            if (count($list) < 100) {
-                break;
-            }
-            $offset += 100;
+    for ($page = 0; $page < $maxPages; $page++) {
+        $res = $asaas->listFinancialTransactions($from, $to, 100, $offset, 'asc');
+        if (!($res['ok'] ?? false)) {
+            $warnings[] = 'Falha ao consultar extrato financeiro no Asaas: ' . (($res['error'] ?? '') ?: 'sem detalhes');
+            break;
         }
+        $list = is_array($res['data']['data'] ?? null) ? $res['data']['data'] : [];
+        if (empty($list)) {
+            break;
+        }
+
+        foreach ($list as $tx) {
+            if (!is_array($tx)) {
+                continue;
+            }
+            $items[] = normalize_asaas_transaction($tx);
+        }
+        $fetchedTotal += count($list);
+
+        if (count($list) < 100) {
+            break;
+        }
+        $offset += 100;
     }
 
-    usort($items, static function (array $a, array $b): int {
-        $aTime = strtotime((string) ($a['paid_at'] ?: $a['due_date'] ?: $a['date_created'])) ?: 0;
-        $bTime = strtotime((string) ($b['paid_at'] ?: $b['due_date'] ?: $b['date_created'])) ?: 0;
-        return $bTime <=> $aTime;
-    });
-
-    $totalValue = 0.0;
-    $totalNetValue = 0.0;
-    $totalFeeValue = 0.0;
+    $creditItems = [];
+    $debitItems = [];
+    $feeItems = [];
+    $credits = 0.0;
+    $debits = 0.0;
     foreach ($items as $item) {
         $value = (float) ($item['value'] ?? 0);
-        $netValue = (float) ($item['net_value'] ?? 0);
-        $feeValue = (float) ($item['fee_value'] ?? max(0.0, $value - $netValue));
-        $totalValue += $value;
-        $totalNetValue += $netValue;
-        $totalFeeValue += $feeValue;
+        if ($value >= 0) {
+            $credits += $value;
+            $creditItems[] = $item;
+        } else {
+            $debits += $value;
+            $debitItems[] = $item;
+        }
+
+        $type = strtoupper((string) ($item['type'] ?? ''));
+        if (str_contains($type, 'FEE') || str_contains($type, 'PROMOTIONAL_CODE')) {
+            $feeItems[] = $item;
+        }
     }
 
     return [
         'count' => count($items),
-        'total_value' => $totalValue,
-        'total_net_value' => $totalNetValue,
-        'total_fee_value' => $totalFeeValue,
-        'status_counts' => $statusCounts,
+        'from' => $from,
+        'to' => $to,
+        'total_value' => round($credits + $debits, 2),
+        'credits_total' => round($credits, 2),
+        'debits_total' => round($debits, 2),
+        'net_total' => round($credits + $debits, 2),
+        'total_net_value' => round($credits + $debits, 2),
+        'total_fee_value' => round(array_reduce($feeItems, static function (float $acc, array $item): float {
+            $value = (float) ($item['value'] ?? 0);
+            return $value < 0 ? $acc + abs($value) : $acc;
+        }, 0.0), 2),
         'fetched_total' => $fetchedTotal,
         'items' => $items,
+        'credit_items' => $creditItems,
+        'debit_items' => $debitItems,
+        'fee_items' => $feeItems,
     ];
 }
 
@@ -130,28 +154,66 @@ try {
     $asaas = new AsaasClient(new HttpClient());
     $warnings = [];
     $maxPages = 60;
+    $from = normalize_date((string) ($_GET['from'] ?? '')) ?? (date('Y') . '-01-01');
+    $to = normalize_date((string) ($_GET['to'] ?? '')) ?? date('Y-m-d');
 
-    $pagos = fetch_asaas_group($asaas, ['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH', 'PAID'], $maxPages, $warnings);
-    $pendentes = fetch_asaas_group($asaas, ['PENDING', 'AWAITING_RISK_ANALYSIS'], $maxPages, $warnings);
-    $vencidos = fetch_asaas_group($asaas, ['OVERDUE'], $maxPages, $warnings);
+    if ($from > $to) {
+        Helpers::json(['ok' => false, 'error' => 'Período inválido para extrato Asaas.'], 422);
+    }
 
-    $hasAnyData = ($pagos['count'] ?? 0) > 0 || ($pendentes['count'] ?? 0) > 0 || ($vencidos['count'] ?? 0) > 0;
+    $extrato = fetch_asaas_transactions($asaas, $from, $to, $maxPages, $warnings);
+    $balance = null;
+    $balanceRes = $asaas->getFinanceBalance();
+    if ($balanceRes['ok'] ?? false) {
+        $balance = isset($balanceRes['data']['balance']) ? (float) $balanceRes['data']['balance'] : null;
+    } else {
+        $warnings[] = 'Não foi possível consultar saldo disponível no Asaas.';
+    }
+
+    $creditos = [
+        'count' => count($extrato['credit_items']),
+        'total_value' => $extrato['credits_total'],
+        'items' => $extrato['credit_items'],
+    ];
+    $debitos = [
+        'count' => count($extrato['debit_items']),
+        'total_value' => $extrato['debits_total'],
+        'items' => $extrato['debit_items'],
+    ];
+    $taxas = [
+        'count' => count($extrato['fee_items']),
+        'total_value' => round(array_reduce($extrato['fee_items'], static function (float $acc, array $item): float {
+            return $acc + (float) ($item['value'] ?? 0);
+        }, 0.0), 2),
+        'items' => $extrato['fee_items'],
+    ];
+
+    $hasAnyData = ($extrato['count'] ?? 0) > 0;
     if (!$hasAnyData && !empty($warnings)) {
         Helpers::json([
             'ok' => false,
-            'error' => 'Não foi possível carregar dados do Asaas.',
+            'error' => 'Não foi possível carregar extrato financeiro do Asaas.',
             'warnings' => $warnings,
         ], 502);
     }
 
     Helpers::json([
         'ok' => true,
-        'source' => 'asaas_direct',
+        'source' => 'asaas_financial_transactions',
         'generated_at' => date('c'),
+        'period' => ['from' => $from, 'to' => $to],
+        'extrato' => [
+            'count' => $extrato['count'],
+            'credits_total' => $extrato['credits_total'],
+            'debits_total' => $extrato['debits_total'],
+            'net_total' => $extrato['net_total'],
+            'total_fee_value' => $extrato['total_fee_value'],
+            'balance_available' => $balance,
+        ],
         'groups' => [
-            'pagos' => $pagos,
-            'pendentes' => $pendentes,
-            'vencidos' => $vencidos,
+            'creditos' => $creditos,
+            'debitos' => $debitos,
+            'taxas' => $taxas,
         ],
         'warnings' => $warnings,
     ]);
