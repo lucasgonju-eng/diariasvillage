@@ -17,6 +17,9 @@ use App\SupabaseClient;
 if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
     Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
 }
+if (($_SESSION['admin_user'] ?? '') !== 'admin') {
+    Helpers::json(['ok' => false, 'error' => 'Somente admin pode criar e editar oficinas modulares.'], 403);
+}
 
 $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
 if (!in_array($method, ['GET', 'POST'], true)) {
@@ -24,6 +27,7 @@ if (!in_array($method, ['GET', 'POST'], true)) {
 }
 
 $client = new SupabaseClient(new HttpClient());
+$catalogTag = '[CATALOGO_OM_MENSAL]';
 
 $normalizeSortName = static function (string $name): string {
     $name = trim($name);
@@ -67,25 +71,39 @@ $extractTeacherFromDescription = static function (string $description): string {
     return '';
 };
 
-$stripTeacherFromDescription = static function (string $description): string {
+$hasCatalogTag = static function (string $description) use ($catalogTag): bool {
+    if ($description === '') {
+        return false;
+    }
+    $normalizedDescription = function_exists('mb_strtoupper')
+        ? mb_strtoupper($description, 'UTF-8')
+        : strtoupper($description);
+    $normalizedTag = function_exists('mb_strtoupper')
+        ? mb_strtoupper($catalogTag, 'UTF-8')
+        : strtoupper($catalogTag);
+    return str_contains($normalizedDescription, $normalizedTag);
+};
+
+$stripMetaFromDescription = static function (string $description) use ($catalogTag): string {
     if ($description === '') {
         return '';
     }
-    $withoutTag = preg_replace('/^\[PROFESSOR\].*(\R|$)/mi', '', $description);
-    return trim((string) $withoutTag);
+    $withoutTeacher = preg_replace('/^\[PROFESSOR\].*(\R|$)/mi', '', $description);
+    $withoutCatalog = preg_replace('/^\[CATALOGO_OM_MENSAL\].*(\R|$)/mi', '', (string) $withoutTeacher);
+    return trim((string) $withoutCatalog);
 };
 
-$buildDescription = static function (string $teacherName, string $existingDescription = '') use ($stripTeacherFromDescription): string {
+$buildDescription = static function (string $teacherName, string $existingDescription = '') use ($stripMetaFromDescription, $catalogTag): string {
     $cleanTeacher = trim($teacherName);
-    $baseDescription = $stripTeacherFromDescription($existingDescription);
-    if ($cleanTeacher === '') {
-        return $baseDescription;
+    $baseDescription = $stripMetaFromDescription($existingDescription);
+    $parts = [
+        $catalogTag,
+        '[PROFESSOR] ' . $cleanTeacher,
+    ];
+    if ($baseDescription !== '') {
+        $parts[] = $baseDescription;
     }
-    $tag = '[PROFESSOR] ' . $cleanTeacher;
-    if ($baseDescription === '') {
-        return $tag;
-    }
-    return $tag . "\n\n" . $baseDescription;
+    return implode("\n\n", $parts);
 };
 
 $isAvailableThisMonth = static function (array $office, string $monthStart, string $monthEnd): bool {
@@ -94,9 +112,6 @@ $isAvailableThisMonth = static function (array $office, string $monthStart, stri
         return false;
     }
     $tipo = strtoupper(trim((string) ($office['tipo'] ?? '')));
-    if ($tipo !== 'OCASIONAL_30D') {
-        return true;
-    }
     $start = trim((string) ($office['data_inicio_validade'] ?? ''));
     $end = trim((string) ($office['data_fim_validade'] ?? ''));
     if ($start === '' || $end === '') {
@@ -105,7 +120,7 @@ $isAvailableThisMonth = static function (array $office, string $monthStart, stri
     return $start <= $monthEnd && $end >= $monthStart;
 };
 
-$loadItems = static function () use ($client, $extractTeacherFromDescription, $normalizeSortName, $isAvailableThisMonth): array {
+$loadItems = static function () use ($client, $extractTeacherFromDescription, $normalizeSortName, $isAvailableThisMonth, $hasCatalogTag): array {
     $officesResult = $client->select(
         'oficina_modular',
         'select=id,nome,codigo,descricao,ativa,status_quorum,tipo,capacidade,data_inicio_validade,data_fim_validade,created_at,updated_at'
@@ -154,6 +169,10 @@ $loadItems = static function () use ($client, $extractTeacherFromDescription, $n
         if ($officeId === '' || $name === '') {
             continue;
         }
+        $description = trim((string) ($office['descricao'] ?? ''));
+        if (!$hasCatalogTag($description)) {
+            continue;
+        }
         $schedules = $schedulesByOffice[$officeId] ?? [];
         if (!empty($schedules)) {
             usort($schedules, static function (array $a, array $b): int {
@@ -169,7 +188,6 @@ $loadItems = static function () use ($client, $extractTeacherFromDescription, $n
             $days[(int) $schedule['day_of_week']] = true;
         }
 
-        $description = trim((string) ($office['descricao'] ?? ''));
         $items[] = [
             'id' => $officeId,
             'name' => $name,
@@ -199,9 +217,34 @@ $loadItems = static function () use ($client, $extractTeacherFromDescription, $n
 
 if ($method === 'GET') {
     $items = $loadItems();
+    $teacherSet = [];
+    $catalogNameSet = [];
+    foreach ($items as $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+        $teacher = trim((string) ($item['teacher_name'] ?? ''));
+        $name = trim((string) ($item['name'] ?? ''));
+        if ($teacher !== '') {
+            $teacherSet[$teacher] = true;
+        }
+        if ($name !== '') {
+            $catalogNameSet[$name] = true;
+        }
+    }
+    $teachers = array_keys($teacherSet);
+    $catalogNames = array_keys($catalogNameSet);
+    usort($teachers, static function (string $a, string $b) use ($normalizeSortName): int {
+        return strcmp($normalizeSortName($a), $normalizeSortName($b));
+    });
+    usort($catalogNames, static function (string $a, string $b) use ($normalizeSortName): int {
+        return strcmp($normalizeSortName($a), $normalizeSortName($b));
+    });
     Helpers::json([
         'ok' => true,
         'items' => $items,
+        'teachers' => $teachers,
+        'catalog_names' => $catalogNames,
         'month_start' => date('Y-m-01'),
         'month_end' => date('Y-m-t'),
     ]);
@@ -227,6 +270,17 @@ $teacherName = trim((string) ($payload['teacher_name'] ?? ''));
 if ($teacherName === '') {
     Helpers::json(['ok' => false, 'error' => 'Informe o nome do(a) professor(a).'], 422);
 }
+$month = (int) ($payload['month'] ?? 0);
+$year = (int) ($payload['year'] ?? 0);
+if ($month < 1 || $month > 12 || $year < 2025 || $year > 2099) {
+    Helpers::json(['ok' => false, 'error' => 'Informe mês e ano válidos da grade mensal.'], 422);
+}
+$periodStartDate = \DateTimeImmutable::createFromFormat('!Y-n-j', $year . '-' . $month . '-1');
+if (!$periodStartDate instanceof \DateTimeImmutable) {
+    Helpers::json(['ok' => false, 'error' => 'Período mensal inválido.'], 422);
+}
+$periodStart = $periodStartDate->format('Y-m-01');
+$periodEnd = $periodStartDate->format('Y-m-t');
 
 $daysInput = $payload['days_of_week'] ?? [];
 if (!is_array($daysInput)) {
@@ -257,35 +311,80 @@ if (!$isAllowedTime) {
     ], 422);
 }
 
-$createdOfficeId = '';
-$createdCode = '';
 $description = $buildDescription($teacherName, '');
-for ($attempt = 1; $attempt <= 5; $attempt++) {
-    $createdCode = 'OM' . date('ymdHis') . str_pad((string) random_int(0, 99), 2, '0', STR_PAD_LEFT);
-    $insertOffice = $client->insert('oficina_modular', [[
-        'nome' => $name,
-        'codigo' => $createdCode,
-        'descricao' => $description,
-        'ativa' => true,
-        'capacidade' => 0,
-        'status_quorum' => 'LIVRE',
-        'tipo' => 'RECORRENTE',
-        'data_inicio_validade' => null,
-        'data_fim_validade' => null,
-    ]]);
-    if (($insertOffice['ok'] ?? false) && !empty($insertOffice['data'][0]['id'])) {
-        $createdOfficeId = (string) $insertOffice['data'][0]['id'];
+$allCatalogItems = $loadItems();
+$normalizedName = $normalizeSortName($name);
+$existingCatalog = null;
+foreach ($allCatalogItems as $item) {
+    if (!is_array($item)) {
+        continue;
+    }
+    if ($normalizeSortName((string) ($item['name'] ?? '')) === $normalizedName) {
+        $existingCatalog = $item;
         break;
     }
-    $errorText = strtolower((string) ($insertOffice['error'] ?? ''));
-    $errorData = strtolower(json_encode($insertOffice['data'] ?? [], JSON_UNESCAPED_UNICODE) ?: '');
-    if (!str_contains($errorText, 'duplicate') && !str_contains($errorData, 'uq_oficina_modular_codigo')) {
-        Helpers::json(['ok' => false, 'error' => 'Falha ao criar oficina modular.'], 500);
+}
+
+$createdOfficeId = '';
+$createdCode = '';
+$createdNewCatalog = false;
+if (is_array($existingCatalog) && !empty($existingCatalog['id'])) {
+    $createdOfficeId = (string) $existingCatalog['id'];
+    $createdCode = (string) ($existingCatalog['code'] ?? '');
+    $updateOffice = $client->update(
+        'oficina_modular',
+        'id=eq.' . rawurlencode($createdOfficeId),
+        [
+            'nome' => $name,
+            'descricao' => $description,
+            'ativa' => true,
+            'status_quorum' => 'LIVRE',
+            'tipo' => 'OCASIONAL_30D',
+            'data_inicio_validade' => $periodStart,
+            'data_fim_validade' => $periodEnd,
+            'updated_at' => date('c'),
+        ]
+    );
+    if (!($updateOffice['ok'] ?? false)) {
+        Helpers::json(['ok' => false, 'error' => 'Falha ao atualizar catálogo da oficina modular.'], 500);
+    }
+} else {
+    for ($attempt = 1; $attempt <= 5; $attempt++) {
+        $createdCode = 'OM' . date('ymdHis') . str_pad((string) random_int(0, 99), 2, '0', STR_PAD_LEFT);
+        $insertOffice = $client->insert('oficina_modular', [[
+            'nome' => $name,
+            'codigo' => $createdCode,
+            'descricao' => $description,
+            'ativa' => true,
+            'capacidade' => 0,
+            'status_quorum' => 'LIVRE',
+            'tipo' => 'OCASIONAL_30D',
+            'data_inicio_validade' => $periodStart,
+            'data_fim_validade' => $periodEnd,
+        ]]);
+        if (($insertOffice['ok'] ?? false) && !empty($insertOffice['data'][0]['id'])) {
+            $createdOfficeId = (string) $insertOffice['data'][0]['id'];
+            $createdNewCatalog = true;
+            break;
+        }
+        $errorText = strtolower((string) ($insertOffice['error'] ?? ''));
+        $errorData = strtolower(json_encode($insertOffice['data'] ?? [], JSON_UNESCAPED_UNICODE) ?: '');
+        if (!str_contains($errorText, 'duplicate') && !str_contains($errorData, 'uq_oficina_modular_codigo')) {
+            Helpers::json(['ok' => false, 'error' => 'Falha ao criar oficina modular.'], 500);
+        }
     }
 }
 
 if ($createdOfficeId === '') {
     Helpers::json(['ok' => false, 'error' => 'Não foi possível gerar código único para a oficina.'], 500);
+}
+
+$deleteOldSchedules = $client->delete(
+    'oficina_modular_horarios',
+    'oficina_modular_id=eq.' . rawurlencode($createdOfficeId)
+);
+if (!($deleteOldSchedules['ok'] ?? false)) {
+    Helpers::json(['ok' => false, 'error' => 'Falha ao limpar horários anteriores da oficina.'], 500);
 }
 
 $schedulePayload = [];
@@ -300,14 +399,34 @@ foreach ($days as $day) {
 
 $insertSchedules = $client->insert('oficina_modular_horarios', $schedulePayload);
 if (!($insertSchedules['ok'] ?? false)) {
-    $client->delete('oficina_modular', 'id=eq.' . rawurlencode($createdOfficeId));
+    if ($createdNewCatalog) {
+        $client->delete('oficina_modular', 'id=eq.' . rawurlencode($createdOfficeId));
+    }
     Helpers::json(['ok' => false, 'error' => 'Falha ao salvar horários da oficina.'], 500);
 }
 
+$updatedItems = $loadItems();
+$teachers = array_values(array_unique(array_filter(array_map(
+    static fn($item): string => trim((string) ($item['teacher_name'] ?? '')),
+    $updatedItems
+))));
+$catalogNames = array_values(array_unique(array_filter(array_map(
+    static fn($item): string => trim((string) ($item['name'] ?? '')),
+    $updatedItems
+))));
+usort($teachers, static function (string $a, string $b) use ($normalizeSortName): int {
+    return strcmp($normalizeSortName($a), $normalizeSortName($b));
+});
+usort($catalogNames, static function (string $a, string $b) use ($normalizeSortName): int {
+    return strcmp($normalizeSortName($a), $normalizeSortName($b));
+});
+
 Helpers::json([
     'ok' => true,
-    'message' => 'Oficina modular criada com sucesso.',
+    'message' => 'Grade mensal da oficina salva com sucesso para ' . str_pad((string) $month, 2, '0', STR_PAD_LEFT) . '/' . $year . '.',
     'created_id' => $createdOfficeId,
     'created_code' => $createdCode,
-    'items' => $loadItems(),
+    'items' => $updatedItems,
+    'teachers' => $teachers,
+    'catalog_names' => $catalogNames,
 ]);

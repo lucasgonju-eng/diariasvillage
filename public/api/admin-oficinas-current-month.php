@@ -21,7 +21,7 @@ if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated']
 $client = new SupabaseClient(new HttpClient());
 $result = $client->select(
     'oficina_modular',
-    'select=id,nome,codigo,tipo,data_inicio_validade,data_fim_validade,ativa&ativa=eq.true&order=nome.asc&limit=500'
+    'select=id,nome,codigo,descricao,tipo,data_inicio_validade,data_fim_validade,ativa&ativa=eq.true&order=nome.asc&limit=500'
 );
 
 if (!($result['ok'] ?? false) || !is_array($result['data'] ?? null)) {
@@ -38,19 +38,27 @@ foreach ($result['data'] as $row) {
     }
     $id = trim((string) ($row['id'] ?? ''));
     $name = trim((string) ($row['nome'] ?? ''));
+    $description = (string) ($row['descricao'] ?? '');
     if ($id === '' || $name === '') {
         continue;
     }
+    $descriptionCheck = function_exists('mb_strtoupper')
+        ? mb_strtoupper($description, 'UTF-8')
+        : strtoupper($description);
+    if (!str_contains($descriptionCheck, '[CATALOGO_OM_MENSAL]')) {
+        continue;
+    }
     $tipo = strtoupper(trim((string) ($row['tipo'] ?? '')));
-    if ($tipo === 'OCASIONAL_30D') {
-        $start = trim((string) ($row['data_inicio_validade'] ?? ''));
-        $end = trim((string) ($row['data_fim_validade'] ?? ''));
-        if ($start === '' || $end === '') {
-            continue;
-        }
-        if (!($start <= $monthEnd && $end >= $monthStart)) {
-            continue;
-        }
+    if ($tipo !== 'OCASIONAL_30D') {
+        continue;
+    }
+    $start = trim((string) ($row['data_inicio_validade'] ?? ''));
+    $end = trim((string) ($row['data_fim_validade'] ?? ''));
+    if ($start === '' || $end === '') {
+        continue;
+    }
+    if (!($start <= $monthEnd && $end >= $monthStart)) {
+        continue;
     }
 
     $code = trim((string) ($row['codigo'] ?? ''));

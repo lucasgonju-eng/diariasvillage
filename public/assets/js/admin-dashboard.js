@@ -63,6 +63,10 @@ const attendanceClearButton = document.querySelector('#attendance-clear-btn');
 const attendanceExportButton = document.querySelector('#attendance-export-btn');
 const attendanceStudentsList = document.querySelector('#attendance-students-list');
 const attendanceOfficesList = document.querySelector('#attendance-offices-list');
+const modularCatalogList = document.querySelector('#modular-catalog-list');
+const modularTeachersList = document.querySelector('#modular-teachers-list');
+const modularCreateMonthInput = document.querySelector('#modular-create-month');
+const modularCreateYearInput = document.querySelector('#modular-create-year');
 const modularCreateNameInput = document.querySelector('#modular-create-name');
 const modularCreateTeacherInput = document.querySelector('#modular-create-teacher');
 const modularCreateStartInput = document.querySelector('#modular-create-start');
@@ -1192,6 +1196,57 @@ function setModularOfficeMessage(text, isError = false) {
   modularCreateMessage.className = `charge-message ${isError ? 'error' : 'success'}`.trim();
 }
 
+function getSelectedModularPeriod() {
+  const month = Number(modularCreateMonthInput?.value || new Date().getMonth() + 1);
+  const year = Number(modularCreateYearInput?.value || new Date().getFullYear());
+  const safeMonth = Number.isInteger(month) && month >= 1 && month <= 12 ? month : new Date().getMonth() + 1;
+  const safeYear = Number.isInteger(year) && year >= 2025 && year <= 2099 ? year : new Date().getFullYear();
+  const from = `${safeYear}-${String(safeMonth).padStart(2, '0')}-01`;
+  const endDate = new Date(safeYear, safeMonth, 0);
+  const to = `${safeYear}-${String(safeMonth).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`;
+  return { month: safeMonth, year: safeYear, from, to };
+}
+
+function officeAvailableInSelectedPeriod(office) {
+  if (!office || office.active !== true) return false;
+  const period = getSelectedModularPeriod();
+  const start = String(office.validity_start || '').trim();
+  const end = String(office.validity_end || '').trim();
+  if (!start || !end) return false;
+  return start <= period.to && end >= period.from;
+}
+
+function populateModularCatalogAndTeacherLists(payload) {
+  if (modularCatalogList) {
+    modularCatalogList.innerHTML = '';
+    const names = Array.isArray(payload?.catalog_names) ? payload.catalog_names : [];
+    names.forEach((name) => {
+      const value = String(name || '').trim();
+      if (!value) return;
+      const option = document.createElement('option');
+      option.value = value;
+      modularCatalogList.appendChild(option);
+    });
+  }
+  if (modularTeachersList) {
+    modularTeachersList.innerHTML = '';
+    const teachers = Array.isArray(payload?.teachers) ? payload.teachers : [];
+    teachers.forEach((name) => {
+      const value = String(name || '').trim();
+      if (!value) return;
+      const option = document.createElement('option');
+      option.value = value;
+      modularTeachersList.appendChild(option);
+    });
+  }
+}
+
+function findCatalogOfficeByName(rawName) {
+  const target = normalizeSearchText(rawName);
+  if (!target) return null;
+  return modularOffices.find((office) => normalizeSearchText(office?.name || '') === target) || null;
+}
+
 function formatDayName(day) {
   const labels = {
     1: 'Segunda-feira',
@@ -1244,7 +1299,7 @@ function renderModularOfficeAlunoPreview() {
   const by1540 = [];
 
   modularOffices.forEach((office) => {
-    if (!office || office.active !== true || office.available_this_month !== true) return;
+    if (!office || !officeAvailableInSelectedPeriod(office)) return;
     const schedules = Array.isArray(office.schedules) ? office.schedules : [];
     schedules.forEach((slot) => {
       if (Number(slot.day_of_week) !== selectedDay) return;
@@ -1289,9 +1344,11 @@ function renderModularOfficeAlunoPreview() {
 
 function renderModularOfficeSecretariaPreview() {
   if (!modularPreviewSecretariaBody) return;
-  const items = [...modularOffices].sort((a, b) =>
-    normalizeSearchText(a?.name || '').localeCompare(normalizeSearchText(b?.name || ''), 'pt-BR'),
-  );
+  const items = [...modularOffices]
+    .filter((office) => officeAvailableInSelectedPeriod(office))
+    .sort((a, b) =>
+      normalizeSearchText(a?.name || '').localeCompare(normalizeSearchText(b?.name || ''), 'pt-BR'),
+    );
   if (!items.length) {
     modularPreviewSecretariaBody.innerHTML = '<tr><td colspan="5">Nenhuma oficina cadastrada.</td></tr>';
     return;
@@ -1315,16 +1372,18 @@ function renderModularOfficeSecretariaPreview() {
 
 function renderModularOfficeAdminPreview() {
   if (!modularPreviewAdminBody) return;
-  const items = [...modularOffices].sort((a, b) =>
-    normalizeSearchText(a?.name || '').localeCompare(normalizeSearchText(b?.name || ''), 'pt-BR'),
-  );
+  const items = [...modularOffices]
+    .filter((office) => officeAvailableInSelectedPeriod(office))
+    .sort((a, b) =>
+      normalizeSearchText(a?.name || '').localeCompare(normalizeSearchText(b?.name || ''), 'pt-BR'),
+    );
   if (!items.length) {
     modularPreviewAdminBody.innerHTML = '<tr><td colspan="6">Nenhuma oficina cadastrada.</td></tr>';
     return;
   }
   modularPreviewAdminBody.innerHTML = items
     .map((office) => {
-      const visibleMonth = office.available_this_month ? 'Sim' : 'Não';
+      const visibleMonth = officeAvailableInSelectedPeriod(office) ? 'Sim' : 'Não';
       return `
         <tr>
           <td>${escapeHtml(office.code || '-')}</td>
@@ -1362,6 +1421,7 @@ async function loadModularOffices(force = false) {
       return;
     }
     modularOffices = Array.isArray(data.items) ? data.items : [];
+    populateModularCatalogAndTeacherLists(data);
     modularOfficesLoaded = true;
     renderModularOfficePreviews();
     setModularOfficeMessage(`Oficinas carregadas: ${modularOffices.length}.`);
@@ -1374,6 +1434,17 @@ async function createModularOffice() {
   if (!modularCreateButton) return;
   const name = String(modularCreateNameInput?.value || '').trim();
   const teacherName = String(modularCreateTeacherInput?.value || '').trim();
+  const rawMonth = Number(modularCreateMonthInput?.value || 0);
+  const rawYear = Number(modularCreateYearInput?.value || 0);
+  if (!Number.isInteger(rawMonth) || rawMonth < 1 || rawMonth > 12) {
+    setModularOfficeMessage('Informe um mês válido para a grade mensal.', true);
+    return;
+  }
+  if (!Number.isInteger(rawYear) || rawYear < 2025 || rawYear > 2099) {
+    setModularOfficeMessage('Informe um ano válido para a grade mensal.', true);
+    return;
+  }
+  const period = getSelectedModularPeriod();
   const timeStart = normalizeOfficeTimeInput(modularCreateStartInput?.value);
   const timeEnd = normalizeOfficeTimeInput(modularCreateEndInput?.value);
   const selectedDays = [...modularCreateDayInputs]
@@ -1414,6 +1485,8 @@ async function createModularOffice() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         action: 'create',
+        month: period.month,
+        year: period.year,
         name,
         teacher_name: teacherName,
         time_start: timeStart,
@@ -1427,6 +1500,7 @@ async function createModularOffice() {
       return;
     }
     modularOffices = Array.isArray(data.items) ? data.items : modularOffices;
+    populateModularCatalogAndTeacherLists(data);
     modularOfficesLoaded = true;
     renderModularOfficePreviews();
     if (modularCreateNameInput) modularCreateNameInput.value = '';
@@ -1935,6 +2009,30 @@ if (modularPreviewDayInput) {
   modularPreviewDayInput.addEventListener('change', () => {
     renderModularOfficeAlunoPreview();
   });
+}
+
+if (modularCreateMonthInput) {
+  modularCreateMonthInput.addEventListener('change', () => {
+    renderModularOfficePreviews();
+  });
+}
+
+if (modularCreateYearInput) {
+  modularCreateYearInput.addEventListener('change', () => {
+    renderModularOfficePreviews();
+  });
+}
+
+if (modularCreateNameInput) {
+  const syncTeacherFromCatalog = () => {
+    const office = findCatalogOfficeByName(modularCreateNameInput.value);
+    if (!office) return;
+    if (modularCreateTeacherInput && !String(modularCreateTeacherInput.value || '').trim()) {
+      modularCreateTeacherInput.value = String(office.teacher_name || '').trim();
+    }
+  };
+  modularCreateNameInput.addEventListener('change', syncTeacherFromCatalog);
+  modularCreateNameInput.addEventListener('blur', syncTeacherFromCatalog);
 }
 
 if (attendanceExportButton) {

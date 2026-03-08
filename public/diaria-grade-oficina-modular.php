@@ -138,7 +138,7 @@ foreach ($travados as $travado) {
 
 $oficinasResult = $client->select(
     'oficina_modular',
-    'select=id,nome,ativa,status_quorum,tipo,capacidade,data_inicio_validade,data_fim_validade'
+    'select=id,nome,descricao,ativa,status_quorum,tipo,capacidade,data_inicio_validade,data_fim_validade'
     . '&ativa=eq.true'
     . '&order=nome.asc'
 );
@@ -217,6 +217,22 @@ $normalizarOficinaExcel = static function (string $nomeOriginal) use ($mapaPasso
 
 foreach ($oficinas as $oficina) {
     $ofId = (string) ($oficina['id'] ?? '');
+    $descricaoOficina = (string) ($oficina['descricao'] ?? '');
+    $descricaoCheck = function_exists('mb_strtoupper')
+        ? mb_strtoupper($descricaoOficina, 'UTF-8')
+        : strtoupper($descricaoOficina);
+    if (!str_contains($descricaoCheck, '[CATALOGO_OM_MENSAL]')) {
+        continue;
+    }
+    $tipoOficina = strtoupper(trim((string) ($oficina['tipo'] ?? '')));
+    if ($tipoOficina !== 'OCASIONAL_30D') {
+        continue;
+    }
+    $inicioValidade = trim((string) ($oficina['data_inicio_validade'] ?? ''));
+    $fimValidade = trim((string) ($oficina['data_fim_validade'] ?? ''));
+    if ($inicioValidade === '' || $fimValidade === '' || !($dataDiaria >= $inicioValidade && $dataDiaria <= $fimValidade)) {
+        continue;
+    }
     $nomeOriginal = (string) ($oficina['nome'] ?? 'Oficina');
     $nomeNormalizado = $normalizarOficinaExcel($nomeOriginal);
     if ($nomeNormalizado === '') {

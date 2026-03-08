@@ -44,7 +44,7 @@ final class OficinaModularGradeService
             return ['ok' => false, 'error' => 'Oficina Modular cancelada.', 'reason' => 'OFICINA_CANCELADA'];
         }
 
-        if (($oficina['tipo'] ?? null) === 'OCASIONAL_30D' && !$this->validarJanelaOcasional30d($oficina)) {
+        if (($oficina['tipo'] ?? null) === 'OCASIONAL_30D' && !$this->validarJanelaOcasional30d($oficina, $diaria)) {
             return ['ok' => false, 'error' => 'Oficina fora da janela de validade.', 'reason' => 'FORA_DA_VALIDADE_30D'];
         }
 
@@ -534,9 +534,18 @@ final class OficinaModularGradeService
         return (int) $dt->format('N'); // 1=segunda ... 7=domingo
     }
 
-    private function validarJanelaOcasional30d(array $oficina): bool
+    private function validarJanelaOcasional30d(array $oficina, ?array $diaria = null): bool
     {
-        $hoje = date('Y-m-d');
+        $referencia = '';
+        if (is_array($diaria)) {
+            $candidate = trim((string) ($diaria['data_diaria'] ?? ''));
+            if ($candidate !== '') {
+                $referencia = substr($candidate, 0, 10);
+            }
+        }
+        if ($referencia === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $referencia)) {
+            $referencia = date('Y-m-d');
+        }
         $inicio = isset($oficina['data_inicio_validade']) ? (string) $oficina['data_inicio_validade'] : '';
         $fim = isset($oficina['data_fim_validade']) ? (string) $oficina['data_fim_validade'] : '';
 
@@ -544,7 +553,7 @@ final class OficinaModularGradeService
             return false;
         }
 
-        return $hoje >= $inicio && $hoje <= $fim;
+        return $referencia >= $inicio && $referencia <= $fim;
     }
 
     private function gerarSlotId(int $diaSemana, string $horaInicio): ?string
