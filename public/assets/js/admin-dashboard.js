@@ -3,6 +3,7 @@ window.__adminDashboardBooted = true;
 console.info('[admin-dashboard] bootstrap ok', { tabs: tabs.length });
 const tabEntries = document.querySelector('#tab-entries');
 const tabCharges = document.querySelector('#tab-charges');
+const tabChamada = document.querySelector('#tab-chamada');
 const tabInadimplentes = document.querySelector('#tab-inadimplentes');
 const tabRecebidas = document.querySelector('#tab-recebidas');
 const tabSemWhatsapp = document.querySelector('#tab-sem-whatsapp');
@@ -46,6 +47,14 @@ const monthlySaveButton = document.querySelector('#monthly-save-btn');
 const monthlyRemoveButton = document.querySelector('#monthly-remove-btn');
 const monthlyMessage = document.querySelector('#monthly-message');
 const monthlyTableBody = document.querySelector('#monthly-table-body');
+const attendanceDateInput = document.querySelector('#attendance-date');
+const attendanceStudentInput = document.querySelector('#attendance-student');
+const attendanceOfficeInput = document.querySelector('#attendance-office');
+const attendanceAddButton = document.querySelector('#attendance-add-btn');
+const attendanceMessage = document.querySelector('#attendance-message');
+const attendanceTbody = document.querySelector('#attendance-tbody');
+const attendanceStudentsList = document.querySelector('#attendance-students-list');
+const attendanceOfficesList = document.querySelector('#attendance-offices-list');
 
 const selectedStudents = new Set();
 const guardianCache = new Map();
@@ -56,6 +65,11 @@ let adminStudents = [];
 let monthlyStudents = Array.isArray(window.__monthlyStudents) ? window.__monthlyStudents : [];
 const monthlyByStudentId = new Map();
 const monthlyByName = new Map();
+const adminCanApproveAttendance = window.__adminCanApproveAttendance === true;
+const attendanceOfficeById = new Map();
+const attendanceOfficeByLabel = new Map();
+let attendanceLoaded = false;
+let attendanceOfficesLoaded = false;
 
 function setActiveTab(name) {
   if (
@@ -71,6 +85,7 @@ function setActiveTab(name) {
   }
   tabEntries.classList.toggle('hidden', name !== 'entries');
   tabCharges.classList.toggle('hidden', name !== 'charges');
+  if (tabChamada) tabChamada.classList.toggle('hidden', name !== 'chamada');
   tabInadimplentes.classList.toggle('hidden', name !== 'inadimplentes');
   tabRecebidas.classList.toggle('hidden', name !== 'recebidas');
   tabSemWhatsapp.classList.toggle('hidden', name !== 'sem-whatsapp');
@@ -823,6 +838,7 @@ function applyStudentsToLists(students) {
   if (studentList) studentList.innerHTML = '';
   if (viewUserStudentsList) viewUserStudentsList.innerHTML = '';
   if (pendenciaStudentsList) pendenciaStudentsList.innerHTML = '';
+  if (attendanceStudentsList) attendanceStudentsList.innerHTML = '';
   studentNames.clear();
   studentLookupByLabel.clear();
   adminStudents.forEach((student) => {
@@ -831,6 +847,11 @@ function applyStudentsToLists(students) {
     const option = document.createElement('option');
     option.value = studentName;
     if (studentList) studentList.appendChild(option);
+    if (attendanceStudentsList) {
+      const optionAttendance = document.createElement('option');
+      optionAttendance.value = studentName;
+      attendanceStudentsList.appendChild(optionAttendance);
+    }
     if (pendenciaStudentsList) {
       const gradeLabel = student.grade ? `${student.grade}º ano` : '';
       const classLabel = (student.class_name || '').trim();
@@ -852,7 +873,7 @@ function applyStudentsToLists(students) {
 }
 
 async function loadStudents() {
-  if (!studentList && !viewUserStudentsList && !pendenciaStudentsList) return;
+  if (!studentList && !viewUserStudentsList && !pendenciaStudentsList && !attendanceStudentsList) return;
 
   const bootStudents = Array.isArray(window.__adminStudents) ? window.__adminStudents : null;
   if (bootStudents && bootStudents.length) {
@@ -1015,12 +1036,268 @@ function resetChargeForm() {
   }
 }
 
+function setAttendanceMessage(text, isError = false) {
+  if (!attendanceMessage) return;
+  attendanceMessage.textContent = text;
+  attendanceMessage.className = `charge-message ${isError ? 'error' : 'success'}`.trim();
+}
+
+function attendanceStatusLabel(status) {
+  const map = {
+    em_revisao: 'Em revisão',
+    autorizada_cobranca: 'Autorizada (cobrança na fila)',
+    rejeitada: 'Rejeitada',
+    aluno_mensalista: 'Aluno mensalista',
+    bloqueada_ja_paga: 'Bloqueada: já paga',
+    bloqueada_duplicidade: 'Bloqueada: cobrança existente',
+    erro_cobranca: 'Erro ao lançar cobrança',
+  };
+  return map[String(status || '').trim()] || status || '-';
+}
+
+function resolveAttendanceOffice(inputValue) {
+  const raw = String(inputValue || '').trim();
+  if (!raw) return { ok: true, officeId: '', officeName: '' };
+  const byLabel = attendanceOfficeByLabel.get(raw);
+  if (byLabel) {
+    return {
+      ok: true,
+      officeId: String(byLabel.id || '').trim(),
+      officeName: String(byLabel.name || '').trim(),
+    };
+  }
+  for (const office of attendanceOfficeById.values()) {
+    if (normalizeSearchText(office.name) === normalizeSearchText(raw)) {
+      return {
+        ok: true,
+        officeId: String(office.id || '').trim(),
+        officeName: String(office.name || '').trim(),
+      };
+    }
+  }
+  return { ok: false, error: 'Selecione uma oficina válida da lista do mês corrente.' };
+}
+
+function renderAttendanceRows(items) {
+  if (!attendanceTbody) return;
+  const rows = Array.isArray(items) ? items : [];
+  if (!rows.length) {
+    attendanceTbody.innerHTML = '<tr><td colspan="8">Nenhuma chamada lançada.</td></tr>';
+    return;
+  }
+  attendanceTbody.innerHTML = rows
+    .map((item) => {
+      const office = item.office_name
+        ? `${item.office_name}${item.office_code ? ` (${item.office_code})` : ''}`
+        : '-';
+      const reviewParts = [];
+      if (item.review_note) reviewParts.push(String(item.review_note));
+      if (item.reviewed_at) reviewParts.push(formatDateTimeBR(item.reviewed_at));
+      const reviewText = reviewParts.length ? reviewParts.join(' • ') : '-';
+      const canReview = adminCanApproveAttendance && String(item.status || '') === 'em_revisao';
+      const actions = canReview
+        ? `<button class="btn btn-primary btn-sm js-attendance-approve" type="button" data-id="${escapeHtml(item.id || '')}">Autorizar</button>
+           <button class="btn btn-danger btn-sm js-attendance-reject" type="button" data-id="${escapeHtml(item.id || '')}">Rejeitar</button>`
+        : '-';
+      return `
+        <tr data-attendance-id="${escapeHtml(item.id || '')}">
+          <td>${escapeHtml(formatDateBR(item.attendance_date || '-'))}</td>
+          <td>${escapeHtml(item.student_name || '-')}</td>
+          <td>${escapeHtml(office)}</td>
+          <td>${escapeHtml(attendanceStatusLabel(item.status || ''))}</td>
+          <td>${escapeHtml(item.created_by_user || item.created_by_role || '-')}</td>
+          <td>${escapeHtml(formatDateTimeBR(item.created_at || ''))}</td>
+          <td>${escapeHtml(reviewText)}</td>
+          <td style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">${actions}</td>
+        </tr>
+      `;
+    })
+    .join('');
+}
+
+async function loadAttendanceOffices() {
+  if (attendanceOfficesLoaded) return;
+  if (!attendanceOfficesList) return;
+  try {
+    const res = await fetch(`/api/admin-oficinas-current-month.php?ts=${Date.now()}`);
+    const data = await res.json();
+    if (!res.ok || !data?.ok) {
+      attendanceOfficesList.innerHTML = '';
+      attendanceOfficesLoaded = true;
+      return;
+    }
+    attendanceOfficeById.clear();
+    attendanceOfficeByLabel.clear();
+    attendanceOfficesList.innerHTML = '';
+    (Array.isArray(data.offices) ? data.offices : []).forEach((office) => {
+      const id = String(office.id || '').trim();
+      const name = String(office.name || '').trim();
+      const label = String(office.label || name).trim();
+      if (!id || !name) return;
+      const normalized = { id, name, label };
+      attendanceOfficeById.set(id, normalized);
+      attendanceOfficeByLabel.set(label, normalized);
+      const option = document.createElement('option');
+      option.value = label;
+      attendanceOfficesList.appendChild(option);
+    });
+    attendanceOfficesLoaded = true;
+  } catch {
+    attendanceOfficesLoaded = true;
+  }
+}
+
+async function loadAttendanceCalls(force = false) {
+  if (attendanceLoaded && !force) return;
+  if (!attendanceTbody) return;
+  setAttendanceMessage('Carregando chamadas...');
+  try {
+    const res = await fetch(`/api/admin-attendance.php?ts=${Date.now()}`);
+    const data = await res.json();
+    if (!res.ok || !data?.ok) {
+      setAttendanceMessage(data?.error || 'Falha ao carregar chamadas.', true);
+      renderAttendanceRows([]);
+      return;
+    }
+    renderAttendanceRows(Array.isArray(data.items) ? data.items : []);
+    setAttendanceMessage('');
+    attendanceLoaded = true;
+  } catch {
+    setAttendanceMessage('Falha ao carregar chamadas.', true);
+    renderAttendanceRows([]);
+  }
+}
+
+async function postAttendanceAction(payload) {
+  const res = await fetch('/api/admin-attendance.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload || {}),
+  });
+  const data = await res.json();
+  return { res, data };
+}
+
+async function createAttendanceCall() {
+  if (!attendanceDateInput || !attendanceStudentInput) return;
+  const attendanceDate = String(attendanceDateInput.value || '').trim();
+  if (!attendanceDate) {
+    setAttendanceMessage('Informe a data da chamada.', true);
+    return;
+  }
+  const resolvedStudent = resolveStudentNameForAdmin(attendanceStudentInput.value);
+  if (!resolvedStudent.ok) {
+    setAttendanceMessage(resolvedStudent.error || 'Selecione um aluno válido.', true);
+    return;
+  }
+  const studentName = resolvedStudent.name;
+  attendanceStudentInput.value = studentName;
+  const student = getStudentByName(studentName);
+  if (!student?.id) {
+    setAttendanceMessage('Aluno não encontrado no banco.', true);
+    return;
+  }
+
+  const officeResolved = resolveAttendanceOffice(attendanceOfficeInput?.value || '');
+  if (!officeResolved.ok) {
+    setAttendanceMessage(officeResolved.error || 'Oficina inválida.', true);
+    return;
+  }
+
+  if (attendanceAddButton) {
+    attendanceAddButton.setAttribute('disabled', 'disabled');
+  }
+  setAttendanceMessage('Lançando chamada...');
+  try {
+    const { res, data } = await postAttendanceAction({
+      action: 'create',
+      attendance_date: attendanceDate,
+      student_id: student.id,
+      student_name: student.name,
+      office_id: officeResolved.officeId,
+      office_name: officeResolved.officeName,
+    });
+    if (!res.ok || !data?.ok) {
+      setAttendanceMessage(data?.error || 'Falha ao lançar chamada.', true);
+      return;
+    }
+    attendanceStudentInput.value = '';
+    if (attendanceOfficeInput) attendanceOfficeInput.value = '';
+    const warning = data.warning ? ` Aviso: ${data.warning}` : '';
+    setAttendanceMessage(`Chamada lançada com sucesso.${warning}`);
+    await loadAttendanceCalls(true);
+  } catch {
+    setAttendanceMessage('Falha ao lançar chamada.', true);
+  } finally {
+    if (attendanceAddButton) {
+      attendanceAddButton.removeAttribute('disabled');
+    }
+  }
+}
+
+async function handleAttendanceAction(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+  const approveButton = target.closest('.js-attendance-approve');
+  const rejectButton = target.closest('.js-attendance-reject');
+  if (!approveButton && !rejectButton) return;
+
+  const actionButton = approveButton || rejectButton;
+  const id = actionButton?.getAttribute('data-id') || '';
+  if (!id) return;
+
+  if (approveButton) {
+    actionButton.setAttribute('disabled', 'disabled');
+    setAttendanceMessage('Autorizando chamada...');
+    try {
+      const { res, data } = await postAttendanceAction({ action: 'approve', id });
+      if (!res.ok || !data?.ok) {
+        setAttendanceMessage(data?.error || 'Falha ao autorizar chamada.', true);
+        return;
+      }
+      setAttendanceMessage(data?.message || 'Chamada autorizada.');
+      await loadAttendanceCalls(true);
+    } catch {
+      setAttendanceMessage('Falha ao autorizar chamada.', true);
+    } finally {
+      actionButton.removeAttribute('disabled');
+    }
+    return;
+  }
+
+  const confirmed = await showAdminConfirm(
+    'Confirmar rejeição desta chamada? A cobrança não será gerada.',
+    { title: 'Rejeitar chamada', confirmText: 'Rejeitar' },
+  );
+  if (!confirmed) return;
+
+  actionButton.setAttribute('disabled', 'disabled');
+  setAttendanceMessage('Rejeitando chamada...');
+  try {
+    const { res, data } = await postAttendanceAction({ action: 'reject', id });
+    if (!res.ok || !data?.ok) {
+      setAttendanceMessage(data?.error || 'Falha ao rejeitar chamada.', true);
+      return;
+    }
+    setAttendanceMessage(data?.message || 'Chamada rejeitada.');
+    await loadAttendanceCalls(true);
+  } catch {
+    setAttendanceMessage('Falha ao rejeitar chamada.', true);
+  } finally {
+    actionButton.removeAttribute('disabled');
+  }
+}
+
 tabs.forEach((btn) => {
   btn.addEventListener('click', () => {
     setActiveTab(btn.dataset.tab);
     if (btn.dataset.tab === 'inadimplentes') {
       maybeAlertInadimplentesDuplicates();
       maybeAlertInadimplentesMonthly();
+    }
+    if (btn.dataset.tab === 'chamada') {
+      loadAttendanceOffices();
+      loadAttendanceCalls(true);
     }
     if (btn.dataset.tab === 'fluxo-caixa' && !cashflowLoaded) {
       loadCashflow();
@@ -1040,6 +1317,27 @@ if (studentInput) {
       event.preventDefault();
       tryAddStudentFromInput();
     }
+  });
+}
+
+if (attendanceAddButton) {
+  attendanceAddButton.addEventListener('click', () => {
+    createAttendanceCall();
+  });
+}
+
+if (attendanceStudentInput) {
+  attendanceStudentInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      createAttendanceCall();
+    }
+  });
+}
+
+if (attendanceTbody) {
+  attendanceTbody.addEventListener('click', (event) => {
+    handleAttendanceAction(event);
   });
 }
 
@@ -2612,6 +2910,10 @@ setActiveTab(initialTab);
 if (initialTab === 'inadimplentes') {
   maybeAlertInadimplentesDuplicates();
   maybeAlertInadimplentesMonthly();
+}
+if (initialTab === 'chamada') {
+  loadAttendanceOffices();
+  loadAttendanceCalls();
 }
 if (initialTab === 'dados-asaas') {
   loadAsaasData();

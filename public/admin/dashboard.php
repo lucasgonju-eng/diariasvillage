@@ -12,7 +12,8 @@ if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated']
 }
 $canViewAsUser = (($_SESSION['admin_user'] ?? '') === 'admin');
 $canMergeDuplicates = (($_SESSION['admin_user'] ?? '') === 'admin');
-$allowedTabs = ['charges', 'inadimplentes', 'recebidas', 'sem-whatsapp', 'pendencias', 'mensalistas', 'exclusoes', 'reset-senha', 'fluxo-caixa', 'dados-asaas', 'entries'];
+$canAttendanceApprove = (($_SESSION['admin_user'] ?? '') === 'admin');
+$allowedTabs = ['charges', 'chamada', 'inadimplentes', 'recebidas', 'sem-whatsapp', 'pendencias', 'mensalistas', 'exclusoes', 'reset-senha', 'fluxo-caixa', 'dados-asaas', 'entries'];
 if ($canMergeDuplicates) {
     $allowedTabs[] = 'duplicados';
 }
@@ -479,6 +480,7 @@ if (!empty($exclusionsLog)) {
     <div class="admin-card">
       <div class="admin-tabs">
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=charges" data-tab="charges">Cobrança manual</a>
+        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=chamada" data-tab="chamada">Chamada</a>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=inadimplentes" data-tab="inadimplentes">Cobranças em aberto</a>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=recebidas" data-tab="recebidas">Cobranças recebidas</a>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=sem-whatsapp" data-tab="sem-whatsapp">Sem WhatsApp</a>
@@ -585,6 +587,55 @@ if (!empty($exclusionsLog)) {
 
         <button class="btn btn-primary" id="send-charges" type="button">Registrar cobranças manuais (sem envio)</button>
         <div id="charge-message" class="charge-message"></div>
+      </section>
+
+      <section id="tab-chamada" class="<?php echo $activeTab === 'chamada' ? '' : 'hidden'; ?>">
+        <h2>Chamada</h2>
+        <p class="muted">Secretaria e admin lançam presença por data. Somente o admin autoriza e, após checagens, a cobrança emergencial vai para a fila.</p>
+        <datalist id="attendance-students-list"></datalist>
+        <datalist id="attendance-offices-list"></datalist>
+        <div class="charge-fields" style="margin-bottom:12px;">
+          <div class="form-group">
+            <label>Data</label>
+            <input id="attendance-date" type="date" value="<?php echo date('Y-m-d'); ?>" />
+          </div>
+          <div class="form-group">
+            <label>Aluno</label>
+            <input id="attendance-student" type="text" list="attendance-students-list" placeholder="Digite 3 letras do aluno" autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label>Oficina modular (opcional)</label>
+            <input id="attendance-office" type="text" list="attendance-offices-list" placeholder="Autocomplete do mês corrente" autocomplete="off" />
+          </div>
+          <div class="form-group" style="display:flex;align-items:flex-end;gap:8px;">
+            <button id="attendance-add-btn" class="btn btn-primary btn-sm" type="button">Lançar chamada</button>
+          </div>
+        </div>
+        <div id="attendance-message" class="charge-message"></div>
+        <div style="overflow-x:auto;">
+          <table class="admin-table">
+            <thead>
+              <tr style="text-align:left;">
+                <th>Data</th>
+                <th>Aluno</th>
+                <th>Oficina</th>
+                <th>Status</th>
+                <th>Lançado por</th>
+                <th>Lançado em</th>
+                <th>Revisão</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="attendance-tbody">
+              <tr>
+                <td colspan="8">Nenhuma chamada lançada.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <?php if (!$canAttendanceApprove): ?>
+          <p class="muted" style="margin-top:8px;">A autorização final é feita pelo usuário admin.</p>
+        <?php endif; ?>
       </section>
 
       <section id="tab-inadimplentes" class="<?php echo $activeTab === 'inadimplentes' ? '' : 'hidden'; ?>">
@@ -1376,14 +1427,16 @@ if (!empty($exclusionsLog)) {
     window.__adminDashboardBooted = false;
     window.__adminStudents = <?php echo json_encode($studentsForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
     window.__monthlyStudents = <?php echo json_encode($monthlyRowsForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
+    window.__adminCanApproveAttendance = <?php echo $canAttendanceApprove ? 'true' : 'false'; ?>;
   </script>
-  <script src="/assets/js/admin-dashboard.js?v=48"></script>
+  <script src="/assets/js/admin-dashboard.js?v=49"></script>
   <script>
     (function () {
       function activateTab(name) {
         var mapping = {
           entries: 'tab-entries',
           charges: 'tab-charges',
+          chamada: 'tab-chamada',
           inadimplentes: 'tab-inadimplentes',
           recebidas: 'tab-recebidas',
           'sem-whatsapp': 'tab-sem-whatsapp',

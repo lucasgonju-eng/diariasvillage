@@ -1,0 +1,478 @@
+<?php
+$bootstrapCandidates = [
+    __DIR__ . '/../src/Bootstrap.php',
+    dirname(__DIR__, 2) . '/src/Bootstrap.php',
+];
+foreach ($bootstrapCandidates as $bootstrapFile) {
+    if (is_file($bootstrapFile)) {
+        require_once $bootstrapFile;
+        break;
+    }
+}
+date_default_timezone_set('America/Sao_Paulo');
+
+use App\AttendanceCalls;
+use App\Helpers;
+use App\HttpClient;
+use App\Mailer;
+use App\MonthlyStudents;
+use App\SupabaseClient;
+
+function isAdminUser(): bool
+{
+    return (string) ($_SESSION['admin_user'] ?? '') === 'admin';
+}
+
+function parseAttendanceDate(string $raw): ?string
+{
+    $date = AttendanceCalls::normalizeDate($raw);
+    if ($date !== null) {
+        return $date;
+    }
+    $time = strtotime($raw);
+    if ($time === false) {
+        return null;
+    }
+    return AttendanceCalls::normalizeDate(date('Y-m-d', $time));
+}
+
+function formatDateBr(string $isoDate): string
+{
+    $time = strtotime($isoDate);
+    if ($time === false) {
+        return $isoDate;
+    }
+    return date('d/m/Y', $time);
+}
+
+function saveAttendanceRowsOrFail(array $rows): void
+{
+    if (!AttendanceCalls::save($rows)) {
+        Helpers::json(['ok' => false, 'error' => 'Falha ao salvar chamada.'], 500);
+    }
+}
+
+if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
+    Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
+}
+
+$method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+$client = new SupabaseClient(new HttpClient());
+
+if ($method === 'GET') {
+    $from = parseAttendanceDate((string) ($_GET['from'] ?? ''));
+    $to = parseAttendanceDate((string) ($_GET['to'] ?? ''));
+    $items = AttendanceCalls::load();
+    if ($from !== null) {
+        $items = array_values(array_filter($items, static fn($row): bool => (string) ($row['attendance_date'] ?? '') >= $from));
+    }
+    if ($to !== null) {
+        $items = array_values(array_filter($items, static fn($row): bool => (string) ($row['attendance_date'] ?? '') <= $to));
+    }
+    Helpers::json([
+        'ok' => true,
+        'items' => $items,
+        'can_approve' => isAdminUser(),
+        'admin_user' => (string) ($_SESSION['admin_user'] ?? ''),
+    ]);
+}
+
+Helpers::requirePost();
+$payload = json_decode(file_get_contents('php://input'), true);
+if (!is_array($payload)) {
+    $payload = [];
+}
+$action = strtolower(trim((string) ($payload['action'] ?? 'create')));
+
+$rows = AttendanceCalls::load();
+
+if ($action === 'create') {
+    $attendanceDate = parseAttendanceDate((string) ($payload['attendance_date'] ?? date('Y-m-d')));
+    if ($attendanceDate === null) {
+        Helpers::json(['ok' => false, 'error' => 'Data inválida para chamada.'], 422);
+    }
+
+    $studentId = trim((string) ($payload['student_id'] ?? ''));
+    $studentNameInput = trim((string) ($payload['student_name'] ?? ''));
+    if ($studentId === '' && $studentNameInput === '') {
+        Helpers::json(['ok' => false, 'error' => 'Selecione um aluno para lançar chamada.'], 422);
+    }
+
+    if ($studentId !== '') {
+        $studentResult = $client->select(
+            'students',
+            'select=id,name,enrollment&id=eq.' . urlencode($studentId) . '&limit=1'
+        );
+    } else {
+        $studentResult = $client->select(
+            'students',
+            'select=id,name,enrollment&name=eq.' . urlencode($studentNameInput) . '&limit=1'
+        );
+    }
+    if (!($studentResult['ok'] ?? false) || empty($studentResult['data'][0])) {
+        Helpers::json(['ok' => false, 'error' => 'Aluno não encontrado no banco.'], 404);
+    }
+    $student = $studentResult['data'][0];
+    $studentId = trim((string) ($student['id'] ?? ''));
+    $studentName = trim((string) ($student['name'] ?? $studentNameInput));
+    if ($studentId === '' || $studentName === '') {
+        Helpers::json(['ok' => false, 'error' => 'Aluno inválido para chamada.'], 422);
+    }
+
+    foreach ($rows as $existing) {
+        if (!is_array($existing)) {
+            continue;
+        }
+        if ((string) ($existing['student_id'] ?? '') !== $studentId) {
+            continue;
+        }
+        if ((string) ($existing['attendance_date'] ?? '') !== $attendanceDate) {
+            continue;
+        }
+        $status = (string) ($existing['status'] ?? '');
+        if ($status !== AttendanceCalls::STATUS_REJEITADA) {
+            Helpers::json(['ok' => false, 'error' => 'Aluno já lançado na chamada para essa data.'], 409);
+        }
+    }
+
+    $officeId = trim((string) ($payload['office_id'] ?? ''));
+    $officeName = trim((string) ($payload['office_name'] ?? ''));
+    $officeCode = '';
+    if ($officeId !== '') {
+        $officeResult = $client->select(
+            'oficina_modular',
+            'select=id,nome,codigo,ativa&id=eq.' . urlencode($officeId) . '&limit=1'
+        );
+        if (!($officeResult['ok'] ?? false) || empty($officeResult['data'][0])) {
+            Helpers::json(['ok' => false, 'error' => 'Oficina informada não encontrada.'], 404);
+        }
+        $officeRow = $officeResult['data'][0];
+        if (($officeRow['ativa'] ?? true) === false) {
+            Helpers::json(['ok' => false, 'error' => 'Oficina informada está inativa.'], 422);
+        }
+        $officeId = trim((string) ($officeRow['id'] ?? ''));
+        $officeName = trim((string) ($officeRow['nome'] ?? $officeName));
+        $officeCode = trim((string) ($officeRow['codigo'] ?? ''));
+    }
+
+    $newRow = [
+        'id' => AttendanceCalls::createId(),
+        'attendance_date' => $attendanceDate,
+        'student_id' => $studentId,
+        'student_name' => $studentName,
+        'office_id' => $officeId,
+        'office_name' => $officeName,
+        'office_code' => $officeCode,
+        'status' => AttendanceCalls::STATUS_EM_REVISAO,
+        'created_at' => date('c'),
+        'created_by_role' => (string) ($_SESSION['admin_user'] ?? ''),
+        'created_by_user' => (string) ($_SESSION['admin_user'] ?? ''),
+        'reviewed_at' => '',
+        'reviewed_by' => '',
+        'review_note' => '',
+        'queue_payment_id' => '',
+        'warning' => '',
+    ];
+
+    $rows[] = $newRow;
+    saveAttendanceRowsOrFail($rows);
+
+    $emailWarning = '';
+    $mailer = new Mailer();
+    $mailHtml = '<p>Nova chamada lançada no administrativo.</p>'
+        . '<p><strong>Data:</strong> ' . htmlspecialchars(formatDateBr($attendanceDate), ENT_QUOTES, 'UTF-8') . '<br>'
+        . '<strong>Aluno:</strong> ' . htmlspecialchars($studentName, ENT_QUOTES, 'UTF-8') . '<br>'
+        . '<strong>Lançado por:</strong> ' . htmlspecialchars((string) ($_SESSION['admin_user'] ?? 'secretaria'), ENT_QUOTES, 'UTF-8') . '<br>'
+        . '<strong>Oficina:</strong> ' . htmlspecialchars($officeName !== '' ? $officeName : 'Não informada', ENT_QUOTES, 'UTF-8')
+        . '</p>'
+        . '<p>Acesse o painel administrativo para revisar e autorizar.</p>';
+    $mailResult = $mailer->send('admin@village.einsteinhub.co', 'Nova chamada lançada • Diárias Village', $mailHtml);
+    if (!($mailResult['ok'] ?? false)) {
+        $emailWarning = 'Chamada lançada, mas não foi possível enviar e-mail ao admin.';
+    }
+
+    Helpers::json([
+        'ok' => true,
+        'item' => $newRow,
+        'warning' => $emailWarning !== '' ? $emailWarning : null,
+    ]);
+}
+
+if ($action === 'reject') {
+    if (!isAdminUser()) {
+        Helpers::json(['ok' => false, 'error' => 'Apenas admin pode rejeitar chamada.'], 403);
+    }
+    $id = trim((string) ($payload['id'] ?? ''));
+    if ($id === '') {
+        Helpers::json(['ok' => false, 'error' => 'ID inválido para rejeição.'], 422);
+    }
+    $note = trim((string) ($payload['review_note'] ?? 'Rejeitada pelo admin.'));
+
+    $updated = null;
+    foreach ($rows as &$row) {
+        if (!is_array($row) || (string) ($row['id'] ?? '') !== $id) {
+            continue;
+        }
+        $row['status'] = AttendanceCalls::STATUS_REJEITADA;
+        $row['reviewed_at'] = date('c');
+        $row['reviewed_by'] = 'admin';
+        $row['review_note'] = $note;
+        $updated = $row;
+        break;
+    }
+    unset($row);
+    if (!is_array($updated)) {
+        Helpers::json(['ok' => false, 'error' => 'Chamada não encontrada.'], 404);
+    }
+
+    saveAttendanceRowsOrFail($rows);
+    Helpers::json(['ok' => true, 'item' => $updated, 'message' => 'Chamada rejeitada.']);
+}
+
+if ($action !== 'approve') {
+    Helpers::json(['ok' => false, 'error' => 'Ação inválida para chamada.'], 422);
+}
+
+if (!isAdminUser()) {
+    Helpers::json(['ok' => false, 'error' => 'Apenas admin pode autorizar chamada.'], 403);
+}
+
+$id = trim((string) ($payload['id'] ?? ''));
+if ($id === '') {
+    Helpers::json(['ok' => false, 'error' => 'ID inválido para autorização.'], 422);
+}
+
+$targetIndex = null;
+foreach ($rows as $idx => $row) {
+    if (!is_array($row)) {
+        continue;
+    }
+    if ((string) ($row['id'] ?? '') === $id) {
+        $targetIndex = $idx;
+        break;
+    }
+}
+if ($targetIndex === null) {
+    Helpers::json(['ok' => false, 'error' => 'Chamada não encontrada.'], 404);
+}
+
+$target = $rows[$targetIndex];
+if ((string) ($target['status'] ?? '') !== AttendanceCalls::STATUS_EM_REVISAO) {
+    Helpers::json(['ok' => false, 'error' => 'A chamada já foi revisada.', 'item' => $target], 409);
+}
+
+$attendanceDate = parseAttendanceDate((string) ($target['attendance_date'] ?? ''));
+if ($attendanceDate === null) {
+    Helpers::json(['ok' => false, 'error' => 'Data inválida na chamada.'], 422);
+}
+
+$studentId = trim((string) ($target['student_id'] ?? ''));
+$studentName = trim((string) ($target['student_name'] ?? ''));
+if ($studentId === '' && $studentName !== '') {
+    $studentResult = $client->select(
+        'students',
+        'select=id,name,enrollment&name=eq.' . urlencode($studentName) . '&limit=50'
+    );
+    $studentRows = (($studentResult['ok'] ?? false) && is_array($studentResult['data'] ?? null))
+        ? $studentResult['data']
+        : [];
+    if (count($studentRows) === 1) {
+        $studentId = trim((string) ($studentRows[0]['id'] ?? ''));
+        $studentName = trim((string) ($studentRows[0]['name'] ?? $studentName));
+    } elseif (count($studentRows) > 1) {
+        Helpers::json([
+            'ok' => false,
+            'error' => 'Mais de um aluno com esse nome. Ajuste o vínculo da chamada antes de autorizar.',
+        ], 422);
+    }
+}
+if ($studentId === '') {
+    Helpers::json(['ok' => false, 'error' => 'Aluno da chamada sem vínculo válido.'], 422);
+}
+
+$paymentsResult = $client->select(
+    'payments',
+    'select=id,student_id,payment_date,daily_type,amount,status,billing_type,guardian_id,created_at'
+        . '&student_id=eq.' . urlencode($studentId)
+        . '&order=created_at.desc&limit=5000'
+);
+$payments = (($paymentsResult['ok'] ?? false) && is_array($paymentsResult['data'] ?? null))
+    ? $paymentsResult['data']
+    : [];
+
+$hasPaidSameDate = false;
+$hasOpenSameDate = false;
+foreach ($payments as $payment) {
+    if (!is_array($payment)) {
+        continue;
+    }
+    $status = strtolower(trim((string) ($payment['status'] ?? '')));
+    if (in_array($status, ['canceled', 'refunded', 'deleted'], true)) {
+        continue;
+    }
+    $dates = MonthlyStudents::extractDatesFromPayment(
+        (string) ($payment['daily_type'] ?? ''),
+        (string) ($payment['payment_date'] ?? '')
+    );
+    if (!in_array($attendanceDate, $dates, true)) {
+        continue;
+    }
+    if ($status === 'paid') {
+        $hasPaidSameDate = true;
+    } else {
+        $hasOpenSameDate = true;
+    }
+}
+
+if ($hasPaidSameDate || $hasOpenSameDate) {
+    $rows[$targetIndex]['status'] = $hasPaidSameDate
+        ? AttendanceCalls::STATUS_BLOQUEADA_JA_PAGA
+        : AttendanceCalls::STATUS_BLOQUEADA_DUPLICIDADE;
+    $rows[$targetIndex]['reviewed_at'] = date('c');
+    $rows[$targetIndex]['reviewed_by'] = 'admin';
+    $rows[$targetIndex]['review_note'] = $hasPaidSameDate
+        ? 'Já existe cobrança paga para esse aluno nessa data.'
+        : 'Já existe cobrança aberta para esse aluno nessa data.';
+    saveAttendanceRowsOrFail($rows);
+
+    Helpers::json([
+        'ok' => true,
+        'blocked' => true,
+        'item' => $rows[$targetIndex],
+        'message' => $hasPaidSameDate
+            ? 'Bloqueado: esta diária já foi paga no SaaS.'
+            : 'Bloqueado: já existe cobrança em aberto para essa data.',
+    ]);
+}
+
+$monthlyItems = MonthlyStudents::load();
+$monthlyById = MonthlyStudents::mapByStudentId($monthlyItems);
+$monthlyByName = MonthlyStudents::mapByNormalizedName($monthlyItems);
+$plan = MonthlyStudents::resolvePlan($studentId, $studentName, $monthlyById, $monthlyByName);
+
+if (is_array($plan) && in_array((int) ($plan['weekly_days'] ?? 0), [2, 3, 4, 5], true)) {
+    $weeklyDays = (int) ($plan['weekly_days'] ?? 0);
+    $usedByWeek = MonthlyStudents::collectUsedDatesByWeek($payments);
+    foreach ($rows as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        if ((string) ($row['id'] ?? '') === $id) {
+            continue;
+        }
+        if ((string) ($row['student_id'] ?? '') !== $studentId) {
+            continue;
+        }
+        $status = (string) ($row['status'] ?? '');
+        if (!in_array($status, [AttendanceCalls::STATUS_ALUNO_MENSALISTA, AttendanceCalls::STATUS_AUTORIZADA_COBRANCA], true)) {
+            continue;
+        }
+        $date = parseAttendanceDate((string) ($row['attendance_date'] ?? ''));
+        if ($date === null) {
+            continue;
+        }
+        $week = MonthlyStudents::weekKey($date);
+        if ($week === '') {
+            continue;
+        }
+        if (!isset($usedByWeek[$week])) {
+            $usedByWeek[$week] = [];
+        }
+        $usedByWeek[$week][$date] = true;
+    }
+
+    $split = MonthlyStudents::splitRequestedDatesByQuota([$attendanceDate], $weeklyDays, $usedByWeek);
+    $overflow = $split['overflow'] ?? [];
+    if (empty($overflow)) {
+        $rows[$targetIndex]['status'] = AttendanceCalls::STATUS_ALUNO_MENSALISTA;
+        $rows[$targetIndex]['reviewed_at'] = date('c');
+        $rows[$targetIndex]['reviewed_by'] = 'admin';
+        $rows[$targetIndex]['review_note'] = 'Aluno mensalista: chamada dentro da franquia semanal.';
+        saveAttendanceRowsOrFail($rows);
+
+        Helpers::json([
+            'ok' => true,
+            'blocked' => true,
+            'item' => $rows[$targetIndex],
+            'message' => 'Aluno mensalista: sem cobrança para essa data.',
+        ]);
+    }
+}
+
+$guardianResult = $client->select(
+    'guardians',
+    'select=id,parent_name,email,parent_phone,parent_document,created_at'
+        . '&student_id=eq.' . urlencode($studentId)
+        . '&order=created_at.desc&limit=200'
+);
+$guardians = (($guardianResult['ok'] ?? false) && is_array($guardianResult['data'] ?? null))
+    ? $guardianResult['data']
+    : [];
+
+$guardian = null;
+foreach ($guardians as $row) {
+    if (!is_array($row)) {
+        continue;
+    }
+    $email = trim((string) ($row['email'] ?? ''));
+    if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $guardian = $row;
+        break;
+    }
+}
+if ($guardian === null && !empty($guardians[0]) && is_array($guardians[0])) {
+    $guardian = $guardians[0];
+}
+
+if (!is_array($guardian) || empty($guardian['id'])) {
+    $rows[$targetIndex]['status'] = AttendanceCalls::STATUS_ERRO_COBRANCA;
+    $rows[$targetIndex]['reviewed_at'] = date('c');
+    $rows[$targetIndex]['reviewed_by'] = 'admin';
+    $rows[$targetIndex]['review_note'] = 'Não foi possível localizar responsável válido para cobrança.';
+    saveAttendanceRowsOrFail($rows);
+
+    Helpers::json([
+        'ok' => false,
+        'item' => $rows[$targetIndex],
+        'error' => 'Sem responsável válido para gerar cobrança.',
+    ], 422);
+}
+
+$insertPayment = $client->insert('payments', [[
+    'guardian_id' => (string) ($guardian['id'] ?? ''),
+    'student_id' => $studentId,
+    'payment_date' => $attendanceDate,
+    'daily_type' => 'emergencial|' . formatDateBr($attendanceDate),
+    'amount' => 97.00,
+    'status' => 'queued',
+    'billing_type' => 'PIX_MANUAL_QUEUE',
+    'asaas_payment_id' => null,
+]]);
+
+if (!($insertPayment['ok'] ?? false) || empty($insertPayment['data'][0])) {
+    $rows[$targetIndex]['status'] = AttendanceCalls::STATUS_ERRO_COBRANCA;
+    $rows[$targetIndex]['reviewed_at'] = date('c');
+    $rows[$targetIndex]['reviewed_by'] = 'admin';
+    $rows[$targetIndex]['review_note'] = 'Falha ao criar cobrança em fila.';
+    saveAttendanceRowsOrFail($rows);
+    Helpers::json([
+        'ok' => false,
+        'item' => $rows[$targetIndex],
+        'error' => 'Falha ao criar cobrança em fila.',
+    ], 500);
+}
+
+$payment = $insertPayment['data'][0];
+$rows[$targetIndex]['status'] = AttendanceCalls::STATUS_AUTORIZADA_COBRANCA;
+$rows[$targetIndex]['queue_payment_id'] = (string) ($payment['id'] ?? '');
+$rows[$targetIndex]['reviewed_at'] = date('c');
+$rows[$targetIndex]['reviewed_by'] = 'admin';
+$rows[$targetIndex]['review_note'] = 'Autorizada pelo admin e cobrança emergencial lançada na fila.';
+saveAttendanceRowsOrFail($rows);
+
+Helpers::json([
+    'ok' => true,
+    'item' => $rows[$targetIndex],
+    'message' => 'Autorizada com sucesso. Cobrança emergencial lançada na fila.',
+]);
+
