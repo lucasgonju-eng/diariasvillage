@@ -421,8 +421,11 @@ if (!empty($exclusionsLog)) {
     .monthly-check-badge{display:inline-block;margin-left:8px;padding:2px 8px;border-radius:999px;background:#0EA5E9;color:#fff;font-size:11px;font-weight:700}
     .monthly-days-wrap{display:flex;gap:12px;flex-wrap:wrap}
     .monthly-days-wrap label{display:flex;gap:6px;align-items:center;padding:6px 10px;border:1px solid #CBD5E1;border-radius:10px;background:#F8FAFC}
-    .office-days-wrap{display:flex;gap:8px;flex-wrap:wrap}
-    .office-days-wrap label{display:flex;gap:6px;align-items:center;padding:6px 10px;border:1px solid #CBD5E1;border-radius:10px;background:#F8FAFC}
+    .office-days-wrap{display:grid;gap:8px}
+    .office-day-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid #CBD5E1;border-radius:10px;background:#F8FAFC}
+    .office-day-label{font-weight:700;color:#0F172A}
+    .office-day-slots{display:flex;gap:8px;flex-wrap:wrap}
+    .office-day-slots label{display:flex;gap:6px;align-items:center;padding:4px 8px;border:1px solid #CBD5E1;border-radius:8px;background:#fff;font-size:12px}
     .office-preview-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
     .office-preview-card{background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:12px}
     .office-preview-card h4{margin:0 0 8px 0;color:#0F172A}
@@ -1148,21 +1151,43 @@ if (!empty($exclusionsLog)) {
             <input id="modular-create-teacher" list="modular-teachers-list" type="text" placeholder="Digite novo professor(a) ou selecione" autocomplete="off" />
           </div>
           <div class="form-group">
-            <label>Hora início</label>
-            <input id="modular-create-start" type="text" placeholder="14:00 ou 15:40" autocomplete="off" />
-          </div>
-          <div class="form-group">
-            <label>Hora fim</label>
-            <input id="modular-create-end" type="text" placeholder="15:00 ou 16:40" autocomplete="off" />
-          </div>
-          <div class="form-group">
-            <label>Dias da semana</label>
+            <label>Grade semanal (dias e horários fixos)</label>
             <div class="office-days-wrap">
-              <label><input type="checkbox" name="modular-create-days" value="1" /> Seg</label>
-              <label><input type="checkbox" name="modular-create-days" value="2" /> Ter</label>
-              <label><input type="checkbox" name="modular-create-days" value="3" /> Qua</label>
-              <label><input type="checkbox" name="modular-create-days" value="4" /> Qui</label>
-              <label><input type="checkbox" name="modular-create-days" value="5" /> Sex</label>
+              <div class="office-day-row">
+                <span class="office-day-label">Segunda-feira</span>
+                <div class="office-day-slots">
+                  <label><input type="checkbox" name="modular-create-week-slot" value="1_1" /> 1º horário (14h)</label>
+                  <label><input type="checkbox" name="modular-create-week-slot" value="1_2" /> 2º horário (15h40)</label>
+                </div>
+              </div>
+              <div class="office-day-row">
+                <span class="office-day-label">Terça-feira</span>
+                <div class="office-day-slots">
+                  <label><input type="checkbox" name="modular-create-week-slot" value="2_1" /> 1º horário (14h)</label>
+                  <label><input type="checkbox" name="modular-create-week-slot" value="2_2" /> 2º horário (15h40)</label>
+                </div>
+              </div>
+              <div class="office-day-row">
+                <span class="office-day-label">Quarta-feira</span>
+                <div class="office-day-slots">
+                  <label><input type="checkbox" name="modular-create-week-slot" value="3_1" /> 1º horário (14h)</label>
+                  <label><input type="checkbox" name="modular-create-week-slot" value="3_2" /> 2º horário (15h40)</label>
+                </div>
+              </div>
+              <div class="office-day-row">
+                <span class="office-day-label">Quinta-feira</span>
+                <div class="office-day-slots">
+                  <label><input type="checkbox" name="modular-create-week-slot" value="4_1" /> 1º horário (14h)</label>
+                  <label><input type="checkbox" name="modular-create-week-slot" value="4_2" /> 2º horário (15h40)</label>
+                </div>
+              </div>
+              <div class="office-day-row">
+                <span class="office-day-label">Sexta-feira</span>
+                <div class="office-day-slots">
+                  <label><input type="checkbox" name="modular-create-week-slot" value="5_1" /> 1º horário (14h)</label>
+                  <label><input type="checkbox" name="modular-create-week-slot" value="5_2" /> 2º horário (15h40)</label>
+                </div>
+              </div>
             </div>
           </div>
           <div class="form-group" style="display:flex;align-items:flex-end;">
@@ -1600,7 +1625,7 @@ if (!empty($exclusionsLog)) {
     window.__monthlyStudents = <?php echo json_encode($monthlyRowsForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
     window.__adminCanApproveAttendance = <?php echo $canAttendanceApprove ? 'true' : 'false'; ?>;
   </script>
-  <script src="/assets/js/admin-dashboard.js?v=53"></script>
+  <script src="/assets/js/admin-dashboard.js?v=54"></script>
   <script>
     (function () {
       function activateTab(name) {

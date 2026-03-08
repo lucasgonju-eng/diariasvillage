@@ -47,20 +47,6 @@ $normalizeSortName = static function (string $name): string {
     return trim($name);
 };
 
-$normalizeTime = static function (string $raw): string {
-    $value = trim($raw);
-    if ($value === '') {
-        return '';
-    }
-    if (preg_match('/^\d{4}$/', $value)) {
-        $value = substr($value, 0, 2) . ':' . substr($value, 2, 2);
-    }
-    if (preg_match('/^\d{2}:\d{2}(?::\d{2})?$/', $value)) {
-        return substr($value, 0, 5);
-    }
-    return '';
-};
-
 $extractTeacherFromDescription = static function (string $description): string {
     if ($description === '') {
         return '';
@@ -282,32 +268,31 @@ if (!$periodStartDate instanceof \DateTimeImmutable) {
 $periodStart = $periodStartDate->format('Y-m-01');
 $periodEnd = $periodStartDate->format('Y-m-t');
 
-$daysInput = $payload['days_of_week'] ?? [];
-if (!is_array($daysInput)) {
-    Helpers::json(['ok' => false, 'error' => 'Dias da semana inválidos.'], 422);
+$weekSlotsInput = $payload['week_slots'] ?? [];
+if (!is_array($weekSlotsInput)) {
+    Helpers::json(['ok' => false, 'error' => 'Grade semanal inválida.'], 422);
 }
-$days = [];
-foreach ($daysInput as $dayRaw) {
-    $day = (int) $dayRaw;
-    if ($day < 1 || $day > 5) {
+$selectedSlots = [];
+foreach ($weekSlotsInput as $slotRaw) {
+    $slotValue = trim((string) $slotRaw);
+    if (!preg_match('/^([1-5])_([12])$/', $slotValue, $match)) {
         continue;
     }
-    $days[$day] = true;
+    $dayOfWeek = (int) ($match[1] ?? 0);
+    $slotIndex = (int) ($match[2] ?? 0);
+    if ($dayOfWeek < 1 || $dayOfWeek > 5 || ($slotIndex !== 1 && $slotIndex !== 2)) {
+        continue;
+    }
+    $selectedSlots[$dayOfWeek . '_' . $slotIndex] = [
+        'day' => $dayOfWeek,
+        'slot' => $slotIndex,
+    ];
 }
-$days = array_map('intval', array_keys($days));
-sort($days);
-if (empty($days)) {
-    Helpers::json(['ok' => false, 'error' => 'Selecione pelo menos um dia útil (Seg a Sex).'], 422);
-}
-
-$timeStart = $normalizeTime((string) ($payload['time_start'] ?? ''));
-$timeEnd = $normalizeTime((string) ($payload['time_end'] ?? ''));
-$isAllowedTime = ($timeStart === '14:00' && $timeEnd === '15:00')
-    || ($timeStart === '15:40' && $timeEnd === '16:40');
-if (!$isAllowedTime) {
+$selectedSlots = array_values($selectedSlots);
+if (empty($selectedSlots)) {
     Helpers::json([
         'ok' => false,
-        'error' => 'Horário inválido. Pelas regras fixas da grade, use apenas 14:00-15:00 ou 15:40-16:40.',
+        'error' => 'Selecione pelo menos um item da grade semanal (dia + 1º/2º horário).',
     ], 422);
 }
 
@@ -388,12 +373,16 @@ if (!($deleteOldSchedules['ok'] ?? false)) {
 }
 
 $schedulePayload = [];
-foreach ($days as $day) {
+foreach ($selectedSlots as $slotInfo) {
+    $day = (int) ($slotInfo['day'] ?? 0);
+    $slot = (int) ($slotInfo['slot'] ?? 0);
+    $start = $slot === 1 ? '14:00:00' : '15:40:00';
+    $end = $slot === 1 ? '15:00:00' : '16:40:00';
     $schedulePayload[] = [
         'oficina_modular_id' => $createdOfficeId,
         'dia_semana' => $day,
-        'hora_inicio' => $timeStart . ':00',
-        'hora_fim' => $timeEnd . ':00',
+        'hora_inicio' => $start,
+        'hora_fim' => $end,
     ];
 }
 

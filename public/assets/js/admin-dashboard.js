@@ -69,9 +69,7 @@ const modularCreateMonthInput = document.querySelector('#modular-create-month');
 const modularCreateYearInput = document.querySelector('#modular-create-year');
 const modularCreateNameInput = document.querySelector('#modular-create-name');
 const modularCreateTeacherInput = document.querySelector('#modular-create-teacher');
-const modularCreateStartInput = document.querySelector('#modular-create-start');
-const modularCreateEndInput = document.querySelector('#modular-create-end');
-const modularCreateDayInputs = document.querySelectorAll('input[name="modular-create-days"]');
+const modularCreateWeekSlotInputs = document.querySelectorAll('input[name="modular-create-week-slot"]');
 const modularCreateButton = document.querySelector('#modular-create-btn');
 const modularCreateMessage = document.querySelector('#modular-create-message');
 const modularPreviewDayInput = document.querySelector('#modular-preview-day');
@@ -1281,17 +1279,6 @@ function formatScheduleList(office) {
     .join(', ');
 }
 
-function normalizeOfficeTimeInput(rawValue) {
-  const value = String(rawValue || '').trim();
-  if (!value) return '';
-  if (/^\d{4}$/.test(value)) {
-    return `${value.slice(0, 2)}:${value.slice(2, 4)}`;
-  }
-  const match = /^(\d{2}):(\d{2})(?::\d{2})?$/.exec(value);
-  if (!match) return '';
-  return `${match[1]}:${match[2]}`;
-}
-
 function renderModularOfficeAlunoPreview() {
   if (!modularPreviewAluno1400 || !modularPreviewAluno1540) return;
   const selectedDay = Number(modularPreviewDayInput?.value || 1);
@@ -1445,12 +1432,10 @@ async function createModularOffice() {
     return;
   }
   const period = getSelectedModularPeriod();
-  const timeStart = normalizeOfficeTimeInput(modularCreateStartInput?.value);
-  const timeEnd = normalizeOfficeTimeInput(modularCreateEndInput?.value);
-  const selectedDays = [...modularCreateDayInputs]
+  const selectedWeekSlots = [...modularCreateWeekSlotInputs]
     .filter((input) => input.checked)
-    .map((input) => Number(input.value))
-    .filter((value) => Number.isInteger(value) && value >= 1 && value <= 5);
+    .map((input) => String(input.value || '').trim())
+    .filter((value) => /^\d_[12]$/.test(value));
 
   if (!name) {
     setModularOfficeMessage('Informe o nome da Oficina Modular.', true);
@@ -1460,18 +1445,8 @@ async function createModularOffice() {
     setModularOfficeMessage('Informe o nome do(a) professor(a).', true);
     return;
   }
-  if (!selectedDays.length) {
-    setModularOfficeMessage('Selecione ao menos um dia útil (Seg a Sex).', true);
-    return;
-  }
-  const allowedSlot =
-    (timeStart === '14:00' && timeEnd === '15:00') ||
-    (timeStart === '15:40' && timeEnd === '16:40');
-  if (!allowedSlot) {
-    setModularOfficeMessage(
-      'Horário inválido. Pelas regras fixas da grade, use apenas 14:00-15:00 ou 15:40-16:40.',
-      true,
-    );
+  if (!selectedWeekSlots.length) {
+    setModularOfficeMessage('Selecione pelo menos um dia/horário semanal da oficina.', true);
     return;
   }
 
@@ -1489,9 +1464,7 @@ async function createModularOffice() {
         year: period.year,
         name,
         teacher_name: teacherName,
-        time_start: timeStart,
-        time_end: timeEnd,
-        days_of_week: selectedDays,
+        week_slots: selectedWeekSlots,
       }),
     });
     const data = await res.json();
@@ -1505,9 +1478,7 @@ async function createModularOffice() {
     renderModularOfficePreviews();
     if (modularCreateNameInput) modularCreateNameInput.value = '';
     if (modularCreateTeacherInput) modularCreateTeacherInput.value = '';
-    if (modularCreateStartInput) modularCreateStartInput.value = '';
-    if (modularCreateEndInput) modularCreateEndInput.value = '';
-    modularCreateDayInputs.forEach((input) => {
+    modularCreateWeekSlotInputs.forEach((input) => {
       input.checked = false;
     });
     setModularOfficeMessage(data?.message || 'Oficina modular criada com sucesso.');
