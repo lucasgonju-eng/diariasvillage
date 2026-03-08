@@ -591,7 +591,7 @@ if (!empty($exclusionsLog)) {
 
       <section id="tab-chamada" class="<?php echo $activeTab === 'chamada' ? '' : 'hidden'; ?>">
         <h2>Chamada</h2>
-        <p class="muted">Secretaria e admin lançam presença por data. Somente o admin autoriza e, após checagens, a cobrança emergencial vai para a fila.</p>
+        <p class="muted">Secretaria e admin montam a lista do dia e finalizam em lote no botão Fechar dia de chamada. Somente o admin autoriza e, após checagens, a cobrança emergencial vai para a fila.</p>
         <datalist id="attendance-students-list"></datalist>
         <datalist id="attendance-offices-list"></datalist>
         <div class="charge-fields" style="margin-bottom:12px;">
@@ -608,10 +608,30 @@ if (!empty($exclusionsLog)) {
             <input id="attendance-office" type="text" list="attendance-offices-list" placeholder="Autocomplete do mês corrente" autocomplete="off" />
           </div>
           <div class="form-group" style="display:flex;align-items:flex-end;gap:8px;">
-            <button id="attendance-add-btn" class="btn btn-primary btn-sm" type="button">Lançar chamada</button>
+            <button id="attendance-add-btn" class="btn btn-ghost btn-sm" type="button">Adicionar aluno ao dia</button>
+            <button id="attendance-close-day-btn" class="btn btn-primary btn-sm" type="button">Fechar dia de chamada</button>
           </div>
         </div>
+        <h3 style="margin:8px 0;">Lista do dia (pré-fechamento)</h3>
+        <div style="overflow-x:auto;margin-bottom:12px;">
+          <table class="admin-table">
+            <thead>
+              <tr style="text-align:left;">
+                <th>Data</th>
+                <th>Aluno</th>
+                <th>Oficina</th>
+                <th>Ação</th>
+              </tr>
+            </thead>
+            <tbody id="attendance-day-list">
+              <tr>
+                <td colspan="4">Nenhum aluno adicionado para o fechamento do dia.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <div id="attendance-message" class="charge-message"></div>
+        <h3 style="margin:8px 0;">Histórico de chamadas</h3>
         <div style="overflow-x:auto;">
           <table class="admin-table">
             <thead>

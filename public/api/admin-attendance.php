@@ -52,6 +52,25 @@ function saveAttendanceRowsOrFail(array $rows): void
     }
 }
 
+function normalizeAttendanceKey(string $value): string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return '';
+    }
+    if (function_exists('mb_strtoupper')) {
+        $value = mb_strtoupper($value, 'UTF-8');
+    } else {
+        $value = strtoupper($value);
+    }
+    $translit = iconv('UTF-8', 'ASCII//TRANSLIT', $value);
+    if ($translit !== false) {
+        $value = $translit;
+    }
+    $value = preg_replace('/[^A-Z0-9]+/', '', $value) ?? '';
+    return trim($value);
+}
+
 if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
     Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
 }
@@ -85,6 +104,192 @@ if (!is_array($payload)) {
 $action = strtolower(trim((string) ($payload['action'] ?? 'create')));
 
 $rows = AttendanceCalls::load();
+
+if ($action === 'close_day') {
+    $attendanceDate = parseAttendanceDate((string) ($payload['attendance_date'] ?? date('Y-m-d')));
+    if ($attendanceDate === null) {
+        Helpers::json(['ok' => false, 'error' => 'Data inválida para fechamento da chamada.'], 422);
+    }
+    $entries = $payload['entries'] ?? [];
+    if (!is_array($entries) || empty($entries)) {
+        Helpers::json(['ok' => false, 'error' => 'Nenhum aluno informado para fechar o dia.'], 422);
+    }
+
+    $createdItems = [];
+    $blockedItems = [];
+    $skippedCount = 0;
+    $seen = [];
+
+    foreach ($entries as $entry) {
+        if (!is_array($entry)) {
+            $skippedCount++;
+            continue;
+        }
+        $studentIdInput = trim((string) ($entry['student_id'] ?? ''));
+        $studentNameInput = trim((string) ($entry['student_name'] ?? ''));
+        if ($studentIdInput === '' && $studentNameInput === '') {
+            $skippedCount++;
+            continue;
+        }
+        $entryKey = $studentIdInput !== ''
+            ? 'id:' . $studentIdInput
+            : 'name:' . normalizeAttendanceKey($studentNameInput);
+        if ($entryKey === '' || isset($seen[$entryKey])) {
+            $skippedCount++;
+            continue;
+        }
+        $seen[$entryKey] = true;
+
+        if ($studentIdInput !== '') {
+            $studentResult = $client->select(
+                'students',
+                'select=id,name,enrollment&id=eq.' . urlencode($studentIdInput) . '&limit=1'
+            );
+        } else {
+            $studentResult = $client->select(
+                'students',
+                'select=id,name,enrollment&name=eq.' . urlencode($studentNameInput) . '&limit=1'
+            );
+        }
+        if (!($studentResult['ok'] ?? false) || empty($studentResult['data'][0])) {
+            $blockedItems[] = [
+                'student_name' => $studentNameInput !== '' ? $studentNameInput : '-',
+                'error' => 'Aluno não encontrado no banco.',
+            ];
+            continue;
+        }
+        $student = $studentResult['data'][0];
+        $studentId = trim((string) ($student['id'] ?? ''));
+        $studentName = trim((string) ($student['name'] ?? $studentNameInput));
+        if ($studentId === '' || $studentName === '') {
+            $blockedItems[] = [
+                'student_name' => $studentNameInput !== '' ? $studentNameInput : '-',
+                'error' => 'Aluno inválido para chamada.',
+            ];
+            continue;
+        }
+
+        $duplicateFound = false;
+        foreach ($rows as $existing) {
+            if (!is_array($existing)) {
+                continue;
+            }
+            if ((string) ($existing['student_id'] ?? '') !== $studentId) {
+                continue;
+            }
+            if ((string) ($existing['attendance_date'] ?? '') !== $attendanceDate) {
+                continue;
+            }
+            $status = (string) ($existing['status'] ?? '');
+            if ($status !== AttendanceCalls::STATUS_REJEITADA) {
+                $duplicateFound = true;
+                break;
+            }
+        }
+        if ($duplicateFound) {
+            $blockedItems[] = [
+                'student_name' => $studentName,
+                'error' => 'Aluno já lançado na chamada para essa data.',
+            ];
+            continue;
+        }
+
+        $officeId = trim((string) ($entry['office_id'] ?? ''));
+        $officeName = trim((string) ($entry['office_name'] ?? ''));
+        $officeCode = '';
+        if ($officeId !== '') {
+            $officeResult = $client->select(
+                'oficina_modular',
+                'select=id,nome,codigo,ativa&id=eq.' . urlencode($officeId) . '&limit=1'
+            );
+            if (!($officeResult['ok'] ?? false) || empty($officeResult['data'][0])) {
+                $blockedItems[] = [
+                    'student_name' => $studentName,
+                    'error' => 'Oficina informada não encontrada.',
+                ];
+                continue;
+            }
+            $officeRow = $officeResult['data'][0];
+            if (($officeRow['ativa'] ?? true) === false) {
+                $blockedItems[] = [
+                    'student_name' => $studentName,
+                    'error' => 'Oficina informada está inativa.',
+                ];
+                continue;
+            }
+            $officeId = trim((string) ($officeRow['id'] ?? ''));
+            $officeName = trim((string) ($officeRow['nome'] ?? $officeName));
+            $officeCode = trim((string) ($officeRow['codigo'] ?? ''));
+        }
+
+        $newRow = [
+            'id' => AttendanceCalls::createId(),
+            'attendance_date' => $attendanceDate,
+            'student_id' => $studentId,
+            'student_name' => $studentName,
+            'office_id' => $officeId,
+            'office_name' => $officeName,
+            'office_code' => $officeCode,
+            'status' => AttendanceCalls::STATUS_EM_REVISAO,
+            'created_at' => date('c'),
+            'created_by_role' => (string) ($_SESSION['admin_user'] ?? ''),
+            'created_by_user' => (string) ($_SESSION['admin_user'] ?? ''),
+            'reviewed_at' => '',
+            'reviewed_by' => '',
+            'review_note' => '',
+            'queue_payment_id' => '',
+            'warning' => '',
+        ];
+        $rows[] = $newRow;
+        $createdItems[] = $newRow;
+    }
+
+    if (!empty($createdItems)) {
+        saveAttendanceRowsOrFail($rows);
+    }
+
+    $emailWarning = '';
+    if (!empty($createdItems)) {
+        $listHtml = '<ul>';
+        foreach ($createdItems as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $officeLabel = trim((string) ($item['office_name'] ?? ''));
+            if ($officeLabel === '') {
+                $officeLabel = 'Não informada';
+            }
+            $listHtml .= '<li>'
+                . htmlspecialchars((string) ($item['student_name'] ?? '-'), ENT_QUOTES, 'UTF-8')
+                . ' • Oficina: '
+                . htmlspecialchars($officeLabel, ENT_QUOTES, 'UTF-8')
+                . '</li>';
+        }
+        $listHtml .= '</ul>';
+        $mailHtml = '<p>Fechamento do dia de chamada realizado no administrativo.</p>'
+            . '<p><strong>Data:</strong> ' . htmlspecialchars(formatDateBr($attendanceDate), ENT_QUOTES, 'UTF-8') . '<br>'
+            . '<strong>Lançado por:</strong> ' . htmlspecialchars((string) ($_SESSION['admin_user'] ?? 'secretaria'), ENT_QUOTES, 'UTF-8') . '<br>'
+            . '<strong>Total incluído:</strong> ' . count($createdItems) . '</p>'
+            . $listHtml
+            . '<p>Acesse o painel administrativo para revisar e autorizar.</p>';
+        $mailer = new Mailer();
+        $mailResult = $mailer->send('admin@village.einsteinhub.co', 'Fechamento do dia de chamada • Diárias Village', $mailHtml);
+        if (!($mailResult['ok'] ?? false)) {
+            $emailWarning = 'Fechamento salvo, mas não foi possível enviar e-mail ao admin.';
+        }
+    }
+
+    Helpers::json([
+        'ok' => true,
+        'attendance_date' => $attendanceDate,
+        'created_count' => count($createdItems),
+        'blocked_count' => count($blockedItems),
+        'skipped_count' => $skippedCount,
+        'created_items' => $createdItems,
+        'blocked_items' => $blockedItems,
+        'email_warning' => $emailWarning !== '' ? $emailWarning : null,
+    ]);
+}
 
 if ($action === 'create') {
     $attendanceDate = parseAttendanceDate((string) ($payload['attendance_date'] ?? date('Y-m-d')));

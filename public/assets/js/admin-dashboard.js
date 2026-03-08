@@ -51,8 +51,10 @@ const attendanceDateInput = document.querySelector('#attendance-date');
 const attendanceStudentInput = document.querySelector('#attendance-student');
 const attendanceOfficeInput = document.querySelector('#attendance-office');
 const attendanceAddButton = document.querySelector('#attendance-add-btn');
+const attendanceCloseDayButton = document.querySelector('#attendance-close-day-btn');
 const attendanceMessage = document.querySelector('#attendance-message');
 const attendanceTbody = document.querySelector('#attendance-tbody');
+const attendanceDayList = document.querySelector('#attendance-day-list');
 const attendanceStudentsList = document.querySelector('#attendance-students-list');
 const attendanceOfficesList = document.querySelector('#attendance-offices-list');
 
@@ -70,6 +72,7 @@ const attendanceOfficeById = new Map();
 const attendanceOfficeByLabel = new Map();
 let attendanceLoaded = false;
 let attendanceOfficesLoaded = false;
+let attendanceDayQueue = [];
 
 function setActiveTab(name) {
   if (
@@ -1178,7 +1181,32 @@ async function postAttendanceAction(payload) {
   return { res, data };
 }
 
-async function createAttendanceCall() {
+function renderAttendanceDayQueue() {
+  if (!attendanceDayList) return;
+  if (!attendanceDayQueue.length) {
+    attendanceDayList.innerHTML = '<tr><td colspan="4">Nenhum aluno adicionado para o fechamento do dia.</td></tr>';
+    return;
+  }
+  attendanceDayList.innerHTML = attendanceDayQueue
+    .map((entry, index) => {
+      const officeLabel = entry.office_name
+        ? `${entry.office_name}${entry.office_code ? ` (${entry.office_code})` : ''}`
+        : '-';
+      return `
+        <tr>
+          <td>${escapeHtml(formatDateBR(entry.attendance_date || '-'))}</td>
+          <td>${escapeHtml(entry.student_name || '-')}</td>
+          <td>${escapeHtml(officeLabel)}</td>
+          <td>
+            <button class="btn btn-danger btn-sm js-attendance-queue-remove" type="button" data-index="${index}">Remover</button>
+          </td>
+        </tr>
+      `;
+    })
+    .join('');
+}
+
+function addAttendanceEntryToQueue() {
   if (!attendanceDateInput || !attendanceStudentInput) return;
   const attendanceDate = String(attendanceDateInput.value || '').trim();
   if (!attendanceDate) {
@@ -1203,35 +1231,91 @@ async function createAttendanceCall() {
     setAttendanceMessage(officeResolved.error || 'Oficina inválida.', true);
     return;
   }
+  const office = officeResolved.officeId ? attendanceOfficeById.get(officeResolved.officeId) : null;
 
-  if (attendanceAddButton) {
-    attendanceAddButton.setAttribute('disabled', 'disabled');
+  const alreadyInQueue = attendanceDayQueue.some(
+    (entry) =>
+      String(entry.attendance_date || '') === attendanceDate && String(entry.student_id || '') === String(student.id || ''),
+  );
+  if (alreadyInQueue) {
+    setAttendanceMessage('Aluno já adicionado na lista deste dia.', true);
+    return;
   }
-  setAttendanceMessage('Lançando chamada...');
+
+  attendanceDayQueue.push({
+    attendance_date: attendanceDate,
+    student_id: String(student.id || ''),
+    student_name: String(student.name || studentName),
+    office_id: String(officeResolved.officeId || ''),
+    office_name: String(officeResolved.officeName || ''),
+    office_code: String(office?.code || ''),
+  });
+  renderAttendanceDayQueue();
+  attendanceStudentInput.value = '';
+  if (attendanceOfficeInput) attendanceOfficeInput.value = '';
+  setAttendanceMessage('Aluno adicionado na lista do dia.');
+}
+
+async function closeAttendanceDay() {
+  if (!attendanceDateInput) return;
+  const attendanceDate = String(attendanceDateInput.value || '').trim();
+  if (!attendanceDate) {
+    setAttendanceMessage('Informe a data da chamada.', true);
+    return;
+  }
+  if (!attendanceDayQueue.length) {
+    setAttendanceMessage('Adicione pelo menos um aluno antes de fechar o dia.', true);
+    return;
+  }
+
+  const mixedDate = attendanceDayQueue.find(
+    (entry) => String(entry.attendance_date || '') !== attendanceDate,
+  );
+  if (mixedDate) {
+    setAttendanceMessage('A lista contém alunos de outra data. Ajuste a data ou remova os itens.', true);
+    return;
+  }
+
+  const confirmed = await showAdminConfirm(
+    `Fechar dia de chamada com ${attendanceDayQueue.length} aluno(s) para ${formatDateBR(attendanceDate)}?`,
+    { title: 'Fechar dia de chamada', confirmText: 'Fechar dia' },
+  );
+  if (!confirmed) return;
+
+  if (attendanceCloseDayButton) attendanceCloseDayButton.setAttribute('disabled', 'disabled');
+  if (attendanceAddButton) attendanceAddButton.setAttribute('disabled', 'disabled');
+  setAttendanceMessage('Fechando dia de chamada...');
   try {
     const { res, data } = await postAttendanceAction({
-      action: 'create',
+      action: 'close_day',
       attendance_date: attendanceDate,
-      student_id: student.id,
-      student_name: student.name,
-      office_id: officeResolved.officeId,
-      office_name: officeResolved.officeName,
+      entries: attendanceDayQueue.map((entry) => ({
+        student_id: entry.student_id,
+        student_name: entry.student_name,
+        office_id: entry.office_id,
+        office_name: entry.office_name,
+      })),
     });
     if (!res.ok || !data?.ok) {
-      setAttendanceMessage(data?.error || 'Falha ao lançar chamada.', true);
+      setAttendanceMessage(data?.error || 'Falha ao fechar dia de chamada.', true);
       return;
     }
-    attendanceStudentInput.value = '';
-    if (attendanceOfficeInput) attendanceOfficeInput.value = '';
-    const warning = data.warning ? ` Aviso: ${data.warning}` : '';
-    setAttendanceMessage(`Chamada lançada com sucesso.${warning}`);
+    const created = Number(data.created_count || 0);
+    const blocked = Number(data.blocked_count || 0);
+    const skipped = Number(data.skipped_count || 0);
+    const emailWarning = data.email_warning ? ` Aviso: ${data.email_warning}` : '';
+    setAttendanceMessage(
+      `Dia fechado. Criadas: ${created}. Bloqueadas: ${blocked}. Ignoradas: ${skipped}.${emailWarning}`,
+      blocked > 0,
+    );
+    attendanceDayQueue = [];
+    renderAttendanceDayQueue();
     await loadAttendanceCalls(true);
   } catch {
-    setAttendanceMessage('Falha ao lançar chamada.', true);
+    setAttendanceMessage('Falha ao fechar dia de chamada.', true);
   } finally {
-    if (attendanceAddButton) {
-      attendanceAddButton.removeAttribute('disabled');
-    }
+    if (attendanceCloseDayButton) attendanceCloseDayButton.removeAttribute('disabled');
+    if (attendanceAddButton) attendanceAddButton.removeAttribute('disabled');
   }
 }
 
@@ -1322,7 +1406,7 @@ if (studentInput) {
 
 if (attendanceAddButton) {
   attendanceAddButton.addEventListener('click', () => {
-    createAttendanceCall();
+    addAttendanceEntryToQueue();
   });
 }
 
@@ -1330,8 +1414,28 @@ if (attendanceStudentInput) {
   attendanceStudentInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
-      createAttendanceCall();
+      addAttendanceEntryToQueue();
     }
+  });
+}
+
+if (attendanceCloseDayButton) {
+  attendanceCloseDayButton.addEventListener('click', () => {
+    closeAttendanceDay();
+  });
+}
+
+if (attendanceDayList) {
+  attendanceDayList.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const removeButton = target.closest('.js-attendance-queue-remove');
+    if (!removeButton) return;
+    const index = Number(removeButton.getAttribute('data-index') || -1);
+    if (Number.isNaN(index) || index < 0 || index >= attendanceDayQueue.length) return;
+    attendanceDayQueue.splice(index, 1);
+    renderAttendanceDayQueue();
+    setAttendanceMessage('Aluno removido da lista do dia.');
   });
 }
 
@@ -2906,6 +3010,7 @@ if (viewUserButton && viewUserStudentInput) {
 const initialTab = document.body?.dataset?.activeTab || 'charges';
 rebuildMonthlyMaps();
 renderMonthlyTable();
+renderAttendanceDayQueue();
 setActiveTab(initialTab);
 if (initialTab === 'inadimplentes') {
   maybeAlertInadimplentesDuplicates();
