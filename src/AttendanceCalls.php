@@ -196,12 +196,16 @@ final class AttendanceCalls
         if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $raw)) {
             return $raw;
         }
-        if (preg_match('/^\d{2}\/\d{2}\/\d{4}$/', $raw)) {
+        if (preg_match('/^\d{2}\/\d{2}\/\d{2,4}$/', $raw)) {
             [$day, $month, $year] = explode('/', $raw);
-            if (!checkdate((int) $month, (int) $day, (int) $year)) {
+            $yearInt = (int) $year;
+            if ($yearInt < 100) {
+                $yearInt += 2000;
+            }
+            if (!checkdate((int) $month, (int) $day, $yearInt)) {
                 return null;
             }
-            return sprintf('%04d-%02d-%02d', (int) $year, (int) $month, (int) $day);
+            return sprintf('%04d-%02d-%02d', $yearInt, (int) $month, (int) $day);
         }
         return null;
     }

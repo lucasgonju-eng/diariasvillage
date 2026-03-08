@@ -302,9 +302,10 @@ function formatCurrency(value) {
 
 function formatDateBR(value) {
   if (!value) return '-';
-  const isoOnlyDate = String(value).trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(isoOnlyDate)) {
-    const [year, month, day] = isoOnlyDate.split('-');
+  const raw = String(value).trim();
+  const isoPrefix = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
+  if (isoPrefix) {
+    const [, year, month, day] = isoPrefix;
     return `${day}/${month}/${year}`;
   }
   const date = new Date(value);
@@ -1128,12 +1129,15 @@ function renderAttendanceRows(items) {
       if (item.reviewed_at) reviewParts.push(formatDateTimeBR(item.reviewed_at));
       const reviewText = reviewParts.length ? reviewParts.join(' • ') : '-';
       const canReview = adminCanApproveAttendance && String(item.status || '') === 'em_revisao';
-      const actions = canReview
-        ? `<button class="btn btn-primary btn-sm js-attendance-approve" type="button" data-id="${escapeHtml(item.id || '')}">Autorizar</button>
-           <button class="btn btn-danger btn-sm js-attendance-reject" type="button" data-id="${escapeHtml(item.id || '')}">Rejeitar</button>`
-        : '-';
+      const actionParts = [];
+      if (canReview) {
+        actionParts.push(`<button class="btn btn-primary btn-sm js-attendance-approve" type="button" data-id="${escapeHtml(item.id || '')}">Autorizar</button>`);
+        actionParts.push(`<button class="btn btn-danger btn-sm js-attendance-reject" type="button" data-id="${escapeHtml(item.id || '')}">Rejeitar</button>`);
+      }
+      actionParts.push(`<button class="btn btn-primary btn-sm js-attendance-edit" type="button" data-id="${escapeHtml(item.id || '')}" data-date="${escapeHtml(item.attendance_date || '')}">Editar</button>`);
+      const actions = actionParts.join('');
       return `
-        <tr data-attendance-id="${escapeHtml(item.id || '')}">
+        <tr data-attendance-id="${escapeHtml(item.id || '')}" data-attendance-date="${escapeHtml(item.attendance_date || '')}">
           <td>${escapeHtml(formatDateBR(item.attendance_date || '-'))}</td>
           <td>${escapeHtml(item.student_name || '-')}</td>
           <td>${escapeHtml(office)}</td>
@@ -1357,11 +1361,44 @@ async function handleAttendanceAction(event) {
   if (!(target instanceof HTMLElement)) return;
   const approveButton = target.closest('.js-attendance-approve');
   const rejectButton = target.closest('.js-attendance-reject');
-  if (!approveButton && !rejectButton) return;
+  const editButton = target.closest('.js-attendance-edit');
+  if (!approveButton && !rejectButton && !editButton) return;
 
-  const actionButton = approveButton || rejectButton;
+  const actionButton = approveButton || rejectButton || editButton;
   const id = actionButton?.getAttribute('data-id') || '';
   if (!id) return;
+
+  if (editButton) {
+    const currentRaw = String(editButton.getAttribute('data-date') || '').trim();
+    const currentLabel = formatDateBR(currentRaw || '');
+    const typed = window.prompt(
+      'Informe a nova Data Day Use (DD/MM/AAAA ou AAAA-MM-DD):',
+      currentLabel && currentLabel !== '-' ? currentLabel : '',
+    );
+    if (typed === null) return;
+    const newDate = String(typed || '').trim();
+    if (!newDate) {
+      setAttendanceMessage('Informe uma data válida para edição.', true);
+      return;
+    }
+
+    actionButton.setAttribute('disabled', 'disabled');
+    setAttendanceMessage('Atualizando Data Day Use...');
+    try {
+      const { res, data } = await postAttendanceAction({ action: 'edit', id, attendance_date: newDate });
+      if (!res.ok || !data?.ok) {
+        setAttendanceMessage(data?.error || 'Falha ao editar Data Day Use.', true);
+        return;
+      }
+      setAttendanceMessage(data?.message || 'Data Day Use atualizada.');
+      await loadAttendanceCalls(true);
+    } catch {
+      setAttendanceMessage('Falha ao editar Data Day Use.', true);
+    } finally {
+      actionButton.removeAttribute('disabled');
+    }
+    return;
+  }
 
   if (approveButton) {
     actionButton.setAttribute('disabled', 'disabled');

@@ -312,6 +312,89 @@ if ($action === 'close_day') {
     ]);
 }
 
+if ($action === 'edit') {
+    $id = trim((string) ($payload['id'] ?? ''));
+    if ($id === '') {
+        Helpers::json(['ok' => false, 'error' => 'ID inválido para edição da chamada.'], 422);
+    }
+    $newDate = parseAttendanceDate((string) ($payload['attendance_date'] ?? ''));
+    if ($newDate === null) {
+        Helpers::json(['ok' => false, 'error' => 'Data Day Use inválida. Use DD/MM/AAAA ou AAAA-MM-DD.'], 422);
+    }
+
+    $targetIndex = null;
+    foreach ($rows as $idx => $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        if ((string) ($row['id'] ?? '') === $id) {
+            $targetIndex = $idx;
+            break;
+        }
+    }
+    if ($targetIndex === null) {
+        Helpers::json(['ok' => false, 'error' => 'Chamada não encontrada.'], 404);
+    }
+
+    $target = $rows[$targetIndex];
+    $oldDate = parseAttendanceDate((string) ($target['attendance_date'] ?? ''));
+    if ($oldDate === null) {
+        $oldDate = (string) ($target['attendance_date'] ?? '');
+    }
+    if ($oldDate === $newDate) {
+        Helpers::json(['ok' => true, 'item' => $target, 'message' => 'Data Day Use já está correta.']);
+    }
+
+    $studentId = trim((string) ($target['student_id'] ?? ''));
+    foreach ($rows as $checkRow) {
+        if (!is_array($checkRow)) {
+            continue;
+        }
+        if ((string) ($checkRow['id'] ?? '') === $id) {
+            continue;
+        }
+        if ($studentId === '' || (string) ($checkRow['student_id'] ?? '') !== $studentId) {
+            continue;
+        }
+        if ((string) ($checkRow['attendance_date'] ?? '') !== $newDate) {
+            continue;
+        }
+        if ((string) ($checkRow['status'] ?? '') !== AttendanceCalls::STATUS_REJEITADA) {
+            Helpers::json([
+                'ok' => false,
+                'error' => 'Já existe chamada ativa para esse aluno na nova Data Day Use.',
+            ], 409);
+        }
+    }
+
+    $rows[$targetIndex]['attendance_date'] = $newDate;
+    $rows[$targetIndex]['reviewed_at'] = date('c');
+    $rows[$targetIndex]['reviewed_by'] = (string) ($_SESSION['admin_user'] ?? '');
+    $rows[$targetIndex]['review_note'] = 'Data Day Use ajustada manualmente de '
+        . formatDateBr((string) $oldDate) . ' para ' . formatDateBr($newDate) . '.';
+
+    $updatedPayment = false;
+    $queuePaymentId = trim((string) ($rows[$targetIndex]['queue_payment_id'] ?? ''));
+    if ($queuePaymentId !== '') {
+        $updatePayment = $client->update('payments', 'id=eq.' . urlencode($queuePaymentId), [
+            'payment_date' => $newDate,
+            'daily_type' => 'emergencial|' . formatDateBr($newDate),
+        ]);
+        $updatedPayment = (bool) ($updatePayment['ok'] ?? false);
+    }
+
+    saveAttendanceRowsOrFail($rows);
+
+    Helpers::json([
+        'ok' => true,
+        'item' => $rows[$targetIndex],
+        'updated_payment' => $updatedPayment,
+        'message' => $updatedPayment
+            ? 'Data Day Use atualizada na chamada e na cobrança vinculada.'
+            : 'Data Day Use atualizada na chamada.',
+    ]);
+}
+
 if ($action === 'create') {
     $attendanceDate = parseAttendanceDate((string) ($payload['attendance_date'] ?? date('Y-m-d')));
     if ($attendanceDate === null) {
