@@ -45,6 +45,27 @@ function formatDateBr(string $isoDate): string
     return date('d/m/Y', $time);
 }
 
+/**
+ * @param array<int, string> $isoDates
+ */
+function formatDateListBr(array $isoDates): string
+{
+    $dates = [];
+    foreach ($isoDates as $date) {
+        $iso = parseAttendanceDate((string) $date);
+        if ($iso === null) {
+            continue;
+        }
+        $dates[$iso] = true;
+    }
+    $keys = array_keys($dates);
+    sort($keys);
+    if (empty($keys)) {
+        return '-';
+    }
+    return implode(', ', array_map(static fn($iso) => formatDateBr((string) $iso), $keys));
+}
+
 function saveAttendanceRowsOrFail(array $rows): void
 {
     if (!AttendanceCalls::save($rows)) {
@@ -543,6 +564,7 @@ if ($hasPaidSameDate || $hasOpenSameDate) {
     Helpers::json([
         'ok' => true,
         'blocked' => true,
+        'blocked_reason' => $hasPaidSameDate ? 'already_paid' : 'already_open',
         'item' => $rows[$targetIndex],
         'message' => $hasPaidSameDate
             ? 'Bloqueado: esta diária já foi paga no SaaS.'
@@ -589,17 +611,37 @@ if (is_array($plan) && in_array((int) ($plan['weekly_days'] ?? 0), [2, 3, 4, 5],
     $split = MonthlyStudents::splitRequestedDatesByQuota([$attendanceDate], $weeklyDays, $usedByWeek);
     $overflow = $split['overflow'] ?? [];
     if (empty($overflow)) {
+        $weekKey = MonthlyStudents::weekKey($attendanceDate);
+        $usedBefore = [];
+        if ($weekKey !== '' && isset($usedByWeek[$weekKey]) && is_array($usedByWeek[$weekKey])) {
+            $usedBefore = array_keys($usedByWeek[$weekKey]);
+        }
+        $usedWithCall = array_values(array_unique(array_merge($usedBefore, [$attendanceDate])));
+        sort($usedWithCall);
+        $remaining = max(0, $weeklyDays - count($usedWithCall));
+
         $rows[$targetIndex]['status'] = AttendanceCalls::STATUS_ALUNO_MENSALISTA;
         $rows[$targetIndex]['reviewed_at'] = date('c');
         $rows[$targetIndex]['reviewed_by'] = 'admin';
-        $rows[$targetIndex]['review_note'] = 'Aluno mensalista: chamada dentro da franquia semanal.';
+        $rows[$targetIndex]['review_note'] = 'Aluno mensalista (' . $weeklyDays
+            . ' dias/semana). Datas registradas na semana: '
+            . formatDateListBr($usedWithCall)
+            . '. Saldo restante: ' . $remaining . ' dia(s).';
         saveAttendanceRowsOrFail($rows);
 
         Helpers::json([
             'ok' => true,
             'blocked' => true,
+            'blocked_reason' => 'monthly_covered',
             'item' => $rows[$targetIndex],
-            'message' => 'Aluno mensalista: sem cobrança para essa data.',
+            'message' => 'Aluno mensalista: sem cobrança para essa data. Datas da semana: ' . formatDateListBr($usedWithCall),
+            'monthly' => [
+                'weekly_days' => $weeklyDays,
+                'attendance_date' => $attendanceDate,
+                'week_key' => $weekKey,
+                'used_dates' => $usedWithCall,
+                'remaining_days' => $remaining,
+            ],
         ]);
     }
 }

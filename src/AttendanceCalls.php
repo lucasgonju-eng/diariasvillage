@@ -97,6 +97,30 @@ final class AttendanceCalls
         }
 
         usort($rows, static function (array $a, array $b): int {
+            $normalize = static function (string $value): string {
+                $value = trim($value);
+                if ($value === '') {
+                    return '';
+                }
+                if (function_exists('mb_strtoupper')) {
+                    $value = mb_strtoupper($value, 'UTF-8');
+                } else {
+                    $value = strtoupper($value);
+                }
+                $translit = iconv('UTF-8', 'ASCII//TRANSLIT', $value);
+                if ($translit !== false) {
+                    $value = $translit;
+                }
+                $value = preg_replace('/[^A-Z0-9]+/', '', $value) ?? '';
+                return trim($value);
+            };
+
+            $aName = $normalize((string) ($a['student_name'] ?? ''));
+            $bName = $normalize((string) ($b['student_name'] ?? ''));
+            $byName = strcmp($aName, $bName);
+            if ($byName !== 0) {
+                return $byName;
+            }
             $byDate = strcmp((string) ($b['attendance_date'] ?? ''), (string) ($a['attendance_date'] ?? ''));
             if ($byDate !== 0) {
                 return $byDate;

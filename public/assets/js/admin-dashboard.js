@@ -1058,6 +1058,16 @@ function attendanceStatusLabel(status) {
   return map[String(status || '').trim()] || status || '-';
 }
 
+function compareByStudentName(a, b) {
+  const aName = normalizeSearchText(a?.student_name || a?.name || '');
+  const bName = normalizeSearchText(b?.student_name || b?.name || '');
+  const byName = aName.localeCompare(bName, 'pt-BR');
+  if (byName !== 0) return byName;
+  const aDate = String(a?.attendance_date || '');
+  const bDate = String(b?.attendance_date || '');
+  return bDate.localeCompare(aDate);
+}
+
 function resolveAttendanceOffice(inputValue) {
   const raw = String(inputValue || '').trim();
   if (!raw) return { ok: true, officeId: '', officeName: '' };
@@ -1083,7 +1093,8 @@ function resolveAttendanceOffice(inputValue) {
 
 function renderAttendanceRows(items) {
   if (!attendanceTbody) return;
-  const rows = Array.isArray(items) ? items : [];
+  const rows = Array.isArray(items) ? [...items] : [];
+  rows.sort(compareByStudentName);
   if (!rows.length) {
     attendanceTbody.innerHTML = '<tr><td colspan="8">Nenhuma chamada lançada.</td></tr>';
     return;
@@ -1187,6 +1198,7 @@ function renderAttendanceDayQueue() {
     attendanceDayList.innerHTML = '<tr><td colspan="4">Nenhum aluno adicionado para o fechamento do dia.</td></tr>';
     return;
   }
+  attendanceDayQueue.sort(compareByStudentName);
   attendanceDayList.innerHTML = attendanceDayQueue
     .map((entry, index) => {
       const officeLabel = entry.office_name
@@ -1250,6 +1262,7 @@ function addAttendanceEntryToQueue() {
     office_name: String(officeResolved.officeName || ''),
     office_code: String(office?.code || ''),
   });
+  attendanceDayQueue.sort(compareByStudentName);
   renderAttendanceDayQueue();
   attendanceStudentInput.value = '';
   if (attendanceOfficeInput) attendanceOfficeInput.value = '';
@@ -1338,6 +1351,34 @@ async function handleAttendanceAction(event) {
       if (!res.ok || !data?.ok) {
         setAttendanceMessage(data?.error || 'Falha ao autorizar chamada.', true);
         return;
+      }
+      if (data?.blocked) {
+        const blockedReason = String(data?.blocked_reason || '');
+        if (blockedReason === 'monthly_covered') {
+          const monthly = data?.monthly || {};
+          const usedDates = Array.isArray(monthly.used_dates) ? monthly.used_dates : [];
+          const usedLabel = usedDates.length
+            ? usedDates.map((d) => formatDateBR(d)).join(', ')
+            : 'Nenhuma';
+          await showAdminAlert(
+            `Aluno mensalista (${monthly.weekly_days || '?'} dias/semana).\n` +
+              `Data da chamada: ${formatDateBR(monthly.attendance_date || '')}\n` +
+              `Datas registradas na semana: ${usedLabel}\n` +
+              `Saldo restante na semana: ${monthly.remaining_days ?? '?'} dia(s).\n\n` +
+              'Resultado: sem cobrança em Cobranças em aberto.',
+            { title: 'Aviso de mensalista' },
+          );
+        } else if (blockedReason === 'already_paid') {
+          await showAdminAlert(
+            'Esta data já está paga para o aluno. Nenhuma cobrança foi gerada.',
+            { title: 'Bloqueio: diária já paga' },
+          );
+        } else if (blockedReason === 'already_open') {
+          await showAdminAlert(
+            'Já existe cobrança em aberto para esta data. Nenhuma nova cobrança foi gerada.',
+            { title: 'Bloqueio: cobrança já existente' },
+          );
+        }
       }
       setAttendanceMessage(data?.message || 'Chamada autorizada.');
       await loadAttendanceCalls(true);
