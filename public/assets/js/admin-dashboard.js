@@ -178,6 +178,15 @@ function ensureAdminDialog() {
         line-height:1.5;
         white-space:pre-wrap;
       }
+      .admin-dialog-input{
+        margin-top:10px;
+        width:100%;
+        padding:10px 12px;
+        border:1px solid #CBD5E1;
+        border-radius:10px;
+        font-size:16px;
+        line-height:1.2;
+      }
       .admin-dialog-actions{
         margin-top:12px;
         display:flex;
@@ -195,6 +204,7 @@ function ensureAdminDialog() {
     <div class="admin-dialog-panel" role="dialog" aria-modal="true" aria-labelledby="admin-dialog-title">
       <h3 id="admin-dialog-title" class="admin-dialog-title"></h3>
       <p class="admin-dialog-message"></p>
+      <input class="admin-dialog-input hidden" type="text" inputmode="numeric" />
       <div class="admin-dialog-actions">
         <button type="button" class="btn btn-ghost btn-sm admin-dialog-cancel">Cancelar</button>
         <button type="button" class="btn btn-primary btn-sm admin-dialog-confirm">Confirmar</button>
@@ -208,6 +218,7 @@ function ensureAdminDialog() {
     panel: overlay.querySelector('.admin-dialog-panel'),
     title: overlay.querySelector('.admin-dialog-title'),
     message: overlay.querySelector('.admin-dialog-message'),
+    input: overlay.querySelector('.admin-dialog-input'),
     cancel: overlay.querySelector('.admin-dialog-cancel'),
     confirm: overlay.querySelector('.admin-dialog-confirm'),
   };
@@ -227,6 +238,11 @@ function openAdminDialog({
   ui.confirm.textContent = confirmText;
   ui.cancel.textContent = cancelText;
   ui.cancel.classList.toggle('hidden', !showCancel);
+  if (ui.input) {
+    ui.input.value = '';
+    ui.input.placeholder = '';
+    ui.input.classList.add('hidden');
+  }
   ui.overlay.classList.remove('hidden');
 
   return new Promise((resolve) => {
@@ -285,6 +301,104 @@ function showAdminAlert(message, options = {}) {
     confirmText: options.confirmText || 'OK',
     cancelText: 'Cancelar',
     showCancel: false,
+  });
+}
+
+function toShortMaskedDate(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
+  if (isoMatch) {
+    return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1].slice(-2)}`;
+  }
+  const brMatch = /^(\d{2})\/(\d{2})\/(\d{2,4})$/.exec(raw);
+  if (brMatch) {
+    return `${brMatch[1]}/${brMatch[2]}/${String(brMatch[3]).slice(-2)}`;
+  }
+  return raw;
+}
+
+function applyShortDateMask(input) {
+  const digits = String(input.value || '').replace(/\D/g, '').slice(0, 6);
+  let value = digits;
+  if (digits.length > 2) value = `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  if (digits.length > 4) value = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+  input.value = value;
+}
+
+function showAdminDateInput(initialValue = '') {
+  const ui = ensureAdminDialog();
+  ui.title.textContent = 'Editar Data Day Use';
+  ui.message.textContent = 'Informe a nova Data Day Use (DD/MM/AA):';
+  ui.confirm.textContent = 'Salvar';
+  ui.cancel.textContent = 'Cancelar';
+  ui.cancel.classList.remove('hidden');
+  if (ui.input) {
+    ui.input.classList.remove('hidden');
+    ui.input.placeholder = 'DD/MM/AA';
+    ui.input.value = toShortMaskedDate(initialValue);
+  }
+  ui.overlay.classList.remove('hidden');
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = (result) => {
+      if (settled) return;
+      settled = true;
+      ui.overlay.classList.add('hidden');
+      ui.confirm.removeEventListener('click', onConfirm);
+      ui.cancel.removeEventListener('click', onCancel);
+      ui.overlay.removeEventListener('click', onOverlayClick);
+      document.removeEventListener('keydown', onKeyDown);
+      if (ui.input) {
+        ui.input.removeEventListener('input', onInput);
+        ui.input.classList.add('hidden');
+        ui.input.placeholder = '';
+      }
+      resolve(result);
+    };
+    const onInput = () => {
+      if (!ui.input) return;
+      applyShortDateMask(ui.input);
+    };
+    const onConfirm = () => {
+      const value = String(ui.input?.value || '').trim();
+      if (!/^\d{2}\/\d{2}\/\d{2}$/.test(value)) {
+        ui.message.textContent = 'Data inválida. Use exatamente DD/MM/AA.';
+        if (ui.input) ui.input.focus();
+        return;
+      }
+      settle({ ok: true, value });
+    };
+    const onCancel = () => settle({ ok: false, value: '' });
+    const onOverlayClick = (event) => {
+      if (event.target === ui.overlay) {
+        settle({ ok: false, value: '' });
+      }
+    };
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        settle({ ok: false, value: '' });
+        return;
+      }
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        onConfirm();
+      }
+    };
+
+    ui.confirm.addEventListener('click', onConfirm);
+    ui.cancel.addEventListener('click', onCancel);
+    ui.overlay.addEventListener('click', onOverlayClick);
+    document.addEventListener('keydown', onKeyDown);
+    if (ui.input) {
+      ui.input.addEventListener('input', onInput);
+      applyShortDateMask(ui.input);
+      ui.input.focus();
+    } else {
+      ui.confirm.focus();
+    }
   });
 }
 
@@ -1370,13 +1484,9 @@ async function handleAttendanceAction(event) {
 
   if (editButton) {
     const currentRaw = String(editButton.getAttribute('data-date') || '').trim();
-    const currentLabel = formatDateBR(currentRaw || '');
-    const typed = window.prompt(
-      'Informe a nova Data Day Use (DD/MM/AAAA ou AAAA-MM-DD):',
-      currentLabel && currentLabel !== '-' ? currentLabel : '',
-    );
-    if (typed === null) return;
-    const newDate = String(typed || '').trim();
+    const promptResult = await showAdminDateInput(currentRaw);
+    if (!promptResult?.ok) return;
+    const newDate = String(promptResult.value || '').trim();
     if (!newDate) {
       setAttendanceMessage('Informe uma data válida para edição.', true);
       return;
