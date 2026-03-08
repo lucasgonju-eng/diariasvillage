@@ -10,6 +10,7 @@ const tabSemWhatsapp = document.querySelector('#tab-sem-whatsapp');
 const tabDuplicados = document.querySelector('#tab-duplicados');
 const tabPendencias = document.querySelector('#tab-pendencias');
 const tabMensalistas = document.querySelector('#tab-mensalistas');
+const tabOficinasModulares = document.querySelector('#tab-oficinas-modulares');
 const tabExclusoes = document.querySelector('#tab-exclusoes');
 const tabResetSenha = document.querySelector('#tab-reset-senha');
 const tabFluxoCaixa = document.querySelector('#tab-fluxo-caixa');
@@ -62,6 +63,18 @@ const attendanceClearButton = document.querySelector('#attendance-clear-btn');
 const attendanceExportButton = document.querySelector('#attendance-export-btn');
 const attendanceStudentsList = document.querySelector('#attendance-students-list');
 const attendanceOfficesList = document.querySelector('#attendance-offices-list');
+const modularCreateNameInput = document.querySelector('#modular-create-name');
+const modularCreateTeacherInput = document.querySelector('#modular-create-teacher');
+const modularCreateStartInput = document.querySelector('#modular-create-start');
+const modularCreateEndInput = document.querySelector('#modular-create-end');
+const modularCreateDayInputs = document.querySelectorAll('input[name="modular-create-days"]');
+const modularCreateButton = document.querySelector('#modular-create-btn');
+const modularCreateMessage = document.querySelector('#modular-create-message');
+const modularPreviewDayInput = document.querySelector('#modular-preview-day');
+const modularPreviewAluno1400 = document.querySelector('#modular-preview-aluno-1400');
+const modularPreviewAluno1540 = document.querySelector('#modular-preview-aluno-1540');
+const modularPreviewSecretariaBody = document.querySelector('#modular-preview-secretaria-body');
+const modularPreviewAdminBody = document.querySelector('#modular-preview-admin-body');
 
 const selectedStudents = new Set();
 const guardianCache = new Map();
@@ -78,6 +91,8 @@ const attendanceOfficeByLabel = new Map();
 let attendanceLoaded = false;
 let attendanceOfficesLoaded = false;
 let attendanceDayQueue = [];
+let modularOfficesLoaded = false;
+let modularOffices = [];
 
 function setActiveTab(name) {
   if (
@@ -100,6 +115,7 @@ function setActiveTab(name) {
   if (tabDuplicados) tabDuplicados.classList.toggle('hidden', name !== 'duplicados');
   tabPendencias.classList.toggle('hidden', name !== 'pendencias');
   tabMensalistas.classList.toggle('hidden', name !== 'mensalistas');
+  if (tabOficinasModulares) tabOficinasModulares.classList.toggle('hidden', name !== 'oficinas-modulares');
   if (tabExclusoes) tabExclusoes.classList.toggle('hidden', name !== 'exclusoes');
   if (tabResetSenha) tabResetSenha.classList.toggle('hidden', name !== 'reset-senha');
   if (tabFluxoCaixa) tabFluxoCaixa.classList.toggle('hidden', name !== 'fluxo-caixa');
@@ -1170,6 +1186,265 @@ function setAttendanceMessage(text, isError = false) {
   attendanceMessage.className = `charge-message ${isError ? 'error' : 'success'}`.trim();
 }
 
+function setModularOfficeMessage(text, isError = false) {
+  if (!modularCreateMessage) return;
+  modularCreateMessage.textContent = String(text || '');
+  modularCreateMessage.className = `charge-message ${isError ? 'error' : 'success'}`.trim();
+}
+
+function formatDayName(day) {
+  const labels = {
+    1: 'Segunda-feira',
+    2: 'Terça-feira',
+    3: 'Quarta-feira',
+    4: 'Quinta-feira',
+    5: 'Sexta-feira',
+    6: 'Sábado',
+    7: 'Domingo',
+  };
+  return labels[Number(day)] || `Dia ${day}`;
+}
+
+function formatDayShort(day) {
+  const labels = {
+    1: 'Seg',
+    2: 'Ter',
+    3: 'Qua',
+    4: 'Qui',
+    5: 'Sex',
+    6: 'Sáb',
+    7: 'Dom',
+  };
+  return labels[Number(day)] || `Dia ${day}`;
+}
+
+function formatScheduleList(office) {
+  const schedules = Array.isArray(office?.schedules) ? office.schedules : [];
+  if (!schedules.length) return '-';
+  return schedules
+    .map((slot) => `${formatDayShort(slot.day_of_week)} ${slot.start}-${slot.end}`)
+    .join(', ');
+}
+
+function normalizeOfficeTimeInput(rawValue) {
+  const value = String(rawValue || '').trim();
+  if (!value) return '';
+  if (/^\d{4}$/.test(value)) {
+    return `${value.slice(0, 2)}:${value.slice(2, 4)}`;
+  }
+  const match = /^(\d{2}):(\d{2})(?::\d{2})?$/.exec(value);
+  if (!match) return '';
+  return `${match[1]}:${match[2]}`;
+}
+
+function renderModularOfficeAlunoPreview() {
+  if (!modularPreviewAluno1400 || !modularPreviewAluno1540) return;
+  const selectedDay = Number(modularPreviewDayInput?.value || 1);
+  const by1400 = [];
+  const by1540 = [];
+
+  modularOffices.forEach((office) => {
+    if (!office || office.active !== true || office.available_this_month !== true) return;
+    const schedules = Array.isArray(office.schedules) ? office.schedules : [];
+    schedules.forEach((slot) => {
+      if (Number(slot.day_of_week) !== selectedDay) return;
+      const item = {
+        id: office.id,
+        name: office.name || 'Oficina Modular',
+        teacher_name: office.teacher_name || 'Professor(a) não informado(a)',
+        status_quorum: office.status_quorum || 'LIVRE',
+      };
+      if (slot.start === '14:00' && slot.end === '15:00') {
+        by1400.push(item);
+      } else if (slot.start === '15:40' && slot.end === '16:40') {
+        by1540.push(item);
+      }
+    });
+  });
+
+  const sortByName = (a, b) => normalizeSearchText(a.name).localeCompare(normalizeSearchText(b.name), 'pt-BR');
+  by1400.sort(sortByName);
+  by1540.sort(sortByName);
+
+  const renderItems = (items) => {
+    if (!items.length) {
+      return '<div class="muted">Nenhuma oficina neste horário para o dia selecionado.</div>';
+    }
+    return items
+      .map(
+        (item) => `
+          <div class="office-preview-item">
+            <strong>${escapeHtml(item.name)}</strong>
+            <div class="meta">Professor(a): ${escapeHtml(item.teacher_name)}</div>
+            <div class="meta">Status: ${escapeHtml(item.status_quorum)}</div>
+          </div>
+        `,
+      )
+      .join('');
+  };
+
+  modularPreviewAluno1400.innerHTML = renderItems(by1400);
+  modularPreviewAluno1540.innerHTML = renderItems(by1540);
+}
+
+function renderModularOfficeSecretariaPreview() {
+  if (!modularPreviewSecretariaBody) return;
+  const items = [...modularOffices].sort((a, b) =>
+    normalizeSearchText(a?.name || '').localeCompare(normalizeSearchText(b?.name || ''), 'pt-BR'),
+  );
+  if (!items.length) {
+    modularPreviewSecretariaBody.innerHTML = '<tr><td colspan="5">Nenhuma oficina cadastrada.</td></tr>';
+    return;
+  }
+  modularPreviewSecretariaBody.innerHTML = items
+    .map((office) => {
+      const days = Array.isArray(office.days_of_week) ? office.days_of_week.map(formatDayShort).join(', ') : '-';
+      const status = office.active ? (office.status_quorum || 'LIVRE') : 'INATIVA';
+      return `
+        <tr>
+          <td>${escapeHtml(office.name || '-')}</td>
+          <td>${escapeHtml(office.teacher_name || '-')}</td>
+          <td>${escapeHtml(days || '-')}</td>
+          <td>${escapeHtml(formatScheduleList(office))}</td>
+          <td>${escapeHtml(status)}</td>
+        </tr>
+      `;
+    })
+    .join('');
+}
+
+function renderModularOfficeAdminPreview() {
+  if (!modularPreviewAdminBody) return;
+  const items = [...modularOffices].sort((a, b) =>
+    normalizeSearchText(a?.name || '').localeCompare(normalizeSearchText(b?.name || ''), 'pt-BR'),
+  );
+  if (!items.length) {
+    modularPreviewAdminBody.innerHTML = '<tr><td colspan="6">Nenhuma oficina cadastrada.</td></tr>';
+    return;
+  }
+  modularPreviewAdminBody.innerHTML = items
+    .map((office) => {
+      const visibleMonth = office.available_this_month ? 'Sim' : 'Não';
+      return `
+        <tr>
+          <td>${escapeHtml(office.code || '-')}</td>
+          <td>${escapeHtml(office.name || '-')}</td>
+          <td>${escapeHtml(office.tipo || '-')}</td>
+          <td>${escapeHtml(String(office.capacity ?? 0))}</td>
+          <td>${escapeHtml(formatScheduleList(office))}</td>
+          <td>${escapeHtml(visibleMonth)}</td>
+        </tr>
+      `;
+    })
+    .join('');
+}
+
+function renderModularOfficePreviews() {
+  renderModularOfficeAlunoPreview();
+  renderModularOfficeSecretariaPreview();
+  renderModularOfficeAdminPreview();
+}
+
+async function loadModularOffices(force = false) {
+  if (!tabOficinasModulares) return;
+  if (modularOfficesLoaded && !force) {
+    renderModularOfficePreviews();
+    return;
+  }
+  setModularOfficeMessage('Carregando oficinas modulares...');
+  try {
+    const res = await fetch('/api/admin-oficinas-modulares.php', {
+      headers: { Accept: 'application/json' },
+    });
+    const data = await res.json();
+    if (!res.ok || !data?.ok) {
+      setModularOfficeMessage(data?.error || 'Falha ao carregar oficinas modulares.', true);
+      return;
+    }
+    modularOffices = Array.isArray(data.items) ? data.items : [];
+    modularOfficesLoaded = true;
+    renderModularOfficePreviews();
+    setModularOfficeMessage(`Oficinas carregadas: ${modularOffices.length}.`);
+  } catch {
+    setModularOfficeMessage('Falha ao carregar oficinas modulares.', true);
+  }
+}
+
+async function createModularOffice() {
+  if (!modularCreateButton) return;
+  const name = String(modularCreateNameInput?.value || '').trim();
+  const teacherName = String(modularCreateTeacherInput?.value || '').trim();
+  const timeStart = normalizeOfficeTimeInput(modularCreateStartInput?.value);
+  const timeEnd = normalizeOfficeTimeInput(modularCreateEndInput?.value);
+  const selectedDays = [...modularCreateDayInputs]
+    .filter((input) => input.checked)
+    .map((input) => Number(input.value))
+    .filter((value) => Number.isInteger(value) && value >= 1 && value <= 5);
+
+  if (!name) {
+    setModularOfficeMessage('Informe o nome da Oficina Modular.', true);
+    return;
+  }
+  if (!teacherName) {
+    setModularOfficeMessage('Informe o nome do(a) professor(a).', true);
+    return;
+  }
+  if (!selectedDays.length) {
+    setModularOfficeMessage('Selecione ao menos um dia útil (Seg a Sex).', true);
+    return;
+  }
+  const allowedSlot =
+    (timeStart === '14:00' && timeEnd === '15:00') ||
+    (timeStart === '15:40' && timeEnd === '16:40');
+  if (!allowedSlot) {
+    setModularOfficeMessage(
+      'Horário inválido. Pelas regras fixas da grade, use apenas 14:00-15:00 ou 15:40-16:40.',
+      true,
+    );
+    return;
+  }
+
+  const originalLabel = modularCreateButton.textContent;
+  modularCreateButton.setAttribute('disabled', 'disabled');
+  modularCreateButton.textContent = 'Criando...';
+  setModularOfficeMessage('Criando oficina modular...');
+  try {
+    const res = await fetch('/api/admin-oficinas-modulares.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'create',
+        name,
+        teacher_name: teacherName,
+        time_start: timeStart,
+        time_end: timeEnd,
+        days_of_week: selectedDays,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data?.ok) {
+      setModularOfficeMessage(data?.error || 'Falha ao criar oficina modular.', true);
+      return;
+    }
+    modularOffices = Array.isArray(data.items) ? data.items : modularOffices;
+    modularOfficesLoaded = true;
+    renderModularOfficePreviews();
+    if (modularCreateNameInput) modularCreateNameInput.value = '';
+    if (modularCreateTeacherInput) modularCreateTeacherInput.value = '';
+    if (modularCreateStartInput) modularCreateStartInput.value = '';
+    if (modularCreateEndInput) modularCreateEndInput.value = '';
+    modularCreateDayInputs.forEach((input) => {
+      input.checked = false;
+    });
+    setModularOfficeMessage(data?.message || 'Oficina modular criada com sucesso.');
+  } catch {
+    setModularOfficeMessage('Falha ao criar oficina modular.', true);
+  } finally {
+    modularCreateButton.removeAttribute('disabled');
+    modularCreateButton.textContent = originalLabel;
+  }
+}
+
 function attendanceStatusLabel(status) {
   const map = {
     em_revisao: 'Em revisão',
@@ -1591,6 +1866,9 @@ tabs.forEach((btn) => {
       loadAttendanceOffices();
       loadAttendanceCalls(true);
     }
+    if (btn.dataset.tab === 'oficinas-modulares') {
+      loadModularOffices();
+    }
     if (btn.dataset.tab === 'fluxo-caixa' && !cashflowLoaded) {
       loadCashflow();
     }
@@ -1644,6 +1922,18 @@ if (attendanceClearButton) {
     if (attendanceFilterFromInput) attendanceFilterFromInput.value = '';
     if (attendanceFilterToInput) attendanceFilterToInput.value = '';
     loadAttendanceCalls(true);
+  });
+}
+
+if (modularCreateButton) {
+  modularCreateButton.addEventListener('click', () => {
+    createModularOffice();
+  });
+}
+
+if (modularPreviewDayInput) {
+  modularPreviewDayInput.addEventListener('change', () => {
+    renderModularOfficeAlunoPreview();
   });
 }
 
@@ -3249,6 +3539,9 @@ if (initialTab === 'inadimplentes') {
 if (initialTab === 'chamada') {
   loadAttendanceOffices();
   loadAttendanceCalls();
+}
+if (initialTab === 'oficinas-modulares') {
+  loadModularOffices();
 }
 if (initialTab === 'dados-asaas') {
   loadAsaasData();

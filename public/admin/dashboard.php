@@ -13,7 +13,7 @@ if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated']
 $canViewAsUser = (($_SESSION['admin_user'] ?? '') === 'admin');
 $canMergeDuplicates = (($_SESSION['admin_user'] ?? '') === 'admin');
 $canAttendanceApprove = (($_SESSION['admin_user'] ?? '') === 'admin');
-$allowedTabs = ['charges', 'chamada', 'inadimplentes', 'recebidas', 'sem-whatsapp', 'pendencias', 'mensalistas', 'exclusoes', 'reset-senha', 'fluxo-caixa', 'dados-asaas', 'entries'];
+$allowedTabs = ['charges', 'chamada', 'inadimplentes', 'recebidas', 'sem-whatsapp', 'pendencias', 'mensalistas', 'oficinas-modulares', 'exclusoes', 'reset-senha', 'fluxo-caixa', 'dados-asaas', 'entries'];
 if ($canMergeDuplicates) {
     $allowedTabs[] = 'duplicados';
 }
@@ -417,6 +417,15 @@ if (!empty($exclusionsLog)) {
     .monthly-check-badge{display:inline-block;margin-left:8px;padding:2px 8px;border-radius:999px;background:#0EA5E9;color:#fff;font-size:11px;font-weight:700}
     .monthly-days-wrap{display:flex;gap:12px;flex-wrap:wrap}
     .monthly-days-wrap label{display:flex;gap:6px;align-items:center;padding:6px 10px;border:1px solid #CBD5E1;border-radius:10px;background:#F8FAFC}
+    .office-days-wrap{display:flex;gap:8px;flex-wrap:wrap}
+    .office-days-wrap label{display:flex;gap:6px;align-items:center;padding:6px 10px;border:1px solid #CBD5E1;border-radius:10px;background:#F8FAFC}
+    .office-preview-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+    .office-preview-card{background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:12px}
+    .office-preview-card h4{margin:0 0 8px 0;color:#0F172A}
+    .office-preview-list{display:grid;gap:8px}
+    .office-preview-item{background:#fff;border:1px solid #E2E8F0;border-radius:10px;padding:8px}
+    .office-preview-item strong{display:block;color:#0F172A}
+    .office-preview-item .meta{font-size:12px;color:#475569}
     .hidden{display:none}
   </style>
 </head>
@@ -486,6 +495,7 @@ if (!empty($exclusionsLog)) {
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=sem-whatsapp" data-tab="sem-whatsapp">Sem WhatsApp</a>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=pendencias" data-tab="pendencias">Pendência de cadastro</a>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=mensalistas" data-tab="mensalistas">Mensalistas</a>
+        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=oficinas-modulares" data-tab="oficinas-modulares">Oficinas Modulares</a>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=exclusoes" data-tab="exclusoes">Exclusões</a>
         <?php if ($canMergeDuplicates): ?>
           <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=duplicados" data-tab="duplicados">Duplicados</a>
@@ -1102,6 +1112,108 @@ if (!empty($exclusionsLog)) {
         </div>
       </section>
 
+      <section id="tab-oficinas-modulares" class="<?php echo $activeTab === 'oficinas-modulares' ? '' : 'hidden'; ?>">
+        <h2>Criação de Oficinas Modulares</h2>
+        <p class="muted">As regras fixas da grade são preservadas: horários de diária 14:00-15:00 e 15:40-16:40, com seleção por dia da semana.</p>
+        <div class="charge-fields" style="margin-bottom:12px;">
+          <div class="form-group">
+            <label>Nome da Oficina Modular</label>
+            <input id="modular-create-name" type="text" placeholder="Ex.: OM13 - Robótica Criativa" autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label>Professor(a)</label>
+            <input id="modular-create-teacher" type="text" placeholder="Nome do(a) professor(a)" autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label>Hora início</label>
+            <input id="modular-create-start" type="text" placeholder="14:00 ou 15:40" autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label>Hora fim</label>
+            <input id="modular-create-end" type="text" placeholder="15:00 ou 16:40" autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label>Dias da semana</label>
+            <div class="office-days-wrap">
+              <label><input type="checkbox" name="modular-create-days" value="1" /> Seg</label>
+              <label><input type="checkbox" name="modular-create-days" value="2" /> Ter</label>
+              <label><input type="checkbox" name="modular-create-days" value="3" /> Qua</label>
+              <label><input type="checkbox" name="modular-create-days" value="4" /> Qui</label>
+              <label><input type="checkbox" name="modular-create-days" value="5" /> Sex</label>
+            </div>
+          </div>
+          <div class="form-group" style="display:flex;align-items:flex-end;">
+            <button id="modular-create-btn" class="btn btn-primary btn-sm" type="button">Criar oficina modular</button>
+          </div>
+        </div>
+        <div id="modular-create-message" class="charge-message"></div>
+
+        <h3 style="margin-top:14px;">Prévia para teste</h3>
+        <p class="muted">Sem matrícula de alunos. Aqui você valida como as oficinas aparecem para aluno, secretaria e admin.</p>
+        <div class="form-group" style="max-width:260px;">
+          <label>Dia de teste (visão do aluno)</label>
+          <select id="modular-preview-day">
+            <option value="1">Segunda-feira</option>
+            <option value="2">Terça-feira</option>
+            <option value="3">Quarta-feira</option>
+            <option value="4">Quinta-feira</option>
+            <option value="5">Sexta-feira</option>
+          </select>
+        </div>
+
+        <div class="office-preview-grid">
+          <div class="office-preview-card">
+            <h4>Prévia Aluno • 14:00-15:00</h4>
+            <div id="modular-preview-aluno-1400" class="office-preview-list">
+              <div class="muted">Carregando oficinas...</div>
+            </div>
+          </div>
+          <div class="office-preview-card">
+            <h4>Prévia Aluno • 15:40-16:40</h4>
+            <div id="modular-preview-aluno-1540" class="office-preview-list">
+              <div class="muted">Carregando oficinas...</div>
+            </div>
+          </div>
+        </div>
+
+        <h3 style="margin-top:16px;">Prévia Secretaria</h3>
+        <div style="overflow-x:auto;">
+          <table class="admin-table">
+            <thead>
+              <tr style="text-align:left;">
+                <th>Oficina</th>
+                <th>Professor(a)</th>
+                <th>Dias</th>
+                <th>Horários</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="modular-preview-secretaria-body">
+              <tr><td colspan="5">Carregando oficinas...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 style="margin-top:16px;">Prévia Admin</h3>
+        <div style="overflow-x:auto;">
+          <table class="admin-table">
+            <thead>
+              <tr style="text-align:left;">
+                <th>Código</th>
+                <th>Oficina</th>
+                <th>Tipo</th>
+                <th>Capacidade</th>
+                <th>Dias/Horários</th>
+                <th>Visível no mês</th>
+              </tr>
+            </thead>
+            <tbody id="modular-preview-admin-body">
+              <tr><td colspan="6">Carregando oficinas...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <section id="tab-exclusoes" class="<?php echo $activeTab === 'exclusoes' ? '' : 'hidden'; ?>">
         <h2>Histórico de exclusões</h2>
         <p class="muted">Registro de exclusões de cobranças e pendências com motivo informado.</p>
@@ -1464,7 +1576,7 @@ if (!empty($exclusionsLog)) {
     window.__monthlyStudents = <?php echo json_encode($monthlyRowsForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
     window.__adminCanApproveAttendance = <?php echo $canAttendanceApprove ? 'true' : 'false'; ?>;
   </script>
-  <script src="/assets/js/admin-dashboard.js?v=52"></script>
+  <script src="/assets/js/admin-dashboard.js?v=53"></script>
   <script>
     (function () {
       function activateTab(name) {
@@ -1477,6 +1589,7 @@ if (!empty($exclusionsLog)) {
           'sem-whatsapp': 'tab-sem-whatsapp',
           pendencias: 'tab-pendencias',
           mensalistas: 'tab-mensalistas',
+          'oficinas-modulares': 'tab-oficinas-modulares',
           exclusoes: 'tab-exclusoes',
           duplicados: 'tab-duplicados',
           'reset-senha': 'tab-reset-senha',
