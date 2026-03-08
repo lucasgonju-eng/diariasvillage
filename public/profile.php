@@ -7,42 +7,111 @@ use App\SupabaseClient;
 
 $user = Helpers::requireAuthWeb();
 $client = new SupabaseClient(new HttpClient());
-$studentId = trim((string) ($user['student_id'] ?? ''));
-if ($studentId === '') {
-    $userId = trim((string) ($user['id'] ?? ''));
-    if ($userId !== '') {
-        $guardianCurrent = $client->select(
-            'guardians',
-            'select=student_id&id=eq.' . urlencode($userId) . '&limit=1'
-        );
-        if (($guardianCurrent['ok'] ?? false) && !empty($guardianCurrent['data'][0])) {
-            $studentId = trim((string) ($guardianCurrent['data'][0]['student_id'] ?? ''));
-        }
-    }
+$studentIdsScope = [];
+$sessionStudentId = trim((string) ($user['student_id'] ?? ''));
+if ($sessionStudentId !== '') {
+    $studentIdsScope[$sessionStudentId] = true;
 }
-if ($studentId === '') {
-    $userEmail = trim((string) ($user['email'] ?? ''));
-    if ($userEmail !== '') {
-        $guardianByEmail = $client->select(
-            'guardians',
-            'select=student_id&email=eq.' . urlencode($userEmail) . '&limit=1'
-        );
-        if (($guardianByEmail['ok'] ?? false) && !empty($guardianByEmail['data'][0])) {
-            $studentId = trim((string) ($guardianByEmail['data'][0]['student_id'] ?? ''));
-        }
-    }
-}
-$studentRow = [];
-if ($studentId !== '') {
-    $studentResult = $client->select(
-        'students',
-        'select=id,name,enrollment,grade,class_name,class&id=eq.' . urlencode($studentId) . '&limit=1'
+$documentDigits = preg_replace('/\D+/', '', (string) ($user['parent_document'] ?? '')) ?? '';
+
+$userId = trim((string) ($user['id'] ?? ''));
+if ($userId !== '') {
+    $guardianCurrent = $client->select(
+        'guardians',
+        'select=student_id,parent_document&id=eq.' . urlencode($userId) . '&limit=1'
     );
-    if (($studentResult['ok'] ?? false) && !empty($studentResult['data'][0]) && is_array($studentResult['data'][0])) {
-        $studentRow = $studentResult['data'][0];
+    if (($guardianCurrent['ok'] ?? false) && !empty($guardianCurrent['data'][0])) {
+        $current = $guardianCurrent['data'][0];
+        $sid = trim((string) ($current['student_id'] ?? ''));
+        if ($sid !== '') {
+            $studentIdsScope[$sid] = true;
+        }
+        if ($documentDigits === '') {
+            $documentDigits = preg_replace('/\D+/', '', (string) ($current['parent_document'] ?? '')) ?? '';
+        }
     }
 }
-$studentName = trim((string) ($studentRow['name'] ?? 'Aluno(a)'));
+
+$userEmail = trim((string) ($user['email'] ?? ''));
+if ($userEmail !== '') {
+    $guardiansByEmail = $client->select(
+        'guardians',
+        'select=student_id&email=eq.' . urlencode($userEmail) . '&limit=200'
+    );
+    if (($guardiansByEmail['ok'] ?? false) && !empty($guardiansByEmail['data'])) {
+        foreach ($guardiansByEmail['data'] as $row) {
+            $sid = trim((string) ($row['student_id'] ?? ''));
+            if ($sid !== '') {
+                $studentIdsScope[$sid] = true;
+            }
+        }
+    }
+}
+
+if ($documentDigits !== '') {
+    $maskCpf = static function (string $digits): string {
+        if (strlen($digits) !== 11) {
+            return $digits;
+        }
+        return substr($digits, 0, 3) . '.'
+            . substr($digits, 3, 3) . '.'
+            . substr($digits, 6, 3) . '-'
+            . substr($digits, 9, 2);
+    };
+    $cpfAttempts = [
+        'parent_document=eq.' . urlencode($documentDigits) . '&select=student_id&limit=500',
+        'parent_document=eq.' . urlencode($maskCpf($documentDigits)) . '&select=student_id&limit=500',
+        'parent_document=ilike.' . urlencode('*' . $documentDigits . '*') . '&select=student_id&limit=500',
+    ];
+    foreach ($cpfAttempts as $query) {
+        $guardiansByCpf = $client->select('guardians', $query);
+        if (!($guardiansByCpf['ok'] ?? false) || empty($guardiansByCpf['data'])) {
+            continue;
+        }
+        foreach ($guardiansByCpf['data'] as $row) {
+            $sid = trim((string) ($row['student_id'] ?? ''));
+            if ($sid !== '') {
+                $studentIdsScope[$sid] = true;
+            }
+        }
+    }
+}
+
+$studentRows = [];
+$studentIds = array_keys($studentIdsScope);
+if (!empty($studentIds)) {
+    if (count($studentIds) === 1) {
+        $studentResult = $client->select(
+            'students',
+            'select=id,name,enrollment,grade,class_name,class&id=eq.' . urlencode($studentIds[0]) . '&limit=1'
+        );
+    } else {
+        $quotedStudentIds = array_map(static fn($id) => '"' . str_replace('"', '', $id) . '"', $studentIds);
+        $studentResult = $client->select(
+            'students',
+            'select=id,name,enrollment,grade,class_name,class&id=in.(' . implode(',', $quotedStudentIds) . ')&order=name.asc&limit=20'
+        );
+    }
+    if (($studentResult['ok'] ?? false) && !empty($studentResult['data']) && is_array($studentResult['data'])) {
+        $studentRows = $studentResult['data'];
+    }
+}
+
+$studentRow = [];
+if (!empty($studentRows)) {
+    if ($sessionStudentId !== '') {
+        foreach ($studentRows as $candidate) {
+            if (trim((string) ($candidate['id'] ?? '')) === $sessionStudentId) {
+                $studentRow = $candidate;
+                break;
+            }
+        }
+    }
+    if (empty($studentRow)) {
+        $studentRow = $studentRows[0];
+    }
+}
+$studentName = trim((string) ($studentRow['name'] ?? 'Aluno(a) não vinculado(a)'));
 $studentEnrollment = trim((string) ($studentRow['enrollment'] ?? ''));
 $studentGrade = trim((string) ($studentRow['grade'] ?? ''));
 $studentClass = trim((string) (($studentRow['class_name'] ?? '') ?: ($studentRow['class'] ?? '')));
