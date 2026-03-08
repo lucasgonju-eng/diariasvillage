@@ -632,6 +632,21 @@ if (!empty($exclusionsLog)) {
         </div>
         <div id="attendance-message" class="charge-message"></div>
         <h3 style="margin:8px 0;">Histórico de chamadas</h3>
+        <div class="charge-fields" style="margin-bottom:8px;">
+          <div class="form-group">
+            <label>De</label>
+            <input id="attendance-filter-from" type="date" />
+          </div>
+          <div class="form-group">
+            <label>Até</label>
+            <input id="attendance-filter-to" type="date" />
+          </div>
+          <div class="form-group" style="display:flex;align-items:flex-end;gap:8px;">
+            <button id="attendance-filter-btn" class="btn btn-ghost btn-sm" type="button">Filtrar</button>
+            <button id="attendance-clear-btn" class="btn btn-ghost btn-sm" type="button">Limpar</button>
+            <button id="attendance-export-btn" class="btn btn-primary btn-sm" type="button">Exportar Excel</button>
+          </div>
+        </div>
         <div style="overflow-x:auto;">
           <table class="admin-table">
             <thead>

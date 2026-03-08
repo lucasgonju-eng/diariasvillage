@@ -55,6 +55,11 @@ const attendanceCloseDayButton = document.querySelector('#attendance-close-day-b
 const attendanceMessage = document.querySelector('#attendance-message');
 const attendanceTbody = document.querySelector('#attendance-tbody');
 const attendanceDayList = document.querySelector('#attendance-day-list');
+const attendanceFilterFromInput = document.querySelector('#attendance-filter-from');
+const attendanceFilterToInput = document.querySelector('#attendance-filter-to');
+const attendanceFilterButton = document.querySelector('#attendance-filter-btn');
+const attendanceClearButton = document.querySelector('#attendance-clear-btn');
+const attendanceExportButton = document.querySelector('#attendance-export-btn');
 const attendanceStudentsList = document.querySelector('#attendance-students-list');
 const attendanceOfficesList = document.querySelector('#attendance-offices-list');
 
@@ -1068,6 +1073,15 @@ function compareByStudentName(a, b) {
   return bDate.localeCompare(aDate);
 }
 
+function getAttendanceFilterParams() {
+  const params = new URLSearchParams();
+  const from = String(attendanceFilterFromInput?.value || '').trim();
+  const to = String(attendanceFilterToInput?.value || '').trim();
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+  return params;
+}
+
 function resolveAttendanceOffice(inputValue) {
   const raw = String(inputValue || '').trim();
   if (!raw) return { ok: true, officeId: '', officeName: '' };
@@ -1162,11 +1176,12 @@ async function loadAttendanceOffices() {
 }
 
 async function loadAttendanceCalls(force = false) {
-  if (attendanceLoaded && !force) return;
   if (!attendanceTbody) return;
   setAttendanceMessage('Carregando chamadas...');
   try {
-    const res = await fetch(`/api/admin-attendance.php?ts=${Date.now()}`);
+    const params = getAttendanceFilterParams();
+    params.set('ts', Date.now().toString());
+    const res = await fetch(`/api/admin-attendance.php?${params.toString()}`);
     const data = await res.json();
     if (!res.ok || !data?.ok) {
       setAttendanceMessage(data?.error || 'Falha ao carregar chamadas.', true);
@@ -1463,6 +1478,28 @@ if (attendanceStudentInput) {
 if (attendanceCloseDayButton) {
   attendanceCloseDayButton.addEventListener('click', () => {
     closeAttendanceDay();
+  });
+}
+
+if (attendanceFilterButton) {
+  attendanceFilterButton.addEventListener('click', () => {
+    loadAttendanceCalls(true);
+  });
+}
+
+if (attendanceClearButton) {
+  attendanceClearButton.addEventListener('click', () => {
+    if (attendanceFilterFromInput) attendanceFilterFromInput.value = '';
+    if (attendanceFilterToInput) attendanceFilterToInput.value = '';
+    loadAttendanceCalls(true);
+  });
+}
+
+if (attendanceExportButton) {
+  attendanceExportButton.addEventListener('click', () => {
+    const params = getAttendanceFilterParams();
+    params.set('ts', Date.now().toString());
+    window.location.href = `/api/admin-attendance-export.php?${params.toString()}`;
   });
 }
 
