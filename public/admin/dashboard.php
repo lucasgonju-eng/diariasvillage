@@ -10,20 +10,25 @@ if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated']
     header('Location: /admin/');
     exit;
 }
-$canViewAsUser = (($_SESSION['admin_user'] ?? '') === 'admin');
-$canMergeDuplicates = (($_SESSION['admin_user'] ?? '') === 'admin');
-$canAttendanceApprove = (($_SESSION['admin_user'] ?? '') === 'admin');
-$canManageModularOffices = (($_SESSION['admin_user'] ?? '') === 'admin');
-$allowedTabs = ['charges', 'chamada', 'inadimplentes', 'recebidas', 'sem-whatsapp', 'pendencias', 'mensalistas', 'exclusoes', 'reset-senha', 'fluxo-caixa', 'dados-asaas', 'entries'];
+$isAdminPrincipal = (($_SESSION['admin_user'] ?? '') === 'admin');
+$canViewAsUser = $isAdminPrincipal;
+$canMergeDuplicates = $isAdminPrincipal;
+$canAttendanceApprove = $isAdminPrincipal;
+$canManageModularOffices = $isAdminPrincipal;
+
+$allowedTabs = $isAdminPrincipal
+    ? ['charges', 'chamada', 'inadimplentes', 'recebidas', 'sem-whatsapp', 'pendencias', 'mensalistas', 'exclusoes', 'reset-senha', 'fluxo-caixa', 'dados-asaas', 'entries']
+    : ['chamada', 'sem-whatsapp', 'mensalistas', 'reset-senha', 'entries'];
 if ($canMergeDuplicates) {
     $allowedTabs[] = 'duplicados';
 }
 if ($canManageModularOffices) {
     $allowedTabs[] = 'oficinas-modulares';
 }
-$activeTab = trim((string) ($_GET['tab'] ?? 'charges'));
+$defaultTab = $isAdminPrincipal ? 'charges' : 'entries';
+$activeTab = trim((string) ($_GET['tab'] ?? $defaultTab));
 if (!in_array($activeTab, $allowedTabs, true)) {
-    $activeTab = 'charges';
+    $activeTab = $defaultTab;
 }
 
 $client = new SupabaseClient(new HttpClient());
@@ -476,9 +481,11 @@ if (!empty($exclusionsLog)) {
             <button id="admin-add-guardian-btn" class="btn btn-ghost btn-sm" type="button">Criar mais um responsável</button>
           </div>
         <?php endif; ?>
-        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=fluxo-caixa" data-tab="fluxo-caixa">Fluxo de Caixa</a>
-        <a class="btn btn-danger btn-sm" href="/admin/settle-pendencia.php">Baixa manual</a>
-        <a class="btn btn-ghost btn-sm" href="/admin/import.php">Importar alunos</a>
+        <?php if ($isAdminPrincipal): ?>
+          <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=fluxo-caixa" data-tab="fluxo-caixa">Fluxo de Caixa</a>
+          <a class="btn btn-danger btn-sm" href="/admin/settle-pendencia.php">Baixa manual</a>
+          <a class="btn btn-ghost btn-sm" href="/admin/import.php">Importar alunos</a>
+        <?php endif; ?>
         <a class="btn btn-ghost btn-sm" href="/logout.php">Sair</a>
       </div>
     </header>
@@ -522,23 +529,33 @@ if (!empty($exclusionsLog)) {
 
     <div class="admin-card">
       <div class="admin-tabs">
-        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=charges" data-tab="charges">Cobrança manual</a>
+        <?php if ($isAdminPrincipal): ?>
+          <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=charges" data-tab="charges">Cobrança manual</a>
+        <?php endif; ?>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=chamada" data-tab="chamada">Chamada</a>
-        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=inadimplentes" data-tab="inadimplentes">Cobranças em aberto</a>
-        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=recebidas" data-tab="recebidas">Cobranças recebidas</a>
+        <?php if ($isAdminPrincipal): ?>
+          <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=inadimplentes" data-tab="inadimplentes">Cobranças em aberto</a>
+          <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=recebidas" data-tab="recebidas">Cobranças recebidas</a>
+        <?php endif; ?>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=sem-whatsapp" data-tab="sem-whatsapp">Sem WhatsApp</a>
-        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=pendencias" data-tab="pendencias">Pendência de cadastro</a>
+        <?php if ($isAdminPrincipal): ?>
+          <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=pendencias" data-tab="pendencias">Pendência de cadastro</a>
+        <?php endif; ?>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=mensalistas" data-tab="mensalistas">Mensalistas</a>
         <?php if ($canManageModularOffices): ?>
           <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=oficinas-modulares" data-tab="oficinas-modulares">Oficinas Modulares</a>
         <?php endif; ?>
-        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=exclusoes" data-tab="exclusoes">Exclusões</a>
+        <?php if ($isAdminPrincipal): ?>
+          <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=exclusoes" data-tab="exclusoes">Exclusões</a>
+        <?php endif; ?>
         <?php if ($canMergeDuplicates): ?>
           <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=duplicados" data-tab="duplicados">Duplicados</a>
         <?php endif; ?>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=reset-senha" data-tab="reset-senha">Resetar senha</a>
-        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=fluxo-caixa" data-tab="fluxo-caixa">Fluxo de Caixa</a>
-        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=dados-asaas" data-tab="dados-asaas">Dados do Asaas</a>
+        <?php if ($isAdminPrincipal): ?>
+          <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=fluxo-caixa" data-tab="fluxo-caixa">Fluxo de Caixa</a>
+          <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=dados-asaas" data-tab="dados-asaas">Dados do Asaas</a>
+        <?php endif; ?>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=entries" data-tab="entries">Entradas confirmadas</a>
       </div>
 

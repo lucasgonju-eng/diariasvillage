@@ -3,6 +3,7 @@ require_once __DIR__ . '/../src/Bootstrap.php';
 $debug = ($_GET['debug'] ?? '') === '1';
 
 $sessionOk = isset($_SESSION['admin_authenticated']) && $_SESSION['admin_authenticated'] === true;
+$isAdminPrincipal = (($_SESSION['admin_user'] ?? '') === 'admin');
 
 if ($debug && $sessionOk) {
     ini_set('display_errors', '1');
@@ -10,7 +11,7 @@ if ($debug && $sessionOk) {
     error_reporting(E_ALL);
 }
 
-if (!$sessionOk) {
+if (!$sessionOk || !$isAdminPrincipal) {
     http_response_code(403);
     echo 'Acesso negado.';
     exit;

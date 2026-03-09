@@ -9,6 +9,11 @@ if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated']
     header('Location: /admin/');
     exit;
 }
+if (($_SESSION['admin_user'] ?? '') !== 'admin') {
+    http_response_code(403);
+    echo 'Acesso negado.';
+    exit;
+}
 
 $client = new SupabaseClient(new HttpClient());
 $result = $client->select(
