@@ -490,6 +490,15 @@ if (!empty($exclusionsLog)) {
       font-weight:800;
     }
     .bulk-mail-edit-emails:hover{filter:brightness(.97)}
+    #bulk-mail-template-load,
+    #bulk-mail-send-test{
+      color:#0A1B4D;
+      border-color:#BFD0EE;
+      background:#E8F0FF;
+      font-weight:800;
+    }
+    #bulk-mail-template-load:hover,
+    #bulk-mail-send-test:hover{filter:brightness(.97)}
     @media (max-width: 980px){
       .bulk-mail-filters,.bulk-mail-compose{grid-template-columns:1fr}
     }
