@@ -299,9 +299,21 @@ $action = trim((string) ($payload['action'] ?? 'init'));
 $client = new SupabaseClient(new HttpClient());
 
 if ($action === 'init') {
-    $studentsResult = $client->select('students', 'select=id,name,enrollment,active&order=name.asc&limit=10000');
-    if (!($studentsResult['ok'] ?? false)) {
-        Helpers::json(['ok' => false, 'error' => 'Falha ao carregar alunos.'], 500);
+    $studentsQueries = [
+        'select=id,name,enrollment,active&order=name.asc&limit=10000',
+        'select=id,name,enrollment&order=name.asc&limit=10000',
+        'select=id,name,enrollment,grade,class_name&order=name.asc&limit=10000',
+    ];
+    $studentsResult = null;
+    foreach ($studentsQueries as $query) {
+        $attempt = $client->select('students', $query);
+        if ($attempt['ok'] ?? false) {
+            $studentsResult = $attempt;
+            break;
+        }
+    }
+    if (!is_array($studentsResult) || !($studentsResult['ok'] ?? false)) {
+        Helpers::json(['ok' => false, 'error' => 'Falha ao carregar alunos no banco.'], 500);
     }
     $studentsRows = is_array($studentsResult['data'] ?? null) ? $studentsResult['data'] : [];
 
@@ -309,6 +321,12 @@ if ($action === 'init') {
         'guardians',
         'select=student_id,parent_name,email,created_at&order=created_at.desc&limit=12000'
     );
+    if (!($guardiansResult['ok'] ?? false)) {
+        $guardiansResult = $client->select(
+            'guardians',
+            'select=student_id,parent_name,email&limit=12000'
+        );
+    }
     $guardiansRows = is_array($guardiansResult['data'] ?? null) ? $guardiansResult['data'] : [];
 
     // Consultas segmentadas para evitar timeout no carregamento da aba.
