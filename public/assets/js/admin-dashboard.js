@@ -166,6 +166,7 @@ const asaasTopInadimplentes = document.querySelector('#asaas-top-inadimplentes')
 let asaasDataLoaded = false;
 let asaasDataLastPayload = null;
 const bulkMailFilterInput = document.querySelector('#bulk-mail-filter');
+const bulkMailGradeFilterInput = document.querySelector('#bulk-mail-grade-filter');
 const bulkMailTypeFilterInput = document.querySelector('#bulk-mail-type-filter');
 const bulkMailSelectAllInput = document.querySelector('#bulk-mail-select-all');
 const bulkMailRecipientsBody = document.querySelector('#bulk-mail-recipients-body');
@@ -1388,10 +1389,35 @@ function getBulkMailTypeLabel(student) {
   return 'Sem diária';
 }
 
+function getBulkMailGradeKey(student) {
+  const grade = Number(student?.grade || 0);
+  if (!Number.isInteger(grade) || grade <= 0) return '';
+  return String(grade);
+}
+
+function renderBulkMailGradeFilterOptions() {
+  if (!bulkMailGradeFilterInput) return;
+  const previousValue = String(bulkMailGradeFilterInput.value || 'all');
+  const grades = new Set();
+  bulkMailStudents.forEach((student) => {
+    const key = getBulkMailGradeKey(student);
+    if (key) grades.add(key);
+  });
+  const sortedGrades = Array.from(grades).sort((a, b) => Number(a) - Number(b));
+  bulkMailGradeFilterInput.innerHTML = [
+    '<option value="all">Todas</option>',
+    ...sortedGrades.map((grade) => `<option value="${escapeHtml(grade)}">${escapeHtml(grade)}º ano</option>`),
+  ].join('');
+  const nextValue = sortedGrades.includes(previousValue) ? previousValue : 'all';
+  bulkMailGradeFilterInput.value = nextValue;
+}
+
 function getFilteredBulkMailStudents() {
   const query = normalizeSearchText(bulkMailFilterInput?.value || '');
+  const grade = String(bulkMailGradeFilterInput?.value || 'all');
   const type = String(bulkMailTypeFilterInput?.value || 'all');
   return bulkMailStudents.filter((student) => {
+    if (grade !== 'all' && getBulkMailGradeKey(student) !== grade) return false;
     if (type === 'diaristas' && !student?.is_diarista) return false;
     if (type === 'mensalistas' && !student?.is_mensalista) return false;
     if (type === 'inadimplentes' && !student?.is_inadimplente) return false;
@@ -1588,7 +1614,7 @@ async function loadBulkMailData(force = false) {
   if (!tabEmailMassa || !bulkMailRecipientsBody) return;
   if (bulkMailLoaded && !force) return;
 
-  bulkMailRecipientsBody.innerHTML = '<tr><td colspan="5">Carregando alunos...</td></tr>';
+  bulkMailRecipientsBody.innerHTML = '<tr><td colspan="6">Carregando alunos...</td></tr>';
   setBulkMailMessage('');
   try {
     const res = await fetch('/admin/bulk-email.php', {
@@ -1604,6 +1630,7 @@ async function loadBulkMailData(force = false) {
     }
     bulkMailStudents = Array.isArray(data.students) ? data.students : [];
     bulkMailTemplates = Array.isArray(data.templates) ? data.templates : [];
+    renderBulkMailGradeFilterOptions();
     renderBulkMailTemplates();
     const suggested = data?.suggested_template_id || bulkMailTemplates[0]?.id;
     if (bulkMailTemplateSelect && suggested) {
@@ -2500,6 +2527,12 @@ if (bulkMailFilterInput) {
 
 if (bulkMailTypeFilterInput) {
   bulkMailTypeFilterInput.addEventListener('change', () => {
+    renderBulkMailRecipients();
+  });
+}
+
+if (bulkMailGradeFilterInput) {
+  bulkMailGradeFilterInput.addEventListener('change', () => {
     renderBulkMailRecipients();
   });
 }

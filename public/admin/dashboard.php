@@ -467,7 +467,7 @@ if (!empty($exclusionsLog)) {
     .office-preview-item .meta{font-size:12px;color:#475569}
     .hidden{display:none}
     .bulk-mail-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0}
-    .bulk-mail-filters{display:grid;grid-template-columns:2fr 1fr;gap:10px;margin:10px 0}
+    .bulk-mail-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin:10px 0}
     .bulk-mail-compose{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
     .bulk-mail-editor{min-height:340px;resize:vertical}
     .bulk-mail-visual{
@@ -1738,6 +1738,12 @@ if (!empty($exclusionsLog)) {
           <div class="form-group">
             <label>Filtrar alunos</label>
             <input id="bulk-mail-filter" type="text" placeholder="Digite nome ou matrícula" autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label>Série</label>
+            <select id="bulk-mail-grade-filter">
+              <option value="all">Todas</option>
+            </select>
           </div>
           <div class="form-group">
             <label>Perfil</label>

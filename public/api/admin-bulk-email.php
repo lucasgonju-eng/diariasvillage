@@ -341,9 +341,10 @@ try {
 
 if ($action === 'init') {
     $studentsQueries = [
+        'select=id,name,enrollment,grade,class_name,active&order=name.asc&limit=10000',
+        'select=id,name,enrollment,grade,class_name&order=name.asc&limit=10000',
         'select=id,name,enrollment,active&order=name.asc&limit=10000',
         'select=id,name,enrollment&order=name.asc&limit=10000',
-        'select=id,name,enrollment,grade,class_name&order=name.asc&limit=10000',
     ];
     $studentsResult = null;
     foreach ($studentsQueries as $query) {
@@ -525,6 +526,8 @@ if ($action === 'init') {
             'id' => $id,
             'name' => trim((string) ($student['name'] ?? '')),
             'enrollment' => trim((string) ($student['enrollment'] ?? '')),
+            'grade' => isset($student['grade']) && is_numeric($student['grade']) ? (int) $student['grade'] : null,
+            'class_name' => trim((string) ($student['class_name'] ?? '')),
             'is_diarista' => isset($diaristaStudentIds[$id]),
             'is_mensalista' => isset($monthlyByStudentId[$id]),
             // Requisito do Admin: mensalista não aparece no filtro "Inadimplentes".
