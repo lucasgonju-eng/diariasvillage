@@ -294,9 +294,10 @@ function replacePlaceholders(string $text, array $context): string
 ensureAdminPrincipal();
 Helpers::requirePost();
 
-$payload = json_decode(file_get_contents('php://input'), true);
-$action = trim((string) ($payload['action'] ?? 'init'));
-$client = new SupabaseClient(new HttpClient());
+try {
+    $payload = json_decode(file_get_contents('php://input'), true);
+    $action = trim((string) ($payload['action'] ?? 'init'));
+    $client = new SupabaseClient(new HttpClient());
 
 if ($action === 'init') {
     $studentsQueries = [
@@ -319,29 +320,32 @@ if ($action === 'init') {
 
     $guardiansResult = $client->select(
         'guardians',
-        'select=student_id,parent_name,email,created_at&order=created_at.desc&limit=12000'
+        'select=student_id,parent_name,email&limit=8000'
     );
     if (!($guardiansResult['ok'] ?? false)) {
         $guardiansResult = $client->select(
             'guardians',
-            'select=student_id,parent_name,email&limit=12000'
+            'select=student_id,parent_name,email&limit=4000'
         );
     }
     $guardiansRows = is_array($guardiansResult['data'] ?? null) ? $guardiansResult['data'] : [];
 
-    // Consultas segmentadas para evitar timeout no carregamento da aba.
-    $paidPaymentsResult = $client->select('payments', 'select=student_id,paid_at&paid_at=not.is.null&limit=20000');
+    // Consultas leves para não travar o carregamento do Admin.
+    $paidPaymentsResult = $client->select(
+        'payments',
+        'select=student_id,status&status=eq.paid&limit=5000'
+    );
     if (!($paidPaymentsResult['ok'] ?? false)) {
-        $paidPaymentsResult = $client->select('payments', 'select=student_id,status&status=eq.paid&limit=20000');
+        $paidPaymentsResult = $client->select('payments', 'select=student_id,payment_date&paid_at=not.is.null&limit=5000');
     }
     $paidPaymentsRows = is_array($paidPaymentsResult['data'] ?? null) ? $paidPaymentsResult['data'] : [];
 
     $openPaymentsResult = $client->select(
         'payments',
-        'select=student_id,status,paid_at&paid_at=is.null&status=not.in.(paid,canceled,refunded,deleted)&limit=20000'
+        'select=student_id,status,paid_at&paid_at=is.null&status=in.(pending,overdue,awaiting_risk_analysis,queued)&limit=5000'
     );
     if (!($openPaymentsResult['ok'] ?? false)) {
-        $openPaymentsResult = $client->select('payments', 'select=student_id,status,paid_at&paid_at=is.null&limit=20000');
+        $openPaymentsResult = $client->select('payments', 'select=student_id,status,paid_at&paid_at=is.null&limit=5000');
     }
     $openPaymentsRows = is_array($openPaymentsResult['data'] ?? null) ? $openPaymentsResult['data'] : [];
 
@@ -577,3 +581,11 @@ if ($action === 'send') {
 }
 
 Helpers::json(['ok' => false, 'error' => 'Ação inválida.'], 422);
+} catch (\Throwable $e) {
+    error_log('admin-bulk-email.php fatal: ' . $e->getMessage());
+    Helpers::json([
+        'ok' => false,
+        'error' => 'Falha interna ao processar e-mails em massa.',
+        'debug' => (string) $e->getMessage(),
+    ], 500);
+}
