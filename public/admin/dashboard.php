@@ -1797,6 +1797,7 @@ if (!empty($exclusionsLog)) {
 
         <div class="bulk-mail-toolbar">
           <button id="bulk-mail-send" class="btn btn-danger btn-sm" type="button">Enviar para selecionados</button>
+          <button id="bulk-mail-send-test" class="btn btn-ghost btn-sm bulk-mail-edit-emails" type="button">Enviar teste</button>
           <div id="bulk-mail-message" class="charge-message"></div>
         </div>
       </section>
@@ -1812,7 +1813,7 @@ if (!empty($exclusionsLog)) {
     window.__monthlyStudents = <?php echo json_encode($monthlyRowsForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
     window.__adminCanApproveAttendance = <?php echo $canAttendanceApprove ? 'true' : 'false'; ?>;
   </script>
-  <script src="/assets/js/admin-dashboard.js?v=58"></script>
+  <script src="/assets/js/admin-dashboard.js?v=59"></script>
   <script>
     (function () {
       function activateTab(name) {

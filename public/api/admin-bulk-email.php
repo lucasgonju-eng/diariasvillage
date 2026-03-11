@@ -763,6 +763,68 @@ if ($action === 'send') {
     ]);
 }
 
+if ($action === 'send_test') {
+    $subject = trim((string) ($payload['subject'] ?? ''));
+    $html = trim((string) ($payload['html'] ?? ''));
+    $studentId = trim((string) ($payload['student_id'] ?? ''));
+    if ($subject === '' || $html === '') {
+        Helpers::json(['ok' => false, 'error' => 'Assunto e HTML são obrigatórios para envio de teste.'], 422);
+    }
+
+    $baseUrl = rtrim(Helpers::baseUrl(), '/');
+    if ($baseUrl === '') {
+        $baseUrl = 'https://diarias.village.einsteinhub.co';
+    }
+
+    $sample = [
+        'student_name' => 'Aluno Exemplo',
+        'enrollment' => '000000',
+        'guardian_name' => 'Responsável Exemplo',
+    ];
+    if ($studentId !== '') {
+        $studentResult = $client->select(
+            'students',
+            'select=id,name,enrollment&id=eq.' . urlencode($studentId) . '&limit=1'
+        );
+        $student = $studentResult['data'][0] ?? null;
+        if (is_array($student)) {
+            $sample['student_name'] = trim((string) ($student['name'] ?? 'Aluno Exemplo')) ?: 'Aluno Exemplo';
+            $sample['enrollment'] = trim((string) ($student['enrollment'] ?? '000000')) ?: '000000';
+            $guardianResult = $client->select(
+                'guardians',
+                'select=parent_name&student_id=eq.' . urlencode($studentId) . '&limit=1'
+            );
+            $guardian = $guardianResult['data'][0] ?? null;
+            if (is_array($guardian)) {
+                $sample['guardian_name'] = trim((string) ($guardian['parent_name'] ?? 'Responsável Exemplo')) ?: 'Responsável Exemplo';
+            }
+        }
+    }
+
+    $context = [
+        'student_name' => $sample['student_name'],
+        'enrollment' => $sample['enrollment'],
+        'guardian_name' => $sample['guardian_name'],
+        'link_pagamento' => $baseUrl . '/login.php',
+        'link_suporte' => $baseUrl . '/login.php',
+        'url_mascote' => $baseUrl . '/assets/img/mascote-village.png',
+    ];
+
+    $resolvedSubject = replacePlaceholders($subject, $context);
+    $resolvedHtml = replacePlaceholders($html, $context);
+    $mailer = new Mailer();
+    $result = $mailer->send('lucasgonju@gmail.com', $resolvedSubject, $resolvedHtml);
+    if (!($result['ok'] ?? false)) {
+        Helpers::json(['ok' => false, 'error' => 'Falha ao enviar teste para lucasgonju@gmail.com.'], 500);
+    }
+
+    Helpers::json([
+        'ok' => true,
+        'message' => 'Teste enviado para lucasgonju@gmail.com.',
+        'sample_context' => $context,
+    ]);
+}
+
 Helpers::json(['ok' => false, 'error' => 'Ação inválida.'], 422);
 } catch (\Throwable $e) {
     error_log('admin-bulk-email.php fatal: ' . $e->getMessage());

@@ -177,6 +177,7 @@ const bulkMailSubjectInput = document.querySelector('#bulk-mail-subject');
 const bulkMailHtmlInput = document.querySelector('#bulk-mail-html');
 const bulkMailVisualInput = document.querySelector('#bulk-mail-visual');
 const bulkMailSendButton = document.querySelector('#bulk-mail-send');
+const bulkMailSendTestButton = document.querySelector('#bulk-mail-send-test');
 const bulkMailMessage = document.querySelector('#bulk-mail-message');
 let bulkMailLoaded = false;
 let bulkMailStudents = [];
@@ -2650,6 +2651,54 @@ if (bulkMailSendButton) {
     } finally {
       bulkMailSendButton.removeAttribute('disabled');
       bulkMailSendButton.textContent = originalText;
+    }
+  });
+}
+
+if (bulkMailSendTestButton) {
+  bulkMailSendTestButton.addEventListener('click', async () => {
+    const subject = String(bulkMailSubjectInput?.value || '').trim();
+    const html = String(bulkMailHtmlInput?.value || '').trim();
+    if (!subject || !html) {
+      setBulkMailMessage('Preencha assunto e HTML antes de enviar teste.', true);
+      return;
+    }
+
+    const selectedIds = Array.from(bulkMailSelectedIds);
+    const sampleStudentId = selectedIds[0] || '';
+    const confirmed = await showAdminConfirm(
+      'Enviar e-mail de teste para lucasgonju@gmail.com com o template atual?',
+      { title: 'Enviar teste', confirmText: 'Enviar teste' },
+    );
+    if (!confirmed) return;
+
+    bulkMailSendTestButton.setAttribute('disabled', 'disabled');
+    const originalText = bulkMailSendTestButton.textContent;
+    bulkMailSendTestButton.textContent = 'Enviando teste...';
+    setBulkMailMessage('Enviando teste para lucasgonju@gmail.com...');
+
+    try {
+      const res = await fetch('/admin/bulk-email.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'send_test',
+          subject,
+          html,
+          student_id: sampleStudentId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        setBulkMailMessage(data?.error || 'Falha ao enviar e-mail de teste.', true);
+        return;
+      }
+      setBulkMailMessage('Teste enviado para lucasgonju@gmail.com com sucesso.');
+    } catch {
+      setBulkMailMessage('Falha ao enviar e-mail de teste.', true);
+    } finally {
+      bulkMailSendTestButton.removeAttribute('disabled');
+      bulkMailSendTestButton.textContent = originalText;
     }
   });
 }
