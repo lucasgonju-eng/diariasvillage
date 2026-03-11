@@ -17,7 +17,7 @@ $canAttendanceApprove = $isAdminPrincipal;
 $canManageModularOffices = $isAdminPrincipal;
 
 $allowedTabs = $isAdminPrincipal
-    ? ['charges', 'chamada', 'inadimplentes', 'recebidas', 'sem-whatsapp', 'pendencias', 'mensalistas', 'exclusoes', 'reset-senha', 'fluxo-caixa', 'dados-asaas', 'entries']
+    ? ['charges', 'chamada', 'inadimplentes', 'recebidas', 'sem-whatsapp', 'pendencias', 'mensalistas', 'exclusoes', 'reset-senha', 'fluxo-caixa', 'dados-asaas', 'email-massa', 'entries']
     : ['chamada', 'sem-whatsapp', 'mensalistas', 'reset-senha', 'entries'];
 if ($canMergeDuplicates) {
     $allowedTabs[] = 'duplicados';
@@ -466,6 +466,26 @@ if (!empty($exclusionsLog)) {
     .office-preview-item strong{display:block;color:#0F172A}
     .office-preview-item .meta{font-size:12px;color:#475569}
     .hidden{display:none}
+    .bulk-mail-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0}
+    .bulk-mail-filters{display:grid;grid-template-columns:2fr 1fr;gap:10px;margin:10px 0}
+    .bulk-mail-compose{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+    .bulk-mail-editor{min-height:340px;resize:vertical}
+    .bulk-mail-visual{
+      min-height:340px;
+      max-height:680px;
+      overflow:auto;
+      border:1px solid #CBD5E1;
+      border-radius:10px;
+      padding:12px;
+      background:#fff;
+      color:#0F172A;
+    }
+    .bulk-mail-template-row{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin:10px 0}
+    .bulk-mail-meta{font-size:12px;color:#475569}
+    .bulk-mail-table-wrap{max-height:360px;overflow:auto;border:1px solid #E2E8F0;border-radius:12px}
+    @media (max-width: 980px){
+      .bulk-mail-filters,.bulk-mail-compose{grid-template-columns:1fr}
+    }
   </style>
 </head>
 <body data-active-tab="<?php echo htmlspecialchars($activeTab, ENT_QUOTES, 'UTF-8'); ?>">
@@ -555,6 +575,7 @@ if (!empty($exclusionsLog)) {
         <?php if ($isAdminPrincipal): ?>
           <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=fluxo-caixa" data-tab="fluxo-caixa">Fluxo de Caixa</a>
           <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=dados-asaas" data-tab="dados-asaas">Dados do Asaas</a>
+          <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=email-massa" data-tab="email-massa">Enviar E-mails em Massa</a>
         <?php endif; ?>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=entries" data-tab="entries">Entradas confirmadas</a>
       </div>
@@ -1691,6 +1712,86 @@ if (!empty($exclusionsLog)) {
           </table>
         </div>
       </section>
+
+      <?php if ($isAdminPrincipal): ?>
+      <section id="tab-email-massa" class="<?php echo $activeTab === 'email-massa' ? '' : 'hidden'; ?>">
+        <h2>Enviar E-mails em Massa</h2>
+        <p class="muted">Envio disponível apenas para admin principal. Selecione os alunos, monte o HTML e envie para os responsáveis dos alunos marcados.</p>
+
+        <div class="bulk-mail-filters">
+          <div class="form-group">
+            <label>Filtrar alunos</label>
+            <input id="bulk-mail-filter" type="text" placeholder="Digite nome ou matrícula" autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label>Perfil</label>
+            <select id="bulk-mail-type-filter">
+              <option value="all">Todos</option>
+              <option value="diaristas">Diaristas (já fizeram pelo menos uma diária)</option>
+              <option value="mensalistas">Mensalistas</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="bulk-mail-toolbar">
+          <label style="display:flex;gap:6px;align-items:center;font-size:13px;">
+            <input id="bulk-mail-select-all" type="checkbox" />
+            Marcar todos (filtro atual)
+          </label>
+          <div class="bulk-mail-meta" id="bulk-mail-counter">0 selecionado(s)</div>
+        </div>
+
+        <div class="bulk-mail-table-wrap">
+          <table class="admin-table">
+            <thead>
+              <tr style="text-align:left;">
+                <th>Selecionar</th>
+                <th>Aluno</th>
+                <th>Matrícula</th>
+                <th>Tipo</th>
+                <th>E-mail(s) de destino</th>
+              </tr>
+            </thead>
+            <tbody id="bulk-mail-recipients-body">
+              <tr><td colspan="5">Carregando alunos...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="bulk-mail-template-row">
+          <div class="form-group" style="min-width:280px;">
+            <label>Template salvo</label>
+            <select id="bulk-mail-template-select"></select>
+          </div>
+          <button id="bulk-mail-template-load" class="btn btn-ghost btn-sm" type="button">Carregar template</button>
+          <button id="bulk-mail-template-save" class="btn btn-primary btn-sm" type="button">Salvar template atual</button>
+        </div>
+
+        <div class="charge-fields">
+          <div class="form-group">
+            <label>Assunto</label>
+            <input id="bulk-mail-subject" type="text" placeholder="Assunto do e-mail" />
+          </div>
+        </div>
+        <div class="bulk-mail-meta">Placeholders disponíveis: {{NOME_ALUNO}}, {{MATRICULA}}, {{NOME_RESPONSAVEL}}</div>
+
+        <div class="bulk-mail-compose">
+          <div class="form-group">
+            <label>HTML puro</label>
+            <textarea id="bulk-mail-html" class="bulk-mail-editor" placeholder="Cole ou escreva o HTML completo do e-mail"></textarea>
+          </div>
+          <div class="form-group">
+            <label>Visão do usuário (editável)</label>
+            <div id="bulk-mail-visual" class="bulk-mail-visual" contenteditable="true"></div>
+          </div>
+        </div>
+
+        <div class="bulk-mail-toolbar">
+          <button id="bulk-mail-send" class="btn btn-danger btn-sm" type="button">Enviar para selecionados</button>
+          <div id="bulk-mail-message" class="charge-message"></div>
+        </div>
+      </section>
+      <?php endif; ?>
     </div>
 
     <div class="footer">Desenvolvido por Lucas Gonçalves Junior - 2026</div>
@@ -1720,7 +1821,8 @@ if (!empty($exclusionsLog)) {
           duplicados: 'tab-duplicados',
           'reset-senha': 'tab-reset-senha',
           'fluxo-caixa': 'tab-fluxo-caixa',
-          'dados-asaas': 'tab-dados-asaas'
+          'dados-asaas': 'tab-dados-asaas',
+          'email-massa': 'tab-email-massa'
         };
         Object.keys(mapping).forEach(function (key) {
           var section = document.getElementById(mapping[key]);

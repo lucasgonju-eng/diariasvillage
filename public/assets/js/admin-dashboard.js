@@ -15,6 +15,7 @@ const tabExclusoes = document.querySelector('#tab-exclusoes');
 const tabResetSenha = document.querySelector('#tab-reset-senha');
 const tabFluxoCaixa = document.querySelector('#tab-fluxo-caixa');
 const tabDadosAsaas = document.querySelector('#tab-dados-asaas');
+const tabEmailMassa = document.querySelector('#tab-email-massa');
 const studentInput = document.querySelector('#charge-student');
 const studentList = document.querySelector('#students-list');
 const chargeList = document.querySelector('#charge-list');
@@ -122,6 +123,7 @@ function setActiveTab(name) {
   if (tabResetSenha) tabResetSenha.classList.toggle('hidden', name !== 'reset-senha');
   if (tabFluxoCaixa) tabFluxoCaixa.classList.toggle('hidden', name !== 'fluxo-caixa');
   if (tabDadosAsaas) tabDadosAsaas.classList.toggle('hidden', name !== 'dados-asaas');
+  if (tabEmailMassa) tabEmailMassa.classList.toggle('hidden', name !== 'email-massa');
   tabs.forEach((btn) => {
     const isActive = btn.dataset.tab === name;
     btn.classList.toggle('btn-primary', isActive);
@@ -163,6 +165,24 @@ const asaasTopAdimplentes = document.querySelector('#asaas-top-adimplentes');
 const asaasTopInadimplentes = document.querySelector('#asaas-top-inadimplentes');
 let asaasDataLoaded = false;
 let asaasDataLastPayload = null;
+const bulkMailFilterInput = document.querySelector('#bulk-mail-filter');
+const bulkMailTypeFilterInput = document.querySelector('#bulk-mail-type-filter');
+const bulkMailSelectAllInput = document.querySelector('#bulk-mail-select-all');
+const bulkMailRecipientsBody = document.querySelector('#bulk-mail-recipients-body');
+const bulkMailCounter = document.querySelector('#bulk-mail-counter');
+const bulkMailTemplateSelect = document.querySelector('#bulk-mail-template-select');
+const bulkMailTemplateLoadButton = document.querySelector('#bulk-mail-template-load');
+const bulkMailTemplateSaveButton = document.querySelector('#bulk-mail-template-save');
+const bulkMailSubjectInput = document.querySelector('#bulk-mail-subject');
+const bulkMailHtmlInput = document.querySelector('#bulk-mail-html');
+const bulkMailVisualInput = document.querySelector('#bulk-mail-visual');
+const bulkMailSendButton = document.querySelector('#bulk-mail-send');
+const bulkMailMessage = document.querySelector('#bulk-mail-message');
+let bulkMailLoaded = false;
+let bulkMailStudents = [];
+let bulkMailTemplates = [];
+const bulkMailSelectedIds = new Set();
+let bulkMailSyncingEditors = false;
 let adminDialogInstance = null;
 
 function ensureAdminDialog() {
@@ -1349,6 +1369,175 @@ async function loadStudents() {
   applyStudentsToLists(data.students);
 }
 
+function setBulkMailMessage(text, isError = false) {
+  if (!bulkMailMessage) return;
+  bulkMailMessage.textContent = String(text || '');
+  bulkMailMessage.className = `charge-message ${isError ? 'error' : 'success'}`.trim();
+}
+
+function updateBulkMailCounter() {
+  if (!bulkMailCounter) return;
+  bulkMailCounter.textContent = `${bulkMailSelectedIds.size} selecionado(s)`;
+}
+
+function getBulkMailTypeLabel(student) {
+  if (student?.is_mensalista) return 'Mensalista';
+  if (student?.is_diarista) return 'Diarista';
+  return 'Sem diária';
+}
+
+function getFilteredBulkMailStudents() {
+  const query = normalizeSearchText(bulkMailFilterInput?.value || '');
+  const type = String(bulkMailTypeFilterInput?.value || 'all');
+  return bulkMailStudents.filter((student) => {
+    if (type === 'diaristas' && !student?.is_diarista) return false;
+    if (type === 'mensalistas' && !student?.is_mensalista) return false;
+    if (!query) return true;
+    const name = normalizeSearchText(student?.name || '');
+    const enrollment = normalizeSearchText(student?.enrollment || '');
+    return name.includes(query) || enrollment.includes(query);
+  });
+}
+
+function renderBulkMailTemplates() {
+  if (!bulkMailTemplateSelect) return;
+  if (!Array.isArray(bulkMailTemplates) || !bulkMailTemplates.length) {
+    bulkMailTemplateSelect.innerHTML = '<option value="">Nenhum template salvo</option>';
+    return;
+  }
+
+  bulkMailTemplateSelect.innerHTML = bulkMailTemplates
+    .map(
+      (tpl) =>
+        `<option value="${escapeHtml(tpl.id || '')}">${escapeHtml(tpl.name || 'Template sem nome')}</option>`,
+    )
+    .join('');
+}
+
+function applyTemplateToBulkMail(templateId) {
+  const targetId = String(templateId || '').trim();
+  if (!targetId) return;
+  const template = bulkMailTemplates.find((tpl) => String(tpl?.id || '') === targetId);
+  if (!template) return;
+
+  if (bulkMailSubjectInput) bulkMailSubjectInput.value = String(template.subject || '');
+  if (bulkMailHtmlInput) bulkMailHtmlInput.value = String(template.html || '');
+  syncBulkMailVisualFromHtml();
+}
+
+function renderBulkMailRecipients() {
+  if (!bulkMailRecipientsBody) return;
+  const rows = getFilteredBulkMailStudents();
+  if (!rows.length) {
+    bulkMailRecipientsBody.innerHTML = '<tr><td colspan="5">Nenhum aluno para o filtro aplicado.</td></tr>';
+    updateBulkMailCounter();
+    if (bulkMailSelectAllInput) {
+      bulkMailSelectAllInput.checked = false;
+      bulkMailSelectAllInput.indeterminate = false;
+    }
+    return;
+  }
+
+  bulkMailRecipientsBody.innerHTML = rows
+    .map((student) => {
+      const studentId = String(student?.id || '');
+      const emails = Array.isArray(student?.emails) ? student.emails.filter(Boolean) : [];
+      const hasEmail = emails.length > 0;
+      const checked = bulkMailSelectedIds.has(studentId) ? 'checked' : '';
+      const disabled = hasEmail ? '' : 'disabled';
+      return `
+        <tr>
+          <td>
+            <input class="bulk-mail-student-checkbox" type="checkbox" data-id="${escapeHtml(studentId)}" ${checked} ${disabled} />
+          </td>
+          <td>${escapeHtml(student?.name || '-')}</td>
+          <td>${escapeHtml(student?.enrollment || '-')}</td>
+          <td>${escapeHtml(getBulkMailTypeLabel(student))}</td>
+          <td>${emails.length ? escapeHtml(emails.join(', ')) : '<span style="color:#B91C1C;">Sem e-mail válido</span>'}</td>
+        </tr>
+      `;
+    })
+    .join('');
+
+  const renderedCheckboxes = [
+    ...bulkMailRecipientsBody.querySelectorAll('.bulk-mail-student-checkbox'),
+  ].filter((el) => el instanceof HTMLInputElement && !el.disabled);
+
+  renderedCheckboxes.forEach((checkbox) => {
+    checkbox.addEventListener('change', () => {
+      const id = String(checkbox.dataset.id || '').trim();
+      if (!id) return;
+      if (checkbox.checked) {
+        bulkMailSelectedIds.add(id);
+      } else {
+        bulkMailSelectedIds.delete(id);
+      }
+      updateBulkMailCounter();
+      const selectedInView = renderedCheckboxes.filter((cb) => cb.checked).length;
+      if (bulkMailSelectAllInput) {
+        bulkMailSelectAllInput.checked = selectedInView > 0 && selectedInView === renderedCheckboxes.length;
+        bulkMailSelectAllInput.indeterminate =
+          selectedInView > 0 && selectedInView < renderedCheckboxes.length;
+      }
+    });
+  });
+
+  const selectedInView = renderedCheckboxes.filter((cb) => cb.checked).length;
+  if (bulkMailSelectAllInput) {
+    bulkMailSelectAllInput.checked = selectedInView > 0 && selectedInView === renderedCheckboxes.length;
+    bulkMailSelectAllInput.indeterminate = selectedInView > 0 && selectedInView < renderedCheckboxes.length;
+  }
+  updateBulkMailCounter();
+}
+
+function syncBulkMailVisualFromHtml() {
+  if (!bulkMailHtmlInput || !bulkMailVisualInput || bulkMailSyncingEditors) return;
+  bulkMailSyncingEditors = true;
+  bulkMailVisualInput.innerHTML = bulkMailHtmlInput.value || '';
+  bulkMailSyncingEditors = false;
+}
+
+function syncBulkMailHtmlFromVisual() {
+  if (!bulkMailHtmlInput || !bulkMailVisualInput || bulkMailSyncingEditors) return;
+  bulkMailSyncingEditors = true;
+  bulkMailHtmlInput.value = bulkMailVisualInput.innerHTML || '';
+  bulkMailSyncingEditors = false;
+}
+
+async function loadBulkMailData(force = false) {
+  if (!tabEmailMassa || !bulkMailRecipientsBody) return;
+  if (bulkMailLoaded && !force) return;
+
+  bulkMailRecipientsBody.innerHTML = '<tr><td colspan="5">Carregando alunos...</td></tr>';
+  setBulkMailMessage('');
+  try {
+    const res = await fetch('/api/admin-bulk-email.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'init' }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data?.ok) {
+      setBulkMailMessage(data?.error || 'Falha ao carregar dados de e-mail em massa.', true);
+      bulkMailRecipientsBody.innerHTML = '<tr><td colspan="5">Falha ao carregar alunos.</td></tr>';
+      return;
+    }
+    bulkMailStudents = Array.isArray(data.students) ? data.students : [];
+    bulkMailTemplates = Array.isArray(data.templates) ? data.templates : [];
+    renderBulkMailTemplates();
+    const suggested = data?.suggested_template_id || bulkMailTemplates[0]?.id;
+    if (bulkMailTemplateSelect && suggested) {
+      bulkMailTemplateSelect.value = String(suggested);
+    }
+    applyTemplateToBulkMail(suggested);
+    renderBulkMailRecipients();
+    bulkMailLoaded = true;
+  } catch {
+    setBulkMailMessage('Falha ao carregar dados de e-mail em massa.', true);
+    bulkMailRecipientsBody.innerHTML = '<tr><td colspan="5">Falha ao carregar alunos.</td></tr>';
+  }
+}
+
 async function syncMonthlyStudents(action) {
   if (!monthlyStudentInput) return;
   const resolved = resolveStudentNameForAdmin(monthlyStudentInput.value);
@@ -2217,8 +2406,174 @@ tabs.forEach((btn) => {
     if (btn.dataset.tab === 'dados-asaas' && !asaasDataLoaded) {
       loadAsaasData();
     }
+    if (btn.dataset.tab === 'email-massa') {
+      loadBulkMailData();
+    }
   });
 });
+
+if (bulkMailFilterInput) {
+  bulkMailFilterInput.addEventListener('input', () => {
+    renderBulkMailRecipients();
+  });
+}
+
+if (bulkMailTypeFilterInput) {
+  bulkMailTypeFilterInput.addEventListener('change', () => {
+    renderBulkMailRecipients();
+  });
+}
+
+if (bulkMailSelectAllInput) {
+  bulkMailSelectAllInput.addEventListener('change', () => {
+    const visibleCheckboxes = [...document.querySelectorAll('.bulk-mail-student-checkbox')].filter(
+      (el) => el instanceof HTMLInputElement && !el.disabled,
+    );
+    const checked = !!bulkMailSelectAllInput.checked;
+    visibleCheckboxes.forEach((checkbox) => {
+      checkbox.checked = checked;
+      const id = String(checkbox.dataset.id || '').trim();
+      if (!id) return;
+      if (checked) bulkMailSelectedIds.add(id);
+      else bulkMailSelectedIds.delete(id);
+    });
+    updateBulkMailCounter();
+  });
+}
+
+if (bulkMailHtmlInput) {
+  bulkMailHtmlInput.addEventListener('input', () => {
+    syncBulkMailVisualFromHtml();
+  });
+}
+
+if (bulkMailVisualInput) {
+  bulkMailVisualInput.addEventListener('input', () => {
+    syncBulkMailHtmlFromVisual();
+  });
+}
+
+if (bulkMailTemplateLoadButton) {
+  bulkMailTemplateLoadButton.addEventListener('click', () => {
+    const templateId = String(bulkMailTemplateSelect?.value || '').trim();
+    if (!templateId) {
+      setBulkMailMessage('Selecione um template para carregar.', true);
+      return;
+    }
+    applyTemplateToBulkMail(templateId);
+    setBulkMailMessage('Template carregado.');
+  });
+}
+
+if (bulkMailTemplateSaveButton) {
+  bulkMailTemplateSaveButton.addEventListener('click', async () => {
+    const subject = String(bulkMailSubjectInput?.value || '').trim();
+    const html = String(bulkMailHtmlInput?.value || '').trim();
+    if (!subject || !html) {
+      setBulkMailMessage('Preencha assunto e HTML antes de salvar template.', true);
+      return;
+    }
+
+    const templateName = window.prompt('Nome do template:', 'Novo template');
+    if (templateName === null) return;
+    const finalName = String(templateName || '').trim();
+    if (!finalName) {
+      setBulkMailMessage('Informe um nome válido para o template.', true);
+      return;
+    }
+
+    bulkMailTemplateSaveButton.setAttribute('disabled', 'disabled');
+    const originalText = bulkMailTemplateSaveButton.textContent;
+    bulkMailTemplateSaveButton.textContent = 'Salvando...';
+    try {
+      const res = await fetch('/api/admin-bulk-email.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'save_template',
+          name: finalName,
+          subject,
+          html,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        setBulkMailMessage(data?.error || 'Falha ao salvar template.', true);
+        return;
+      }
+      bulkMailTemplates = Array.isArray(data.templates) ? data.templates : bulkMailTemplates;
+      renderBulkMailTemplates();
+      if (bulkMailTemplateSelect && data?.saved_template_id) {
+        bulkMailTemplateSelect.value = String(data.saved_template_id);
+      }
+      setBulkMailMessage('Template salvo com sucesso.');
+    } catch {
+      setBulkMailMessage('Falha ao salvar template.', true);
+    } finally {
+      bulkMailTemplateSaveButton.removeAttribute('disabled');
+      bulkMailTemplateSaveButton.textContent = originalText;
+    }
+  });
+}
+
+if (bulkMailSendButton) {
+  bulkMailSendButton.addEventListener('click', async () => {
+    const selectedIds = Array.from(bulkMailSelectedIds);
+    const subject = String(bulkMailSubjectInput?.value || '').trim();
+    const html = String(bulkMailHtmlInput?.value || '').trim();
+
+    if (!selectedIds.length) {
+      setBulkMailMessage('Selecione ao menos um aluno para envio.', true);
+      return;
+    }
+    if (!subject || !html) {
+      setBulkMailMessage('Preencha assunto e HTML antes de enviar.', true);
+      return;
+    }
+
+    const confirmed = await showAdminConfirm(
+      `Enviar e-mail para ${selectedIds.length} aluno(s) selecionado(s)?`,
+      { title: 'Confirmação de envio', confirmText: 'Enviar e-mails' },
+    );
+    if (!confirmed) return;
+
+    bulkMailSendButton.setAttribute('disabled', 'disabled');
+    const originalText = bulkMailSendButton.textContent;
+    bulkMailSendButton.textContent = 'Enviando...';
+    setBulkMailMessage('Enviando e-mails...');
+
+    try {
+      const res = await fetch('/api/admin-bulk-email.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'send',
+          student_ids: selectedIds,
+          subject,
+          html,
+        }),
+      });
+      const data = await res.json();
+      const summary = data?.summary || {};
+      if (!res.ok || !data?.ok) {
+        setBulkMailMessage(
+          data?.error
+            || `Falha parcial no envio. Sucesso: ${summary.sent_students || 0}, falha: ${summary.failed_students || 0}.`,
+          true,
+        );
+        return;
+      }
+      setBulkMailMessage(
+        `Envio concluído. Alunos com sucesso: ${summary.sent_students || 0}. E-mails enviados: ${summary.sent_emails || 0}.`,
+      );
+    } catch {
+      setBulkMailMessage('Falha de rede ao enviar e-mails.', true);
+    } finally {
+      bulkMailSendButton.removeAttribute('disabled');
+      bulkMailSendButton.textContent = originalText;
+    }
+  });
+}
 
 if (studentInput) {
   studentInput.addEventListener('change', tryAddStudentFromInput);
@@ -3922,5 +4277,8 @@ if (initialTab === 'oficinas-modulares') {
 }
 if (initialTab === 'dados-asaas') {
   loadAsaasData();
+}
+if (initialTab === 'email-massa') {
+  loadBulkMailData();
 }
 loadStudents();
