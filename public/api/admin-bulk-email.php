@@ -370,28 +370,21 @@ if ($action === 'init') {
     }
     $guardiansRows = is_array($guardiansResult['data'] ?? null) ? $guardiansResult['data'] : [];
 
-    // Consultas leves para não travar o carregamento do Admin.
-    $paidPaymentsResult = $client->select(
-        'payments',
-        'select=student_id,status&status=eq.paid&limit=5000'
-    );
-    if (!($paidPaymentsResult['ok'] ?? false)) {
-        $paidPaymentsResult = $client->select('payments', 'select=student_id,payment_date&paid_at=not.is.null&limit=5000');
-    }
-    $paidPaymentsRows = is_array($paidPaymentsResult['data'] ?? null) ? $paidPaymentsResult['data'] : [];
-
-    $openPaymentsResult = $client->select(
-        'payments',
-        'select=student_id,status,paid_at&paid_at=is.null&status=in.(pending,overdue,awaiting_risk_analysis,queued)&limit=5000'
-    );
-    if (!($openPaymentsResult['ok'] ?? false)) {
-        $openPaymentsResult = $client->select('payments', 'select=student_id,status,paid_at&paid_at=is.null&limit=5000');
-    }
-    $openPaymentsRows = is_array($openPaymentsResult['data'] ?? null) ? $openPaymentsResult['data'] : [];
-
     $monthlyRows = MonthlyStudents::load();
     $monthlyByStudentId = MonthlyStudents::mapByStudentId($monthlyRows);
+    $monthlyByName = MonthlyStudents::mapByNormalizedName($monthlyRows);
 
+    $paidPaymentsResult = $client->select(
+        'payments',
+        'select=student_id,status,paid_at&status=eq.paid&limit=5000'
+    );
+    if (!($paidPaymentsResult['ok'] ?? false)) {
+        $paidPaymentsResult = $client->select(
+            'payments',
+            'select=student_id,paid_at,status&paid_at=not.is.null&limit=5000'
+        );
+    }
+    $paidPaymentsRows = is_array($paidPaymentsResult['data'] ?? null) ? $paidPaymentsResult['data'] : [];
     $diaristaStudentIds = [];
     foreach ($paidPaymentsRows as $row) {
         if (!is_array($row)) {
@@ -402,8 +395,22 @@ if ($action === 'init') {
             $diaristaStudentIds[$studentId] = true;
         }
     }
-    $inadimplenteStudentIds = [];
-    foreach ($openPaymentsRows as $row) {
+    // Replica da regra da aba "Cobranças em aberto".
+    $queuedPendingResult = $client->select(
+        'payments',
+        'select=id,student_id,status,billing_type,daily_type,payment_date,created_at,students(id,name,enrollment)'
+        . '&billing_type=eq.PIX_MANUAL_QUEUE&status=eq.queued&order=created_at.desc&limit=5000'
+    );
+    $queuedPending = is_array($queuedPendingResult['data'] ?? null) ? $queuedPendingResult['data'] : [];
+
+    $allUnpaidResult = $client->select(
+        'payments',
+        'select=id,student_id,status,billing_type,daily_type,payment_date,created_at,students(id,name,enrollment)'
+        . '&paid_at=is.null&order=created_at.desc&limit=12000'
+    );
+    $allUnpaidRows = is_array($allUnpaidResult['data'] ?? null) ? $allUnpaidResult['data'] : [];
+    $manualPending = [];
+    foreach ($allUnpaidRows as $row) {
         if (!is_array($row)) {
             continue;
         }
@@ -411,7 +418,66 @@ if ($action === 'init') {
         if (in_array($status, ['paid', 'canceled', 'refunded', 'deleted'], true)) {
             continue;
         }
-        $studentId = trim((string) ($row['student_id'] ?? ''));
+        if ($status === 'queued' && strtoupper((string) ($row['billing_type'] ?? '')) === 'PIX_MANUAL_QUEUE') {
+            continue;
+        }
+        $manualPending[] = $row;
+    }
+
+    $manualPaidResult = $client->select(
+        'payments',
+        'select=id,student_id,status,billing_type,daily_type,payment_date,created_at,students(id,name,enrollment)'
+        . '&status=eq.paid&order=paid_at.desc&limit=1000'
+    );
+    $manualPaid = is_array($manualPaidResult['data'] ?? null) ? $manualPaidResult['data'] : [];
+
+    $inadimplentesClassified = MonthlyStudents::classifyRowsByQuota(
+        array_merge($queuedPending, $manualPending, $manualPaid),
+        static function (array $row): array {
+            $student = is_array($row['students'] ?? null) ? $row['students'] : [];
+            $studentId = trim((string) ($row['student_id'] ?? ($student['id'] ?? '')));
+            $studentName = trim((string) ($student['name'] ?? ''));
+            $dates = MonthlyStudents::extractDatesFromPayment(
+                (string) ($row['daily_type'] ?? ''),
+                (string) ($row['payment_date'] ?? '')
+            );
+            return [
+                'student_id' => $studentId,
+                'student_name' => $studentName,
+                'dates' => $dates,
+                'created_at' => (string) ($row['created_at'] ?? ''),
+            ];
+        },
+        $monthlyByStudentId,
+        $monthlyByName
+    );
+
+    $inadimplentesVisibleById = [];
+    foreach (($inadimplentesClassified['visible'] ?? []) as $rowVisible) {
+        if (!is_array($rowVisible)) {
+            continue;
+        }
+        $pid = trim((string) ($rowVisible['id'] ?? ''));
+        if ($pid !== '') {
+            $inadimplentesVisibleById[$pid] = true;
+        }
+    }
+    $queuedPending = array_values(array_filter($queuedPending, static function ($row) use ($inadimplentesVisibleById): bool {
+        $pid = trim((string) ($row['id'] ?? ''));
+        return $pid === '' || isset($inadimplentesVisibleById[$pid]);
+    }));
+    $manualPending = array_values(array_filter($manualPending, static function ($row) use ($inadimplentesVisibleById): bool {
+        $pid = trim((string) ($row['id'] ?? ''));
+        return $pid === '' || isset($inadimplentesVisibleById[$pid]);
+    }));
+
+    $inadimplenteStudentIds = [];
+    foreach (array_merge($queuedPending, $manualPending) as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $student = is_array($row['students'] ?? null) ? $row['students'] : [];
+        $studentId = trim((string) ($row['student_id'] ?? ($student['id'] ?? '')));
         if ($studentId !== '') {
             $inadimplenteStudentIds[$studentId] = true;
         }
@@ -461,7 +527,8 @@ if ($action === 'init') {
             'enrollment' => trim((string) ($student['enrollment'] ?? '')),
             'is_diarista' => isset($diaristaStudentIds[$id]),
             'is_mensalista' => isset($monthlyByStudentId[$id]),
-            'is_inadimplente' => isset($inadimplenteStudentIds[$id]),
+            // Requisito do Admin: mensalista não aparece no filtro "Inadimplentes".
+            'is_inadimplente' => isset($inadimplenteStudentIds[$id]) && !isset($monthlyByStudentId[$id]),
             'emails' => $emails,
             'guardians' => array_values($guardiansByStudentId[$id] ?? []),
             'guardian_names' => $guardianNames,
