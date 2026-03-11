@@ -1513,7 +1513,7 @@ async function loadBulkMailData(force = false) {
   bulkMailRecipientsBody.innerHTML = '<tr><td colspan="5">Carregando alunos...</td></tr>';
   setBulkMailMessage('');
   try {
-    const res = await fetch('/api/admin-bulk-email.php', {
+    const res = await fetch('/admin/bulk-email.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'init' }),
@@ -2488,7 +2488,7 @@ if (bulkMailTemplateSaveButton) {
     const originalText = bulkMailTemplateSaveButton.textContent;
     bulkMailTemplateSaveButton.textContent = 'Salvando...';
     try {
-      const res = await fetch('/api/admin-bulk-email.php', {
+      const res = await fetch('/admin/bulk-email.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2545,7 +2545,7 @@ if (bulkMailSendButton) {
     setBulkMailMessage('Enviando e-mails...');
 
     try {
-      const res = await fetch('/api/admin-bulk-email.php', {
+      const res = await fetch('/admin/bulk-email.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
