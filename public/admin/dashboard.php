@@ -483,6 +483,13 @@ if (!empty($exclusionsLog)) {
     .bulk-mail-template-row{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin:10px 0}
     .bulk-mail-meta{font-size:12px;color:#475569}
     .bulk-mail-table-wrap{max-height:360px;overflow:auto;border:1px solid #E2E8F0;border-radius:12px}
+    .bulk-mail-edit-emails{
+      color:#0A1B4D;
+      border-color:#BFD0EE;
+      background:#E8F0FF;
+      font-weight:800;
+    }
+    .bulk-mail-edit-emails:hover{filter:brightness(.97)}
     @media (max-width: 980px){
       .bulk-mail-filters,.bulk-mail-compose{grid-template-columns:1fr}
     }
