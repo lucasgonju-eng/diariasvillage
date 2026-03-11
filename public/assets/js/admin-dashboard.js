@@ -1401,6 +1401,12 @@ function getFilteredBulkMailStudents() {
   });
 }
 
+function getBulkMailStudentById(studentId) {
+  const target = String(studentId || '').trim();
+  if (!target) return null;
+  return bulkMailStudents.find((row) => String(row?.id || '').trim() === target) || null;
+}
+
 function renderBulkMailTemplates() {
   if (!bulkMailTemplateSelect) return;
   if (!Array.isArray(bulkMailTemplates) || !bulkMailTemplates.length) {
@@ -1431,7 +1437,7 @@ function renderBulkMailRecipients() {
   if (!bulkMailRecipientsBody) return;
   const rows = getFilteredBulkMailStudents();
   if (!rows.length) {
-    bulkMailRecipientsBody.innerHTML = '<tr><td colspan="5">Nenhum aluno para o filtro aplicado.</td></tr>';
+    bulkMailRecipientsBody.innerHTML = '<tr><td colspan="6">Nenhum aluno para o filtro aplicado.</td></tr>';
     updateBulkMailCounter();
     if (bulkMailSelectAllInput) {
       bulkMailSelectAllInput.checked = false;
@@ -1456,6 +1462,9 @@ function renderBulkMailRecipients() {
           <td>${escapeHtml(student?.enrollment || '-')}</td>
           <td>${escapeHtml(getBulkMailTypeLabel(student))}</td>
           <td>${emails.length ? escapeHtml(emails.join(', ')) : '<span style="color:#B91C1C;">Sem e-mail válido</span>'}</td>
+          <td>
+            <button class="btn btn-ghost btn-sm bulk-mail-edit-emails" type="button" data-id="${escapeHtml(studentId)}">Editar e-mails</button>
+          </td>
         </tr>
       `;
     })
@@ -1480,6 +1489,74 @@ function renderBulkMailRecipients() {
         bulkMailSelectAllInput.checked = selectedInView > 0 && selectedInView === renderedCheckboxes.length;
         bulkMailSelectAllInput.indeterminate =
           selectedInView > 0 && selectedInView < renderedCheckboxes.length;
+      }
+    });
+  });
+
+  [...bulkMailRecipientsBody.querySelectorAll('.bulk-mail-edit-emails')].forEach((button) => {
+    button.addEventListener('click', async () => {
+      if (!(button instanceof HTMLElement)) return;
+      const studentId = String(button.dataset.id || '').trim();
+      if (!studentId) return;
+      const student = getBulkMailStudentById(studentId);
+      if (!student) {
+        setBulkMailMessage('Aluno não encontrado para edição de e-mails.', true);
+        return;
+      }
+
+      const guardians = Array.isArray(student.guardians) ? student.guardians : [];
+      if (!guardians.length) {
+        await showAdminAlert('Este aluno não possui responsáveis para edição de e-mail.');
+        return;
+      }
+
+      const updates = [];
+      for (const guardian of guardians) {
+        const guardianId = String(guardian?.id || '').trim();
+        if (!guardianId) continue;
+        const guardianName = String(guardian?.name || 'Responsável').trim();
+        const currentEmail = String(guardian?.email || '').trim();
+        const edited = window.prompt(`E-mail do responsável: ${guardianName}`, currentEmail);
+        if (edited === null) {
+          return;
+        }
+        updates.push({ id: guardianId, email: String(edited || '').trim() });
+      }
+
+      if (!updates.length) {
+        setBulkMailMessage('Nenhum responsável válido para atualização.', true);
+        return;
+      }
+
+      const originalText = button.textContent;
+      button.setAttribute('disabled', 'disabled');
+      button.textContent = 'Salvando...';
+      setBulkMailMessage('Salvando e-mails no banco...');
+      try {
+        const res = await fetch('/admin/bulk-email.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'update_guardians_emails',
+            student_id: studentId,
+            guardians: updates,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data?.ok) {
+          setBulkMailMessage(data?.error || 'Falha ao salvar e-mails dos responsáveis.', true);
+          return;
+        }
+
+        student.guardians = Array.isArray(data.guardians) ? data.guardians : student.guardians;
+        student.emails = Array.isArray(data.emails) ? data.emails : student.emails;
+        renderBulkMailRecipients();
+        setBulkMailMessage('E-mails atualizados com sucesso.');
+      } catch {
+        setBulkMailMessage('Falha ao salvar e-mails dos responsáveis.', true);
+      } finally {
+        button.removeAttribute('disabled');
+        button.textContent = originalText;
       }
     });
   });
@@ -1521,7 +1598,7 @@ async function loadBulkMailData(force = false) {
     const data = await res.json();
     if (!res.ok || !data?.ok) {
       setBulkMailMessage(data?.error || 'Falha ao carregar dados de e-mail em massa.', true);
-      bulkMailRecipientsBody.innerHTML = '<tr><td colspan="5">Falha ao carregar alunos.</td></tr>';
+      bulkMailRecipientsBody.innerHTML = '<tr><td colspan="6">Falha ao carregar alunos.</td></tr>';
       return;
     }
     bulkMailStudents = Array.isArray(data.students) ? data.students : [];
@@ -1536,7 +1613,7 @@ async function loadBulkMailData(force = false) {
     bulkMailLoaded = true;
   } catch {
     setBulkMailMessage('Falha ao carregar dados de e-mail em massa.', true);
-    bulkMailRecipientsBody.innerHTML = '<tr><td colspan="5">Falha ao carregar alunos.</td></tr>';
+    bulkMailRecipientsBody.innerHTML = '<tr><td colspan="6">Falha ao carregar alunos.</td></tr>';
   }
 }
 

@@ -300,6 +300,37 @@ function replacePlaceholders(string $text, array $context): string
     ]);
 }
 
+function extractValidEmails(string $raw): array
+{
+    $value = trim($raw);
+    if ($value === '') {
+        return [];
+    }
+    preg_match_all('/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/i', $value, $matches);
+    $items = is_array($matches[0] ?? null) ? $matches[0] : [];
+    $result = [];
+    foreach ($items as $email) {
+        $normalized = strtolower(trim((string) $email));
+        if ($normalized === '') {
+            continue;
+        }
+        if (str_ends_with($normalized, '@placeholder.local') || str_ends_with($normalized, '@diariasvillage.local')) {
+            continue;
+        }
+        if (!filter_var($normalized, FILTER_VALIDATE_EMAIL)) {
+            continue;
+        }
+        $result[$normalized] = $normalized;
+    }
+    return array_values($result);
+}
+
+function pickPrimaryEmailForStorage(string $raw): string
+{
+    $emails = extractValidEmails($raw);
+    return $emails[0] ?? '';
+}
+
 ensureAdminPrincipal();
 Helpers::requirePost();
 
@@ -329,12 +360,12 @@ if ($action === 'init') {
 
     $guardiansResult = $client->select(
         'guardians',
-        'select=student_id,parent_name,email&limit=8000'
+        'select=id,student_id,parent_name,email&limit=8000'
     );
     if (!($guardiansResult['ok'] ?? false)) {
         $guardiansResult = $client->select(
             'guardians',
-            'select=student_id,parent_name,email&limit=4000'
+            'select=id,student_id,parent_name,email&limit=4000'
         );
     }
     $guardiansRows = is_array($guardiansResult['data'] ?? null) ? $guardiansResult['data'] : [];
@@ -388,6 +419,7 @@ if ($action === 'init') {
 
     $emailsByStudentId = [];
     $guardianNamesByStudentId = [];
+    $guardiansByStudentId = [];
     foreach ($guardiansRows as $guardian) {
         if (!is_array($guardian)) {
             continue;
@@ -398,12 +430,18 @@ if ($action === 'init') {
         }
         $email = trim((string) ($guardian['email'] ?? ''));
         $name = trim((string) ($guardian['parent_name'] ?? 'Responsável'));
+        $guardianId = trim((string) ($guardian['id'] ?? ''));
         if ($name !== '') {
             $guardianNamesByStudentId[$studentId][$name] = true;
         }
-        if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            $emailsByStudentId[$studentId][strtolower($email)] = $email;
+        foreach (extractValidEmails($email) as $validEmail) {
+            $emailsByStudentId[$studentId][$validEmail] = $validEmail;
         }
+        $guardiansByStudentId[$studentId][] = [
+            'id' => $guardianId,
+            'name' => $name,
+            'email' => $email,
+        ];
     }
 
     $students = [];
@@ -425,6 +463,7 @@ if ($action === 'init') {
             'is_mensalista' => isset($monthlyByStudentId[$id]),
             'is_inadimplente' => isset($inadimplenteStudentIds[$id]),
             'emails' => $emails,
+            'guardians' => array_values($guardiansByStudentId[$id] ?? []),
             'guardian_names' => $guardianNames,
         ];
     }
@@ -463,6 +502,71 @@ if ($action === 'save_template') {
     }
 
     Helpers::json(['ok' => true, 'templates' => loadTemplates(), 'saved_template_id' => $templateId]);
+}
+
+if ($action === 'update_guardians_emails') {
+    $studentId = trim((string) ($payload['student_id'] ?? ''));
+    $updates = $payload['guardians'] ?? [];
+    if ($studentId === '' || !is_array($updates) || empty($updates)) {
+        Helpers::json(['ok' => false, 'error' => 'Informe aluno e responsáveis para atualizar e-mails.'], 422);
+    }
+
+    $updateById = [];
+    foreach ($updates as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $guardianId = trim((string) ($row['id'] ?? ''));
+        if ($guardianId === '') {
+            continue;
+        }
+        $emailRaw = (string) ($row['email'] ?? '');
+        $updateById[$guardianId] = pickPrimaryEmailForStorage($emailRaw);
+    }
+    if (empty($updateById)) {
+        Helpers::json(['ok' => false, 'error' => 'Nenhum responsável válido para atualização.'], 422);
+    }
+
+    foreach ($updateById as $guardianId => $emailValue) {
+        $updateResult = $client->update(
+            'guardians',
+            'id=eq.' . urlencode($guardianId) . '&student_id=eq.' . urlencode($studentId),
+            ['email' => $emailValue !== '' ? $emailValue : null]
+        );
+        if (!($updateResult['ok'] ?? false)) {
+            Helpers::json(['ok' => false, 'error' => 'Falha ao atualizar e-mail de responsável.'], 500);
+        }
+    }
+
+    $guardiansResult = $client->select(
+        'guardians',
+        'select=id,parent_name,email&student_id=eq.' . urlencode($studentId) . '&limit=100'
+    );
+    $guardiansRows = is_array($guardiansResult['data'] ?? null) ? $guardiansResult['data'] : [];
+    $emails = [];
+    $guardians = [];
+    foreach ($guardiansRows as $guardian) {
+        if (!is_array($guardian)) {
+            continue;
+        }
+        $name = trim((string) ($guardian['parent_name'] ?? 'Responsável'));
+        $email = trim((string) ($guardian['email'] ?? ''));
+        foreach (extractValidEmails($email) as $validEmail) {
+            $emails[$validEmail] = $validEmail;
+        }
+        $guardians[] = [
+            'id' => trim((string) ($guardian['id'] ?? '')),
+            'name' => $name,
+            'email' => $email,
+        ];
+    }
+
+    Helpers::json([
+        'ok' => true,
+        'student_id' => $studentId,
+        'emails' => array_values($emails),
+        'guardians' => $guardians,
+    ]);
 }
 
 if ($action === 'send') {
@@ -505,15 +609,22 @@ if ($action === 'send') {
             'select=parent_name,email&student_id=eq.' . urlencode($studentId) . '&limit=100'
         );
         $guardians = is_array($guardianResult['data'] ?? null) ? $guardianResult['data'] : [];
-        $validGuardians = array_values(array_filter($guardians, static function ($g): bool {
-            if (!is_array($g)) {
-                return false;
+        $destinations = [];
+        foreach ($guardians as $guardian) {
+            if (!is_array($guardian)) {
+                continue;
             }
-            $email = trim((string) ($g['email'] ?? ''));
-            return $email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL);
-        }));
+            $guardianName = trim((string) ($guardian['parent_name'] ?? 'Responsável'));
+            $emailRaw = trim((string) ($guardian['email'] ?? ''));
+            foreach (extractValidEmails($emailRaw) as $validEmail) {
+                $destinations[$validEmail] = [
+                    'email' => $validEmail,
+                    'guardian_name' => $guardianName,
+                ];
+            }
+        }
 
-        if (empty($validGuardians)) {
+        if (empty($destinations)) {
             $results[] = [
                 'student_id' => $studentId,
                 'student_name' => (string) ($student['name'] ?? ''),
@@ -525,18 +636,15 @@ if ($action === 'send') {
 
         $sentForStudent = 0;
         $failedForStudent = 0;
-        $sentEmails = [];
-        foreach ($validGuardians as $guardian) {
-            $email = trim((string) ($guardian['email'] ?? ''));
-            $emailKey = strtolower($email);
-            if (isset($sentEmails[$emailKey])) {
+        foreach ($destinations as $destination) {
+            $email = (string) ($destination['email'] ?? '');
+            if ($email === '') {
                 continue;
             }
-
             $context = [
                 'student_name' => (string) ($student['name'] ?? ''),
                 'enrollment' => (string) ($student['enrollment'] ?? ''),
-                'guardian_name' => (string) ($guardian['parent_name'] ?? 'Responsável'),
+                'guardian_name' => (string) ($destination['guardian_name'] ?? 'Responsável'),
                 'link_pagamento' => $baseUrl . '/login.php',
                 'link_suporte' => $baseUrl . '/login.php',
                 'url_mascote' => $baseUrl . '/assets/img/mascote-village.png',
@@ -547,7 +655,6 @@ if ($action === 'send') {
             $mailResult = $mailer->send($email, $resolvedSubject, $resolvedHtml);
             if ($mailResult['ok'] ?? false) {
                 $sentForStudent++;
-                $sentEmails[$emailKey] = true;
             } else {
                 $failedForStudent++;
             }

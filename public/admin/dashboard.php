@@ -1751,10 +1751,11 @@ if (!empty($exclusionsLog)) {
                 <th>Matrícula</th>
                 <th>Tipo</th>
                 <th>E-mail(s) de destino</th>
+                <th>Ações</th>
               </tr>
             </thead>
             <tbody id="bulk-mail-recipients-body">
-              <tr><td colspan="5">Carregando alunos...</td></tr>
+              <tr><td colspan="6">Carregando alunos...</td></tr>
             </tbody>
           </table>
         </div>
@@ -1804,7 +1805,7 @@ if (!empty($exclusionsLog)) {
     window.__monthlyStudents = <?php echo json_encode($monthlyRowsForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
     window.__adminCanApproveAttendance = <?php echo $canAttendanceApprove ? 'true' : 'false'; ?>;
   </script>
-  <script src="/assets/js/admin-dashboard.js?v=57"></script>
+  <script src="/assets/js/admin-dashboard.js?v=58"></script>
   <script>
     (function () {
       function activateTab(name) {
