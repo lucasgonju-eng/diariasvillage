@@ -1381,6 +1381,7 @@ function updateBulkMailCounter() {
 }
 
 function getBulkMailTypeLabel(student) {
+  if (student?.is_inadimplente) return 'Inadimplente';
   if (student?.is_mensalista) return 'Mensalista';
   if (student?.is_diarista) return 'Diarista';
   return 'Sem diária';
@@ -1392,6 +1393,7 @@ function getFilteredBulkMailStudents() {
   return bulkMailStudents.filter((student) => {
     if (type === 'diaristas' && !student?.is_diarista) return false;
     if (type === 'mensalistas' && !student?.is_mensalista) return false;
+    if (type === 'inadimplentes' && !student?.is_inadimplente) return false;
     if (!query) return true;
     const name = normalizeSearchText(student?.name || '');
     const enrollment = normalizeSearchText(student?.enrollment || '');

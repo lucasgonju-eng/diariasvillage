@@ -307,24 +307,51 @@ if ($action === 'init') {
 
     $guardiansResult = $client->select(
         'guardians',
-        'select=student_id,parent_name,email,created_at&order=created_at.desc&limit=20000'
+        'select=student_id,parent_name,email,created_at&order=created_at.desc&limit=12000'
     );
     $guardiansRows = is_array($guardiansResult['data'] ?? null) ? $guardiansResult['data'] : [];
 
-    $paymentsResult = $client->select('payments', 'select=student_id,payment_date&limit=50000');
-    $paymentsRows = is_array($paymentsResult['data'] ?? null) ? $paymentsResult['data'] : [];
+    // Consultas segmentadas para evitar timeout no carregamento da aba.
+    $paidPaymentsResult = $client->select('payments', 'select=student_id,paid_at&paid_at=not.is.null&limit=20000');
+    if (!($paidPaymentsResult['ok'] ?? false)) {
+        $paidPaymentsResult = $client->select('payments', 'select=student_id,status&status=eq.paid&limit=20000');
+    }
+    $paidPaymentsRows = is_array($paidPaymentsResult['data'] ?? null) ? $paidPaymentsResult['data'] : [];
+
+    $openPaymentsResult = $client->select(
+        'payments',
+        'select=student_id,status,paid_at&paid_at=is.null&status=not.in.(paid,canceled,refunded,deleted)&limit=20000'
+    );
+    if (!($openPaymentsResult['ok'] ?? false)) {
+        $openPaymentsResult = $client->select('payments', 'select=student_id,status,paid_at&paid_at=is.null&limit=20000');
+    }
+    $openPaymentsRows = is_array($openPaymentsResult['data'] ?? null) ? $openPaymentsResult['data'] : [];
 
     $monthlyRows = MonthlyStudents::load();
     $monthlyByStudentId = MonthlyStudents::mapByStudentId($monthlyRows);
 
     $diaristaStudentIds = [];
-    foreach ($paymentsRows as $row) {
+    foreach ($paidPaymentsRows as $row) {
         if (!is_array($row)) {
             continue;
         }
         $studentId = trim((string) ($row['student_id'] ?? ''));
         if ($studentId !== '') {
             $diaristaStudentIds[$studentId] = true;
+        }
+    }
+    $inadimplenteStudentIds = [];
+    foreach ($openPaymentsRows as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $status = strtolower(trim((string) ($row['status'] ?? '')));
+        if (in_array($status, ['paid', 'canceled', 'refunded', 'deleted'], true)) {
+            continue;
+        }
+        $studentId = trim((string) ($row['student_id'] ?? ''));
+        if ($studentId !== '') {
+            $inadimplenteStudentIds[$studentId] = true;
         }
     }
 
@@ -365,6 +392,7 @@ if ($action === 'init') {
             'enrollment' => trim((string) ($student['enrollment'] ?? '')),
             'is_diarista' => isset($diaristaStudentIds[$id]),
             'is_mensalista' => isset($monthlyByStudentId[$id]),
+            'is_inadimplente' => isset($inadimplenteStudentIds[$id]),
             'emails' => $emails,
             'guardian_names' => $guardianNames,
         ];

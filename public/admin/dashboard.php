@@ -1729,6 +1729,7 @@ if (!empty($exclusionsLog)) {
               <option value="all">Todos</option>
               <option value="diaristas">Diaristas (já fizeram pelo menos uma diária)</option>
               <option value="mensalistas">Mensalistas</option>
+              <option value="inadimplentes">Inadimplentes (cobranças em aberto)</option>
             </select>
           </div>
         </div>
@@ -1803,7 +1804,7 @@ if (!empty($exclusionsLog)) {
     window.__monthlyStudents = <?php echo json_encode($monthlyRowsForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
     window.__adminCanApproveAttendance = <?php echo $canAttendanceApprove ? 'true' : 'false'; ?>;
   </script>
-  <script src="/assets/js/admin-dashboard.js?v=55"></script>
+  <script src="/assets/js/admin-dashboard.js?v=56"></script>
   <script>
     (function () {
       function activateTab(name) {
