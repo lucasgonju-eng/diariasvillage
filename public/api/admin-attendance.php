@@ -522,6 +522,48 @@ if ($action === 'create') {
     ]);
 }
 
+if ($action === 'retry') {
+    if (!isAdminUser()) {
+        Helpers::json(['ok' => false, 'error' => 'Apenas admin pode relançar cobrança.'], 403);
+    }
+    $id = trim((string) ($payload['id'] ?? ''));
+    if ($id === '') {
+        Helpers::json(['ok' => false, 'error' => 'ID inválido para relançar cobrança.'], 422);
+    }
+
+    $updated = null;
+    foreach ($rows as &$row) {
+        if (!is_array($row) || (string) ($row['id'] ?? '') !== $id) {
+            continue;
+        }
+        if ((string) ($row['status'] ?? '') !== AttendanceCalls::STATUS_ERRO_COBRANCA) {
+            Helpers::json([
+                'ok' => false,
+                'error' => 'Somente chamadas com erro de cobrança podem ser relançadas.',
+                'item' => $row,
+            ], 409);
+        }
+        $row['status'] = AttendanceCalls::STATUS_EM_REVISAO;
+        $row['reviewed_at'] = date('c');
+        $row['reviewed_by'] = 'admin';
+        $row['review_note'] = 'Relançada pelo admin para nova tentativa de autorização/cobrança.';
+        $row['queue_payment_id'] = '';
+        $updated = $row;
+        break;
+    }
+    unset($row);
+    if (!is_array($updated)) {
+        Helpers::json(['ok' => false, 'error' => 'Chamada não encontrada.'], 404);
+    }
+
+    saveAttendanceRowsOrFail($rows);
+    Helpers::json([
+        'ok' => true,
+        'item' => $updated,
+        'message' => 'Chamada relançada. Agora você pode clicar em Autorizar novamente.',
+    ]);
+}
+
 if ($action === 'reject') {
     if (!isAdminUser()) {
         Helpers::json(['ok' => false, 'error' => 'Apenas admin pode rejeitar chamada.'], 403);

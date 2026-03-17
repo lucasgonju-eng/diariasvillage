@@ -2162,10 +2162,14 @@ function renderAttendanceRows(items) {
       if (item.reviewed_at) reviewParts.push(formatDateTimeBR(item.reviewed_at));
       const reviewText = reviewParts.length ? reviewParts.join(' • ') : '-';
       const canReview = adminCanApproveAttendance && String(item.status || '') === 'em_revisao';
+      const canRetryCharge = adminCanApproveAttendance && String(item.status || '') === 'erro_cobranca';
       const actionParts = [];
       if (canReview) {
         actionParts.push(`<button class="btn btn-primary btn-sm js-attendance-approve" type="button" data-id="${escapeHtml(item.id || '')}">Autorizar</button>`);
         actionParts.push(`<button class="btn btn-danger btn-sm js-attendance-reject" type="button" data-id="${escapeHtml(item.id || '')}">Rejeitar</button>`);
+      }
+      if (canRetryCharge) {
+        actionParts.push(`<button class="btn btn-primary btn-sm js-attendance-retry" type="button" data-id="${escapeHtml(item.id || '')}">Relançar</button>`);
       }
       actionParts.push(`<button class="btn btn-primary btn-sm js-attendance-edit" type="button" data-id="${escapeHtml(item.id || '')}" data-date="${escapeHtml(item.attendance_date || '')}">Editar</button>`);
       const actions = actionParts.join('');
@@ -2394,10 +2398,11 @@ async function handleAttendanceAction(event) {
   if (!(target instanceof HTMLElement)) return;
   const approveButton = target.closest('.js-attendance-approve');
   const rejectButton = target.closest('.js-attendance-reject');
+  const retryButton = target.closest('.js-attendance-retry');
   const editButton = target.closest('.js-attendance-edit');
-  if (!approveButton && !rejectButton && !editButton) return;
+  if (!approveButton && !rejectButton && !retryButton && !editButton) return;
 
-  const actionButton = approveButton || rejectButton || editButton;
+  const actionButton = approveButton || rejectButton || retryButton || editButton;
   const id = actionButton?.getAttribute('data-id') || '';
   if (!id) return;
 
@@ -2423,6 +2428,31 @@ async function handleAttendanceAction(event) {
       await loadAttendanceCalls(true);
     } catch {
       setAttendanceMessage('Falha ao editar Data Day Use.', true);
+    } finally {
+      actionButton.removeAttribute('disabled');
+    }
+    return;
+  }
+
+  if (retryButton) {
+    const confirmed = await showAdminConfirm(
+      'Relançar esta chamada para tentar criar a cobrança novamente?',
+      { title: 'Relançar cobrança', confirmText: 'Relançar' },
+    );
+    if (!confirmed) return;
+
+    actionButton.setAttribute('disabled', 'disabled');
+    setAttendanceMessage('Relançando cobrança...');
+    try {
+      const { res, data } = await postAttendanceAction({ action: 'retry', id });
+      if (!res.ok || !data?.ok) {
+        setAttendanceMessage(data?.error || 'Falha ao relançar cobrança.', true);
+        return;
+      }
+      setAttendanceMessage(data?.message || 'Chamada relançada.');
+      await loadAttendanceCalls(true);
+    } catch {
+      setAttendanceMessage('Falha ao relançar cobrança.', true);
     } finally {
       actionButton.removeAttribute('disabled');
     }
