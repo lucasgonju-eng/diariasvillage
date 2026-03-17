@@ -792,6 +792,16 @@ if (!empty($exclusionsLog)) {
       <section id="tab-inadimplentes" class="<?php echo $activeTab === 'inadimplentes' ? '' : 'hidden'; ?>">
         <h2>Cobranças em aberto</h2>
         <p class="muted">Inclui cobranças da fila de envio e cobranças já enviadas que ainda não foram pagas.</p>
+        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px;">
+          <div class="form-group" style="min-width:260px;">
+            <label>Filtrar por aluno</label>
+            <input id="inadimplentes-student-filter" type="text" list="inadimplentes-students-list" placeholder="Digite o nome do aluno" autocomplete="off" />
+            <datalist id="inadimplentes-students-list"></datalist>
+          </div>
+          <div class="form-group" style="display:flex;align-items:flex-end;">
+            <button id="inadimplentes-student-filter-clear" class="btn btn-ghost btn-sm" type="button">Limpar filtro</button>
+          </div>
+        </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
           <button id="send-selected-pending" class="btn btn-primary btn-sm" type="button">Enviar cobranças da fila</button>
           <button id="sync-charges-payments-inadimplentes-btn" class="btn btn-sm btn-sync-reconcile" type="button">Conciliar com Asaas antes de enviar</button>
@@ -1868,7 +1878,7 @@ if (!empty($exclusionsLog)) {
     window.__monthlyStudents = <?php echo json_encode($monthlyRowsForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
     window.__adminCanApproveAttendance = <?php echo $canAttendanceApprove ? 'true' : 'false'; ?>;
   </script>
-  <script src="/assets/js/admin-dashboard.js?v=60"></script>
+  <script src="/assets/js/admin-dashboard.js?v=61"></script>
   <script>
     (function () {
       function activateTab(name) {

@@ -24,6 +24,9 @@ const chargeMessage = document.querySelector('#charge-message');
 const sendSelectedPendingButton = document.querySelector('#send-selected-pending');
 const selectAllPendingInput = document.querySelector('#select-all-pending');
 const sendPendingMessage = document.querySelector('#send-pending-message');
+const inadimplentesStudentFilterInput = document.querySelector('#inadimplentes-student-filter');
+const inadimplentesStudentFilterList = document.querySelector('#inadimplentes-students-list');
+const inadimplentesStudentFilterClearButton = document.querySelector('#inadimplentes-student-filter-clear');
 const syncChargesPaymentsInadimplentesButton = document.querySelector('#sync-charges-payments-inadimplentes-btn');
 const syncChargesPaymentsInadimplentesMessage = document.querySelector('#sync-charges-payments-inadimplentes-message');
 const inadimplentesSummary = document.querySelector('#inadimplentes-summary');
@@ -2976,7 +2979,8 @@ function showSendPendingMessage(text, isError = false) {
 
 function updateInadimplentesSummary() {
   if (!inadimplentesSummary) return;
-  const rows = [...document.querySelectorAll('.inadimplente-row')];
+  const rows = [...document.querySelectorAll('.inadimplente-row')]
+    .filter((row) => row.style.display !== 'none');
   const totalCount = rows.length;
   const totalDayUse = rows.reduce((sum, row) => {
     const directCount = Number(row.getAttribute('data-dayuse-count') || 0);
@@ -2993,10 +2997,33 @@ function updateInadimplentesSummary() {
     0,
   );
   inadimplentesSummary.textContent =
-    `Total em aberto: ${totalCount} cobrança(s) • ` +
+    `Cobranças em aberto: ${totalCount} • ` +
     `Day use em aberto: ${totalDayUse} • ` +
     `Valor total: ${formatCurrency(totalAmount)} • ` +
     `Sem cobrança gerada no Asaas: ${missingAsaasCount}`;
+}
+
+function buildInadimplentesStudentAutocomplete() {
+  if (!inadimplentesStudentFilterList) return;
+  const names = new Set();
+  document.querySelectorAll('.inadimplente-row').forEach((row) => {
+    const name = String(row.getAttribute('data-student') || '').trim();
+    if (name) names.add(name);
+  });
+  const sorted = [...names].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  inadimplentesStudentFilterList.innerHTML = sorted
+    .map((name) => `<option value="${escapeHtml(name)}"></option>`)
+    .join('');
+}
+
+function applyInadimplentesStudentFilter() {
+  const query = normalizeSearchText(inadimplentesStudentFilterInput?.value || '');
+  document.querySelectorAll('.inadimplente-row').forEach((row) => {
+    const student = normalizeSearchText(row.getAttribute('data-student') || '');
+    const visible = query === '' || student.includes(query);
+    row.style.display = visible ? '' : 'none';
+  });
+  updateInadimplentesSummary();
 }
 
 if (selectAllPendingInput) {
@@ -3005,6 +3032,8 @@ if (selectAllPendingInput) {
     document.querySelectorAll('.pending-send-checkbox').forEach((checkbox) => {
       if (!(checkbox instanceof HTMLInputElement)) return;
       if (checkbox.disabled) return;
+      const row = checkbox.closest('.inadimplente-row');
+      if (row && row.style.display === 'none') return;
       checkbox.checked = checked;
     });
   });
@@ -3223,6 +3252,7 @@ pendingDeleteButtons.forEach((button) => {
         return;
       }
       row.remove();
+      buildInadimplentesStudentAutocomplete();
       updateInadimplentesSummary();
       showSendPendingMessage('Cobrança excluída com motivo: Cobrança em duplicidade.');
       maybeAlertInadimplentesDuplicates(true);
@@ -4111,6 +4141,21 @@ if (syncChargesPaymentsInadimplentesButton) {
   });
 }
 
+if (inadimplentesStudentFilterInput) {
+  inadimplentesStudentFilterInput.addEventListener('input', () => {
+    applyInadimplentesStudentFilter();
+  });
+}
+
+if (inadimplentesStudentFilterClearButton) {
+  inadimplentesStudentFilterClearButton.addEventListener('click', () => {
+    if (inadimplentesStudentFilterInput) {
+      inadimplentesStudentFilterInput.value = '';
+    }
+    applyInadimplentesStudentFilter();
+  });
+}
+
 const mergeButtons = document.querySelectorAll('.js-merge-duplicates');
 mergeButtons.forEach((button) => {
   button.addEventListener('click', async () => {
@@ -4496,4 +4541,6 @@ if (initialTab === 'email-massa') {
   loadBulkMailData();
 }
 loadStudents();
+buildInadimplentesStudentAutocomplete();
+applyInadimplentesStudentFilter();
 updateInadimplentesSummary();
