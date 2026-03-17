@@ -137,6 +137,7 @@ if (!is_array($payload)) {
     $payload = [];
 }
 $action = strtolower(trim((string) ($payload['action'] ?? 'create')));
+$isAudit = $action === 'audit';
 
 $rows = AttendanceCalls::load();
 
@@ -552,7 +553,7 @@ if ($action === 'reject') {
     Helpers::json(['ok' => true, 'item' => $updated, 'message' => 'Chamada rejeitada.']);
 }
 
-if ($action !== 'approve') {
+if (!in_array($action, ['approve', 'audit'], true)) {
     Helpers::json(['ok' => false, 'error' => 'Ação inválida para chamada.'], 422);
 }
 
@@ -653,6 +654,20 @@ foreach ($payments as $payment) {
 }
 
 if ($hasPaidSameDate || $hasOpenSameDate) {
+    if ($isAudit) {
+        Helpers::json([
+            'ok' => true,
+            'audit' => true,
+            'blocked' => true,
+            'blocked_reason' => $hasPaidSameDate ? 'already_paid' : 'already_open',
+            'message' => $hasPaidSameDate
+                ? 'Bloqueado: esta diária já foi paga no SaaS.'
+                : 'Bloqueado: já existe cobrança em aberto para essa data.',
+            'student_id' => $studentId,
+            'attendance_date' => $attendanceDate,
+        ]);
+    }
+
     $rows[$targetIndex]['status'] = $hasPaidSameDate
         ? AttendanceCalls::STATUS_BLOQUEADA_JA_PAGA
         : AttendanceCalls::STATUS_BLOQUEADA_DUPLICIDADE;
@@ -729,6 +744,24 @@ if (is_array($plan) && in_array((int) ($plan['weekly_days'] ?? 0), [2, 3, 4, 5],
         sort($usedWithCall);
         $remaining = max(0, $weeklyDays - count($usedWithCall));
 
+        if ($isAudit) {
+            Helpers::json([
+                'ok' => true,
+                'audit' => true,
+                'blocked' => true,
+                'blocked_reason' => 'monthly_covered',
+                'message' => 'Aluno mensalista: sem cobrança para essa data. Datas da semana: ' . formatDateListBr($usedWithCall),
+                'monthly' => [
+                    'weekly_days' => $weeklyDays,
+                    'attendance_date' => $attendanceDate,
+                    'week_key' => $weekKey,
+                    'used_dates' => $usedWithCall,
+                    'remaining_days' => $remaining,
+                ],
+                'student_id' => $studentId,
+            ]);
+        }
+
         $rows[$targetIndex]['status'] = AttendanceCalls::STATUS_ALUNO_MENSALISTA;
         $rows[$targetIndex]['reviewed_at'] = date('c');
         $rows[$targetIndex]['reviewed_by'] = 'admin';
@@ -781,6 +814,18 @@ if ($guardian === null && !empty($guardians[0]) && is_array($guardians[0])) {
 }
 
 if (!is_array($guardian) || empty($guardian['id'])) {
+    if ($isAudit) {
+        Helpers::json([
+            'ok' => true,
+            'audit' => true,
+            'blocked' => true,
+            'blocked_reason' => 'missing_guardian',
+            'error' => 'Sem responsável válido para gerar cobrança.',
+            'student_id' => $studentId,
+            'attendance_date' => $attendanceDate,
+        ]);
+    }
+
     $rows[$targetIndex]['status'] = AttendanceCalls::STATUS_ERRO_COBRANCA;
     $rows[$targetIndex]['reviewed_at'] = date('c');
     $rows[$targetIndex]['reviewed_by'] = 'admin';
@@ -806,6 +851,26 @@ $dailyType = $dailyBaseType . '|' . formatDateBr($attendanceDate);
 $today = date('Y-m-d');
 $dueDate = $attendanceDate < $today ? $today : $attendanceDate;
 $asaasError = '';
+
+if ($isAudit) {
+    $auditReason = is_array($plan)
+        ? 'monthly_overflow'
+        : 'non_monthly';
+    Helpers::json([
+        'ok' => true,
+        'audit' => true,
+        'blocked' => false,
+        'can_charge' => true,
+        'reason' => $auditReason,
+        'student_id' => $studentId,
+        'attendance_date' => $attendanceDate,
+        'guardian_id' => (string) ($guardian['id'] ?? ''),
+        'guardian_email' => $guardianEmail,
+        'monthly' => is_array($plan) ? [
+            'weekly_days' => (int) ($plan['weekly_days'] ?? 0),
+        ] : null,
+    ]);
+}
 
 if ($customerId === '') {
     $customerPayload = [

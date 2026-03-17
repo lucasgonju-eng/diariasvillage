@@ -2431,8 +2431,70 @@ async function handleAttendanceAction(event) {
 
   if (approveButton) {
     actionButton.setAttribute('disabled', 'disabled');
-    setAttendanceMessage('Autorizando chamada...');
+    setAttendanceMessage('Auditando chamada...');
     try {
+      const { res: auditRes, data: auditData } = await postAttendanceAction({ action: 'audit', id });
+      if (!auditRes.ok || !auditData?.ok) {
+        setAttendanceMessage(auditData?.error || 'Falha ao auditar chamada.', true);
+        return;
+      }
+      if (auditData?.blocked) {
+        const blockedReason = String(auditData?.blocked_reason || '');
+        if (blockedReason === 'monthly_covered') {
+          const monthly = auditData?.monthly || {};
+          const usedDates = Array.isArray(monthly.used_dates) ? monthly.used_dates : [];
+          const usedLabel = usedDates.length
+            ? usedDates.map((d) => formatDateBR(d)).join(', ')
+            : 'Nenhuma';
+          await showAdminAlert(
+            `Auditoria: aluno mensalista coberto na semana.\n` +
+              `Data da chamada: ${formatDateBR(monthly.attendance_date || '')}\n` +
+              `Cota semanal: ${monthly.weekly_days || '?'} dia(s)\n` +
+              `Datas já usadas: ${usedLabel}\n` +
+              `Saldo restante: ${monthly.remaining_days ?? '?'} dia(s)\n\n` +
+              'Resultado: cobrança bloqueada.',
+            { title: 'Auditoria de cobrança' },
+          );
+        } else if (blockedReason === 'already_paid') {
+          await showAdminAlert(
+            'Auditoria: este day use já está pago. Resultado: cobrança bloqueada.',
+            { title: 'Auditoria de cobrança' },
+          );
+        } else if (blockedReason === 'already_open') {
+          await showAdminAlert(
+            'Auditoria: já existe cobrança em aberto para esta data. Resultado: cobrança bloqueada.',
+            { title: 'Auditoria de cobrança' },
+          );
+        } else if (blockedReason === 'missing_guardian') {
+          await showAdminAlert(
+            'Auditoria: responsável inválido/ausente para gerar cobrança. Resultado: cobrança bloqueada.',
+            { title: 'Auditoria de cobrança' },
+          );
+        } else {
+          await showAdminAlert(auditData?.message || 'Auditoria bloqueou a cobrança.', {
+            title: 'Auditoria de cobrança',
+          });
+        }
+        setAttendanceMessage(auditData?.message || 'Cobrança bloqueada pela auditoria.', true);
+        await loadAttendanceCalls(true);
+        return;
+      }
+
+      const auditReason = String(auditData?.reason || '');
+      const auditLabel =
+        auditReason === 'monthly_overflow'
+          ? 'mensalista excedeu a cota semanal'
+          : 'aluno não mensalista';
+      const goApprove = await showAdminConfirm(
+        `Auditoria aprovada: ${auditLabel}.\nData: ${formatDateBR(auditData?.attendance_date || '')}\n\nDeseja autorizar e gerar cobrança agora?`,
+        { title: 'Auditoria de cobrança', confirmText: 'Autorizar e cobrar' },
+      );
+      if (!goApprove) {
+        setAttendanceMessage('Autorização cancelada após auditoria.');
+        return;
+      }
+
+      setAttendanceMessage('Autorizando chamada...');
       const { res, data } = await postAttendanceAction({ action: 'approve', id });
       if (!res.ok || !data?.ok) {
         setAttendanceMessage(data?.error || 'Falha ao autorizar chamada.', true);
