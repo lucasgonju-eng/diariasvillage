@@ -1,5 +1,23 @@
 <?php
-require_once dirname(__DIR__, 2) . '/src/Bootstrap.php';
+$bootstrapCandidates = array(
+    __DIR__ . '/../src/Bootstrap.php',
+    dirname(__DIR__, 2) . '/src/Bootstrap.php',
+);
+$bootstrapLoaded = false;
+foreach ($bootstrapCandidates as $candidate) {
+    if (is_file($candidate)) {
+        require_once $candidate;
+        $bootstrapLoaded = true;
+        break;
+    }
+}
+if (!$bootstrapLoaded) {
+    http_response_code(500);
+    header('Content-Type: application/json');
+    echo json_encode(array('ok' => false, 'error' => 'Bootstrap não encontrado.'));
+    exit;
+}
+
 date_default_timezone_set('America/Sao_Paulo');
 ignore_user_abort(true);
 if (function_exists('set_time_limit')) {
