@@ -6,12 +6,6 @@ if (function_exists('set_time_limit')) {
     @set_time_limit(180);
 }
 
-use App\AsaasClient;
-use App\Helpers;
-use App\HttpClient;
-use App\Mailer;
-use App\SupabaseClient;
-
 function resolveDayUseChargeLocal(string $dayUseDate): array
 {
     $timestamp = strtotime($dayUseDate);
@@ -160,12 +154,12 @@ function resolveQueuedChargeRule(array $paymentRow, string $today): array
 }
 
 if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
-    Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
+    \App\Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
 }
 
 try {
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
-        Helpers::json(['ok' => false, 'error' => 'Método inválido.'], 405);
+        \App\Helpers::json(['ok' => false, 'error' => 'Método inválido.'], 405);
     }
     $payload = json_decode(file_get_contents('php://input'), true);
     if (!is_array($payload)) {
@@ -173,7 +167,7 @@ try {
     }
     $paymentIds = $payload['payment_ids'] ?? [];
     if (!is_array($paymentIds) || empty($paymentIds)) {
-        Helpers::json(['ok' => false, 'error' => 'Nenhuma cobrança pendente selecionada.'], 422);
+        \App\Helpers::json(['ok' => false, 'error' => 'Nenhuma cobrança pendente selecionada.'], 422);
     }
 
     $paymentIds = array_values(array_unique(array_filter(array_map(
@@ -181,14 +175,14 @@ try {
         $paymentIds
     ))));
     if (empty($paymentIds)) {
-        Helpers::json(['ok' => false, 'error' => 'IDs inválidos.'], 422);
+        \App\Helpers::json(['ok' => false, 'error' => 'IDs inválidos.'], 422);
     }
 
-    $asaas = new AsaasClient(new HttpClient());
-    $mailer = new Mailer();
-    $client = new SupabaseClient(new HttpClient());
+    $asaas = new \App\AsaasClient(new \App\HttpClient());
+    $mailer = new \App\Mailer();
+    $client = new \App\SupabaseClient(new \App\HttpClient());
     $today = date('Y-m-d');
-    $portalLink = Helpers::baseUrl() ?: 'https://diarias.village.einsteinhub.co';
+    $portalLink = \App\Helpers::baseUrl() ?: 'https://diarias.village.einsteinhub.co';
     $logPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'error_log_custom.txt';
     $results = [];
 
@@ -386,7 +380,7 @@ try {
     }
 
     $failures = array_values(array_filter($results, static fn($row) => !($row['ok'] ?? false)));
-    Helpers::json([
+    \App\Helpers::json([
         'ok' => empty($failures),
         'results' => $results,
         'error' => empty($failures) ? null : ($failures[0]['error'] ?? 'Falha ao enviar cobranças pendentes.'),
@@ -398,7 +392,7 @@ try {
         '[admin-send-pending-charges] ' . $e->getMessage() . ' | file=' . $e->getFile() . ' | line=' . $e->getLine() . PHP_EOL,
         FILE_APPEND
     );
-    Helpers::json([
+    \App\Helpers::json([
         'ok' => false,
         'error' => 'Falha interna ao enviar cobranças pendentes. Tente novamente em 1 minuto.',
         'details' => $e->getMessage(),
