@@ -24,6 +24,8 @@ const chargeMessage = document.querySelector('#charge-message');
 const sendSelectedPendingButton = document.querySelector('#send-selected-pending');
 const selectAllPendingInput = document.querySelector('#select-all-pending');
 const sendPendingMessage = document.querySelector('#send-pending-message');
+const syncChargesPaymentsInadimplentesButton = document.querySelector('#sync-charges-payments-inadimplentes-btn');
+const syncChargesPaymentsInadimplentesMessage = document.querySelector('#sync-charges-payments-inadimplentes-message');
 const inadimplentesSummary = document.querySelector('#inadimplentes-summary');
 const pendingDeleteButtons = document.querySelectorAll('.js-delete-payment');
 let inadimplentesDuplicatesPopupShown = false;
@@ -2991,17 +2993,28 @@ if (selectAllPendingInput) {
   selectAllPendingInput.addEventListener('change', () => {
     const checked = !!selectAllPendingInput.checked;
     document.querySelectorAll('.pending-send-checkbox').forEach((checkbox) => {
-      if (checkbox instanceof HTMLInputElement) checkbox.checked = checked;
+      if (!(checkbox instanceof HTMLInputElement)) return;
+      if (checkbox.disabled) return;
+      checkbox.checked = checked;
     });
   });
 }
 
 if (sendSelectedPendingButton) {
   sendSelectedPendingButton.addEventListener('click', async () => {
-    const selected = [...document.querySelectorAll('.pending-send-checkbox')]
+    const selectedRows = [...document.querySelectorAll('.pending-send-checkbox')]
       .filter((el) => el instanceof HTMLInputElement && el.checked)
-      .map((el) => el.value)
-      .filter(Boolean);
+      .map((el) => ({ id: el.value, row: el.closest('.inadimplente-row') }))
+      .filter((item) => item.id);
+    const blockedMonthly = selectedRows.filter((item) => item.row?.getAttribute('data-monthly') === '1');
+    if (blockedMonthly.length) {
+      showSendPendingMessage(
+        'Há aluno(s) mensalista(s) selecionado(s). Remova-os da seleção e concilie antes de enviar.',
+        true,
+      );
+      return;
+    }
+    const selected = selectedRows.map((item) => item.id);
 
     if (!selected.length) {
       showSendPendingMessage('Selecione ao menos uma cobrança da fila de envio.', true);
@@ -3979,101 +3992,112 @@ async function postSyncChargesPayments(payload) {
   return { res, data };
 }
 
+async function runSyncChargesPayments(button, messageNode) {
+  if (!button) return;
+  button.setAttribute('disabled', 'disabled');
+  const originalText = button.textContent;
+  button.textContent = 'Analisando duplicidades...';
+  if (messageNode) {
+    messageNode.textContent = 'Checando duplicidade de dia (mesmo aluno + mesmo day-use)...';
+    messageNode.className = 'charge-message';
+  }
+
+  try {
+    const previewResult = await postSyncChargesPayments({ preview_duplicate_dayuse: true });
+    const previewRes = previewResult.res;
+    const previewData = previewResult.data;
+    if (!previewRes.ok || !previewData?.ok) {
+      if (messageNode) {
+        messageNode.textContent = previewData?.error || 'Falha ao checar duplicidades de day-use.';
+        messageNode.className = 'charge-message error';
+      }
+      return;
+    }
+
+    const duplicateItems = Array.isArray(previewData?.duplicate_dayuse?.items)
+      ? previewData.duplicate_dayuse.items
+      : [];
+    const duplicatePaymentItems = Array.isArray(previewData?.duplicate_payments?.items)
+      ? previewData.duplicate_payments.items
+      : [];
+    let syncPayload = {};
+    if (duplicateItems.length > 0) {
+      const wantsToRemove = await showAdminConfirm(
+        buildSyncDuplicateDayUsePopupMessage(duplicateItems),
+        { title: 'Duplicidades em pendências', confirmText: 'Remover duplicidades' },
+      );
+      if (!wantsToRemove) {
+        if (messageNode) {
+          messageNode.textContent = 'Atualização cancelada. Revise as pendências duplicadas de day-use.';
+          messageNode.className = 'charge-message';
+        }
+        return;
+      }
+      syncPayload = { confirm_remove_duplicate_dayuse: true };
+    }
+    if (duplicatePaymentItems.length > 0) {
+      const wantsToRemovePayments = await showAdminConfirm(
+        buildSyncDuplicatePaymentsPopupMessage(duplicatePaymentItems),
+        { title: 'Duplicidades em cobranças', confirmText: 'Excluir extras' },
+      );
+      if (!wantsToRemovePayments) {
+        if (messageNode) {
+          messageNode.textContent = 'Atualização cancelada. Revise as cobranças duplicadas de day-use.';
+          messageNode.className = 'charge-message';
+        }
+        return;
+      }
+      syncPayload = {
+        ...syncPayload,
+        confirm_remove_duplicate_payments: true,
+      };
+    }
+
+    button.textContent = 'Sincronizando...';
+    if (messageNode) {
+      messageNode.textContent = 'Executando varredura de cobranças/pagamentos no Asaas...';
+      messageNode.className = 'charge-message';
+    }
+
+    const syncResult = await postSyncChargesPayments(syncPayload);
+    const res = syncResult.res;
+    const data = syncResult.data;
+    if (!res.ok || !data?.ok) {
+      if (messageNode) {
+        messageNode.textContent = data?.error || 'Falha ao sincronizar cobranças e pagamentos.';
+        messageNode.className = 'charge-message error';
+      }
+      return;
+    }
+
+    const summary = data.summary || {};
+    if (messageNode) {
+      messageNode.textContent = `Sincronização concluída. Duplicidades em pendências (mesmo dia): ${summary.duplicate_dayuse_detected || 0}, removidas: ${summary.pendencias_removed_duplicate_dayuse || 0}. Duplicidades em cobranças: ${summary.duplicate_payments_detected || 0}, removidas: ${summary.duplicate_payments_removed || 0}. Payments verificados: ${summary.payments_checked || 0}, atualizados para pago: ${summary.payments_paid_updated || 0}, cancelados: ${summary.payments_canceled_updated || 0}, não encontrados: ${summary.payments_not_found || 0}. Pendências verificadas: ${summary.pendencias_checked || 0}, pagas: ${summary.pendencias_paid_updated || 0}, removidas sem cobrança no Asaas: ${summary.pendencias_removed_no_charge || 0}, desvinculadas: ${summary.pendencias_unlinked || 0}.`;
+      messageNode.className = 'charge-message success';
+    }
+  } catch {
+    if (messageNode) {
+      messageNode.textContent = 'Falha ao sincronizar cobranças e pagamentos.';
+      messageNode.className = 'charge-message error';
+    }
+  } finally {
+    button.removeAttribute('disabled');
+    button.textContent = originalText;
+  }
+}
+
 if (syncChargesPaymentsButton) {
   syncChargesPaymentsButton.addEventListener('click', async () => {
-    syncChargesPaymentsButton.setAttribute('disabled', 'disabled');
-    const originalText = syncChargesPaymentsButton.textContent;
-    syncChargesPaymentsButton.textContent = 'Analisando duplicidades...';
-    if (syncChargesPaymentsMessage) {
-      syncChargesPaymentsMessage.textContent = 'Checando duplicidade de dia (mesmo aluno + mesmo day-use)...';
-      syncChargesPaymentsMessage.className = 'charge-message';
-    }
+    await runSyncChargesPayments(syncChargesPaymentsButton, syncChargesPaymentsMessage);
+  });
+}
 
-    try {
-      const previewResult = await postSyncChargesPayments({ preview_duplicate_dayuse: true });
-      const previewRes = previewResult.res;
-      const previewData = previewResult.data;
-      if (!previewRes.ok || !previewData?.ok) {
-        if (syncChargesPaymentsMessage) {
-          syncChargesPaymentsMessage.textContent =
-            previewData?.error || 'Falha ao checar duplicidades de day-use.';
-          syncChargesPaymentsMessage.className = 'charge-message error';
-        }
-        return;
-      }
-
-      const duplicateItems = Array.isArray(previewData?.duplicate_dayuse?.items)
-        ? previewData.duplicate_dayuse.items
-        : [];
-      const duplicatePaymentItems = Array.isArray(previewData?.duplicate_payments?.items)
-        ? previewData.duplicate_payments.items
-        : [];
-      let syncPayload = {};
-      if (duplicateItems.length > 0) {
-        const wantsToRemove = await showAdminConfirm(
-          buildSyncDuplicateDayUsePopupMessage(duplicateItems),
-          { title: 'Duplicidades em pendências', confirmText: 'Remover duplicidades' },
-        );
-        if (!wantsToRemove) {
-          if (syncChargesPaymentsMessage) {
-            syncChargesPaymentsMessage.textContent =
-              'Atualização cancelada. Revise as pendências duplicadas de day-use.';
-            syncChargesPaymentsMessage.className = 'charge-message';
-          }
-          return;
-        }
-        syncPayload = { confirm_remove_duplicate_dayuse: true };
-      }
-      if (duplicatePaymentItems.length > 0) {
-        const wantsToRemovePayments = await showAdminConfirm(
-          buildSyncDuplicatePaymentsPopupMessage(duplicatePaymentItems),
-          { title: 'Duplicidades em cobranças', confirmText: 'Excluir extras' },
-        );
-        if (!wantsToRemovePayments) {
-          if (syncChargesPaymentsMessage) {
-            syncChargesPaymentsMessage.textContent =
-              'Atualização cancelada. Revise as cobranças duplicadas de day-use.';
-            syncChargesPaymentsMessage.className = 'charge-message';
-          }
-          return;
-        }
-        syncPayload = {
-          ...syncPayload,
-          confirm_remove_duplicate_payments: true,
-        };
-      }
-
-      syncChargesPaymentsButton.textContent = 'Sincronizando...';
-      if (syncChargesPaymentsMessage) {
-        syncChargesPaymentsMessage.textContent = 'Executando varredura de cobranças/pagamentos no Asaas...';
-        syncChargesPaymentsMessage.className = 'charge-message';
-      }
-
-      const syncResult = await postSyncChargesPayments(syncPayload);
-      const res = syncResult.res;
-      const data = syncResult.data;
-      if (!res.ok || !data?.ok) {
-        if (syncChargesPaymentsMessage) {
-          syncChargesPaymentsMessage.textContent = data?.error || 'Falha ao sincronizar cobranças e pagamentos.';
-          syncChargesPaymentsMessage.className = 'charge-message error';
-        }
-        return;
-      }
-
-      const summary = data.summary || {};
-      if (syncChargesPaymentsMessage) {
-        syncChargesPaymentsMessage.textContent = `Sincronização concluída. Duplicidades em pendências (mesmo dia): ${summary.duplicate_dayuse_detected || 0}, removidas: ${summary.pendencias_removed_duplicate_dayuse || 0}. Duplicidades em cobranças: ${summary.duplicate_payments_detected || 0}, removidas: ${summary.duplicate_payments_removed || 0}. Payments verificados: ${summary.payments_checked || 0}, atualizados para pago: ${summary.payments_paid_updated || 0}, cancelados: ${summary.payments_canceled_updated || 0}, não encontrados: ${summary.payments_not_found || 0}. Pendências verificadas: ${summary.pendencias_checked || 0}, pagas: ${summary.pendencias_paid_updated || 0}, removidas sem cobrança no Asaas: ${summary.pendencias_removed_no_charge || 0}, desvinculadas: ${summary.pendencias_unlinked || 0}. Recarregue a página quando quiser refletir tudo na tabela.`;
-        syncChargesPaymentsMessage.className = 'charge-message success';
-      }
-    } catch {
-      if (syncChargesPaymentsMessage) {
-        syncChargesPaymentsMessage.textContent = 'Falha ao sincronizar cobranças e pagamentos.';
-        syncChargesPaymentsMessage.className = 'charge-message error';
-      }
-    } finally {
-      syncChargesPaymentsButton.removeAttribute('disabled');
-      syncChargesPaymentsButton.textContent = originalText;
-    }
+if (syncChargesPaymentsInadimplentesButton) {
+  syncChargesPaymentsInadimplentesButton.addEventListener('click', async () => {
+    await runSyncChargesPayments(
+      syncChargesPaymentsInadimplentesButton,
+      syncChargesPaymentsInadimplentesMessage,
+    );
   });
 }
 

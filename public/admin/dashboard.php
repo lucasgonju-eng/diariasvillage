@@ -488,6 +488,13 @@ if (!empty($exclusionsLog)) {
       color:#0F172A;
       font-weight:700;
     }
+    .btn-sync-reconcile{
+      color:#0A1B4D;
+      border-color:#BFD0EE;
+      background:#E8F0FF;
+      font-weight:800;
+    }
+    .btn-sync-reconcile:hover{filter:brightness(.97)}
     .hidden{display:none}
     .bulk-mail-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0}
     .bulk-mail-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin:10px 0}
@@ -801,12 +808,14 @@ if (!empty($exclusionsLog)) {
         <p class="muted">Inclui cobranças da fila de envio e cobranças já enviadas que ainda não foram pagas.</p>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
           <button id="send-selected-pending" class="btn btn-primary btn-sm" type="button">Enviar cobranças da fila</button>
+          <button id="sync-charges-payments-inadimplentes-btn" class="btn btn-sm btn-sync-reconcile" type="button">Conciliar com Asaas antes de enviar</button>
           <label style="display:flex;gap:6px;align-items:center;font-size:13px;">
             <input id="select-all-pending" type="checkbox" />
             Selecionar todas da fila de envio
           </label>
         </div>
         <div id="send-pending-message" class="charge-message"></div>
+        <div id="sync-charges-payments-inadimplentes-message" class="charge-message"></div>
 
         <div style="overflow-x:auto;">
           <table class="admin-table">
@@ -856,7 +865,12 @@ if (!empty($exclusionsLog)) {
                     data-monthly-days="<?php echo $isMonthlyCheck ? htmlspecialchars((string) $monthlyDays, ENT_QUOTES, 'UTF-8') : ''; ?>"
                   >
                     <td>
-                      <input class="pending-send-checkbox" type="checkbox" value="<?php echo htmlspecialchars($payment['id'] ?? '', ENT_QUOTES, 'UTF-8'); ?>" />
+                      <input
+                        class="pending-send-checkbox"
+                        type="checkbox"
+                        value="<?php echo htmlspecialchars($payment['id'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                        <?php echo $isMonthlyCheck ? 'disabled title="Aluno mensalista: revisar antes de enviar cobrança."' : ''; ?>
+                      />
                     </td>
                     <td><?php echo htmlspecialchars($student['name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo htmlspecialchars($guardian['parent_name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
