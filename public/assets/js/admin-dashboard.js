@@ -2982,6 +2982,11 @@ function updateInadimplentesSummary() {
   const rows = [...document.querySelectorAll('.inadimplente-row')]
     .filter((row) => row.style.display !== 'none');
   const totalCount = rows.length;
+  const uniqueStudents = new Set(
+    rows
+      .map((row) => normalizeSearchText(row.getAttribute('data-student') || ''))
+      .filter((name) => name !== ''),
+  );
   const totalDayUse = rows.reduce((sum, row) => {
     const directCount = Number(row.getAttribute('data-dayuse-count') || 0);
     if (directCount > 0) return sum + directCount;
@@ -2998,6 +3003,7 @@ function updateInadimplentesSummary() {
   );
   inadimplentesSummary.textContent =
     `Cobranças em aberto: ${totalCount} • ` +
+    `Alunos únicos em aberto: ${uniqueStudents.size} • ` +
     `Day use em aberto: ${totalDayUse} • ` +
     `Valor total: ${formatCurrency(totalAmount)} • ` +
     `Sem cobrança gerada no Asaas: ${missingAsaasCount}`;
