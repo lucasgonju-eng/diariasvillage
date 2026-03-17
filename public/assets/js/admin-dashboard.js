@@ -2440,6 +2440,7 @@ async function handleAttendanceAction(event) {
       }
       if (auditData?.blocked) {
         const blockedReason = String(auditData?.blocked_reason || '');
+        let finalizeWithoutCharge = false;
         if (blockedReason === 'monthly_covered') {
           const monthly = auditData?.monthly || {};
           const usedDates = Array.isArray(monthly.used_dates) ? monthly.used_dates : [];
@@ -2455,11 +2456,13 @@ async function handleAttendanceAction(event) {
               'Resultado: cobrança bloqueada.',
             { title: 'Auditoria de cobrança' },
           );
+          finalizeWithoutCharge = true;
         } else if (blockedReason === 'already_paid') {
           await showAdminAlert(
             'Auditoria: este day use já está pago. Resultado: cobrança bloqueada.',
             { title: 'Auditoria de cobrança' },
           );
+          finalizeWithoutCharge = true;
         } else if (blockedReason === 'already_open') {
           await showAdminAlert(
             'Auditoria: já existe cobrança em aberto para esta data. Resultado: cobrança bloqueada.',
@@ -2475,6 +2478,19 @@ async function handleAttendanceAction(event) {
             title: 'Auditoria de cobrança',
           });
         }
+
+        if (finalizeWithoutCharge) {
+          setAttendanceMessage('Finalizando autorização sem cobrança...');
+          const { res, data } = await postAttendanceAction({ action: 'approve', id });
+          if (!res.ok || !data?.ok) {
+            setAttendanceMessage(data?.error || 'Falha ao finalizar autorização sem cobrança.', true);
+            return;
+          }
+          setAttendanceMessage(data?.message || 'Chamada autorizada sem cobrança.');
+          await loadAttendanceCalls(true);
+          return;
+        }
+
         setAttendanceMessage(auditData?.message || 'Cobrança bloqueada pela auditoria.', true);
         await loadAttendanceCalls(true);
         return;
