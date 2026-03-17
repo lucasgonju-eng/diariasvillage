@@ -535,7 +535,7 @@ function updateViewUserAutocompleteOptions(rawQuery) {
 function resolveStudentNameForAdmin(rawInput) {
   const input = String(rawInput || '').trim();
   if (!input) {
-    return { ok: false, error: 'Digite pelo menos 3 letras do nome do aluno.' };
+    return { ok: false, error: 'Digite pelo menos 1 letra do nome do aluno.' };
   }
 
   if (studentNames.has(input)) {
