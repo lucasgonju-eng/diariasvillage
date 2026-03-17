@@ -3133,7 +3133,7 @@ if (sendSelectedPendingButton) {
         }
         const statusCell = row.children?.[6];
         if (statusCell) {
-          statusCell.textContent = 'Aguardando pagamento';
+          statusCell.textContent = 'Pendente no Asaas';
         }
         row.setAttribute('data-has-asaas', '1');
       });

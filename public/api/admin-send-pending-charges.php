@@ -63,9 +63,9 @@ function parseBrDateToIso(string $raw): ?string
 }
 
 /**
- * @return array{amount: float, daily_base_type: string, date_label: string}
+ * @return string[]
  */
-function resolveQueuedChargeRule(array $paymentRow, string $today): array
+function extractIsoDatesFromPaymentRow(array $paymentRow, string $today): array
 {
     $dailyRaw = trim((string) ($paymentRow['daily_type'] ?? ''));
     $parts = explode('|', $dailyRaw, 2);
@@ -92,6 +92,21 @@ function resolveQueuedChargeRule(array $paymentRow, string $today): array
 
     $isoKeys = array_keys($isoDates);
     sort($isoKeys);
+    return $isoKeys;
+}
+
+function buildChargeSignature(array $paymentRow, string $today): string
+{
+    $isoKeys = extractIsoDatesFromPaymentRow($paymentRow, $today);
+    return implode(',', $isoKeys);
+}
+
+/**
+ * @return array{amount: float, daily_base_type: string, date_label: string}
+ */
+function resolveQueuedChargeRule(array $paymentRow, string $today): array
+{
+    $isoKeys = extractIsoDatesFromPaymentRow($paymentRow, $today);
 
     $amount = 0.0;
     $hasEmergencial = false;
@@ -157,6 +172,60 @@ try {
             }
             if (($paymentRow['billing_type'] ?? '') !== 'PIX_MANUAL_QUEUE' || ($paymentRow['status'] ?? '') !== 'queued') {
                 $results[] = ['id' => $paymentId, 'ok' => false, 'error' => 'Cobrança já enviada ou inválida para envio.'];
+                continue;
+            }
+            $paymentSignature = buildChargeSignature((array) $paymentRow, $today);
+
+            $studentId = trim((string) ($paymentRow['student_id'] ?? ''));
+            $guardianId = trim((string) ($paymentRow['guardian_id'] ?? ''));
+            $possibleDuplicatesQuery = 'select=id,status,billing_type,daily_type,payment_date,paid_at,asaas_payment_id'
+                . '&guardian_id=eq.' . urlencode($guardianId)
+                . '&limit=200';
+            if ($studentId !== '') {
+                $possibleDuplicatesQuery .= '&student_id=eq.' . urlencode($studentId);
+            }
+            $possibleDuplicatesResult = $client->select('payments', $possibleDuplicatesQuery);
+            $possibleDuplicates = ($possibleDuplicatesResult['ok'] ?? false) && is_array($possibleDuplicatesResult['data'] ?? null)
+                ? $possibleDuplicatesResult['data']
+                : [];
+
+            $duplicateFound = null;
+            foreach ($possibleDuplicates as $candidate) {
+                $candidateId = trim((string) ($candidate['id'] ?? ''));
+                if ($candidateId === '' || $candidateId === $paymentId) {
+                    continue;
+                }
+                $candidateStatus = strtolower(trim((string) ($candidate['status'] ?? '')));
+                if (in_array($candidateStatus, ['canceled', 'cancelled', 'deleted', 'refunded'], true)) {
+                    continue;
+                }
+                if ($candidateStatus === 'queued' && strtoupper((string) ($candidate['billing_type'] ?? '')) === 'PIX_MANUAL_QUEUE') {
+                    continue;
+                }
+                $candidateSignature = buildChargeSignature((array) $candidate, $today);
+                if ($candidateSignature !== $paymentSignature) {
+                    continue;
+                }
+                $candidateAsaasId = trim((string) ($candidate['asaas_payment_id'] ?? ''));
+                if (
+                    $candidateAsaasId !== ''
+                    || in_array($candidateStatus, ['pending', 'pending_asaas', 'overdue', 'awaiting_risk_analysis', 'paid'], true)
+                    || !empty($candidate['paid_at'])
+                ) {
+                    $duplicateFound = [
+                        'id' => $candidateId,
+                        'status' => $candidateStatus !== '' ? $candidateStatus : 'desconhecido',
+                    ];
+                    break;
+                }
+            }
+            if (is_array($duplicateFound)) {
+                $results[] = [
+                    'id' => $paymentId,
+                    'ok' => false,
+                    'error' => 'Cobrança duplicada bloqueada: já existe cobrança para este responsável/aluno nas mesmas datas (ID '
+                        . $duplicateFound['id'] . ', status ' . $duplicateFound['status'] . ').',
+                ];
                 continue;
             }
 
@@ -234,7 +303,7 @@ try {
 
             $updatePayment = $client->update('payments', 'id=eq.' . urlencode($paymentId), [
                 'billing_type' => 'PIX_MANUAL',
-                'status' => 'pending',
+                'status' => 'pending_asaas',
                 'asaas_payment_id' => $paymentData['id'] ?? null,
                 'amount' => (float) ($chargeRule['amount'] ?? 77.00),
                 'daily_type' => $dailyBaseType . '|' . $dateLabel,

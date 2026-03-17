@@ -984,12 +984,14 @@ if (!empty($exclusionsLog)) {
                     }
                     $statusRaw = strtolower(trim((string) ($payment['status'] ?? 'pending')));
                     $statusMap = [
-                        'pending' => 'Aguardando pagamento',
+                        'pending' => 'Pendente no Asaas',
+                        'pending_asaas' => 'Pendente no Asaas',
+                        'paid' => 'Concluído',
                         'overdue' => 'Vencida',
                         'awaiting_risk_analysis' => 'Em análise de risco',
                         'queued' => 'Na fila (não enviada)',
                     ];
-                    $statusLabel = $statusMap[$statusRaw] ?? (trim((string) ($payment['status'] ?? '')) !== '' ? (string) $payment['status'] : 'Aguardando pagamento');
+                    $statusLabel = $statusMap[$statusRaw] ?? (trim((string) ($payment['status'] ?? '')) !== '' ? (string) $payment['status'] : 'Pendente no Asaas');
                   ?>
                   <?php
                     $paymentIdRow = trim((string) ($payment['id'] ?? ''));
@@ -1952,7 +1954,7 @@ if (!empty($exclusionsLog)) {
     window.__monthlyStudents = <?php echo json_encode($monthlyRowsForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
     window.__adminCanApproveAttendance = <?php echo $canAttendanceApprove ? 'true' : 'false'; ?>;
   </script>
-  <script src="/assets/js/admin-dashboard.js?v=64"></script>
+  <script src="/assets/js/admin-dashboard.js?v=65"></script>
   <script>
     (function () {
       function activateTab(name) {

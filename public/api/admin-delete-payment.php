@@ -59,7 +59,7 @@ if ($status === 'paid') {
     Helpers::json(['ok' => false, 'error' => 'Não é possível excluir cobrança já paga.'], 422);
 }
 
-$delete = $client->delete('payments', 'id=eq.' . urlencode($paymentId) . '&status=in.(pending,queued)');
+$delete = $client->delete('payments', 'id=eq.' . urlencode($paymentId) . '&status=in.(pending,pending_asaas,queued)');
 if (!($delete['ok'] ?? false)) {
     Helpers::json(['ok' => false, 'error' => 'Falha ao excluir cobrança.'], 500);
 }

@@ -267,7 +267,7 @@ function detect_duplicate_unpaid_payments(SupabaseClient $client): array
     $result = $client->select(
         'payments',
         'select=id,student_id,payment_date,daily_type,amount,status,created_at,students(name),guardians(parent_name,email)'
-        . '&status=in.(pending,queued)&limit=10000'
+        . '&status=in.(pending,pending_asaas,queued)&limit=10000'
     );
     $rows = ($result['ok'] ?? false) && is_array($result['data'] ?? null) ? $result['data'] : [];
     $groups = [];
@@ -483,7 +483,7 @@ try {
             if ($removePaymentId === '') {
                 continue;
             }
-            $delete = $client->delete('payments', 'id=eq.' . urlencode($removePaymentId) . '&status=in.(pending,queued)');
+            $delete = $client->delete('payments', 'id=eq.' . urlencode($removePaymentId) . '&status=in.(pending,pending_asaas,queued)');
             if ($delete['ok'] ?? false) {
                 $summary['duplicate_payments_removed']++;
                 append_exclusion_log([
