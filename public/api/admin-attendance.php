@@ -934,7 +934,7 @@ if ($asaasError === '' && $customerId !== '') {
     }
 }
 
-$insertPayment = $client->insert('payments', [[$insertPayload]]);
+$insertPayment = $client->insert('payments', [$insertPayload]);
 
 if (!($insertPayment['ok'] ?? false) || empty($insertPayment['data'][0])) {
     $rows[$targetIndex]['status'] = AttendanceCalls::STATUS_ERRO_COBRANCA;
