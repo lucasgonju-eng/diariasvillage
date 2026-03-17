@@ -1,6 +1,10 @@
 <?php
 require_once dirname(__DIR__, 2) . '/src/Bootstrap.php';
 date_default_timezone_set('America/Sao_Paulo');
+ignore_user_abort(true);
+if (function_exists('set_time_limit')) {
+    @set_time_limit(180);
+}
 
 use App\AsaasClient;
 use App\Helpers;
@@ -359,10 +363,14 @@ try {
     ]);
 } catch (\Throwable $e) {
     $logPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'error_log_custom.txt';
-    @file_put_contents($logPath, '[admin-send-pending-charges] ' . $e->getMessage() . PHP_EOL, FILE_APPEND);
+    @file_put_contents(
+        $logPath,
+        '[admin-send-pending-charges] ' . $e->getMessage() . ' | file=' . $e->getFile() . ' | line=' . $e->getLine() . PHP_EOL,
+        FILE_APPEND
+    );
     Helpers::json([
         'ok' => false,
-        'error' => 'Falha interna ao enviar cobranças pendentes.',
+        'error' => 'Falha interna ao enviar cobranças pendentes. Tente novamente em 1 minuto.',
         'details' => $e->getMessage(),
-    ], 500);
+    ]);
 }
