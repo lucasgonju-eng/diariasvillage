@@ -2978,6 +2978,15 @@ function updateInadimplentesSummary() {
   if (!inadimplentesSummary) return;
   const rows = [...document.querySelectorAll('.inadimplente-row')];
   const totalCount = rows.length;
+  const totalDayUse = rows.reduce((sum, row) => {
+    const directCount = Number(row.getAttribute('data-dayuse-count') || 0);
+    if (directCount > 0) return sum + directCount;
+    const datesRaw = String(row.getAttribute('data-dayuse-date') || '').trim();
+    if (!datesRaw) return sum + 1;
+    const matchedDates = datesRaw.match(/\b\d{2}\/\d{2}\/\d{2,4}\b/g);
+    if (matchedDates && matchedDates.length) return sum + matchedDates.length;
+    return sum + 1;
+  }, 0);
   const totalAmount = rows.reduce((sum, row) => sum + Number(row.getAttribute('data-amount') || 0), 0);
   const missingAsaasCount = rows.reduce(
     (sum, row) => sum + (row.getAttribute('data-has-asaas') === '1' ? 0 : 1),
@@ -2985,6 +2994,7 @@ function updateInadimplentesSummary() {
   );
   inadimplentesSummary.textContent =
     `Total em aberto: ${totalCount} cobrança(s) • ` +
+    `Day use em aberto: ${totalDayUse} • ` +
     `Valor total: ${formatCurrency(totalAmount)} • ` +
     `Sem cobrança gerada no Asaas: ${missingAsaasCount}`;
 }

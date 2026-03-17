@@ -60,20 +60,6 @@ foreach ($allUnpaidRows as $row) {
     }
     $manualPending[] = $row;
 }
-$openChargesCount = count($queuedPending) + count($manualPending);
-$openChargesAmount = 0.0;
-$openChargesMissingAsaas = 0;
-foreach ($queuedPending as $row) {
-    $openChargesAmount += (float) ($row['amount'] ?? 0);
-    $openChargesMissingAsaas++;
-}
-foreach ($manualPending as $row) {
-    $openChargesAmount += (float) ($row['amount'] ?? 0);
-    if (trim((string) ($row['asaas_payment_id'] ?? '')) === '') {
-        $openChargesMissingAsaas++;
-    }
-}
-
 $monthlyItems = MonthlyStudents::load();
 $monthlyById = MonthlyStudents::mapByStudentId($monthlyItems);
 $monthlyByName = MonthlyStudents::mapByNormalizedName($monthlyItems);
@@ -846,6 +832,10 @@ if (!empty($exclusionsLog)) {
                     $created = $payment['created_at'] ? date('d/m/Y H:i', strtotime($payment['created_at'])) : '-';
                     $dailyParts = explode('|', $payment['daily_type'] ?? '', 2);
                     $datesLabel = $dailyParts[1] ?? date('d/m/Y', strtotime($payment['payment_date']));
+                    $dayUseCount = count(array_filter(array_map('trim', explode(',', (string) $datesLabel))));
+                    if ($dayUseCount < 1) {
+                        $dayUseCount = 1;
+                    }
                   ?>
                   <?php
                     $paymentIdRow = trim((string) ($payment['id'] ?? ''));
@@ -859,6 +849,7 @@ if (!empty($exclusionsLog)) {
                     data-payment-id="<?php echo htmlspecialchars((string) ($payment['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
                     data-student="<?php echo htmlspecialchars((string) ($student['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
                     data-dayuse-date="<?php echo htmlspecialchars((string) $datesLabel, ENT_QUOTES, 'UTF-8'); ?>"
+                    data-dayuse-count="<?php echo (int) $dayUseCount; ?>"
                     data-amount="<?php echo htmlspecialchars((string) ($payment['amount'] ?? 0), ENT_QUOTES, 'UTF-8'); ?>"
                     data-has-asaas="0"
                     data-monthly="<?php echo $isMonthlyCheck ? '1' : '0'; ?>"
@@ -903,6 +894,10 @@ if (!empty($exclusionsLog)) {
                     $created = $payment['created_at'] ? date('d/m/Y H:i', strtotime($payment['created_at'])) : '-';
                     $dailyParts = explode('|', $payment['daily_type'] ?? '', 2);
                     $datesLabel = $dailyParts[1] ?? date('d/m/Y', strtotime($payment['payment_date']));
+                    $dayUseCount = count(array_filter(array_map('trim', explode(',', (string) $datesLabel))));
+                    if ($dayUseCount < 1) {
+                        $dayUseCount = 1;
+                    }
                     $statusRaw = strtolower(trim((string) ($payment['status'] ?? 'pending')));
                     $statusMap = [
                         'pending' => 'Aguardando pagamento',
@@ -931,6 +926,7 @@ if (!empty($exclusionsLog)) {
                     data-payment-id="<?php echo htmlspecialchars((string) ($payment['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
                     data-student="<?php echo htmlspecialchars((string) ($student['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
                     data-dayuse-date="<?php echo htmlspecialchars((string) $datesLabel, ENT_QUOTES, 'UTF-8'); ?>"
+                    data-dayuse-count="<?php echo (int) $dayUseCount; ?>"
                     data-amount="<?php echo htmlspecialchars((string) ($payment['amount'] ?? 0), ENT_QUOTES, 'UTF-8'); ?>"
                     data-has-asaas="<?php echo $hasAsaasId ? '1' : '0'; ?>"
                     data-monthly="<?php echo $isMonthlyCheck ? '1' : '0'; ?>"
@@ -962,15 +958,6 @@ if (!empty($exclusionsLog)) {
                 <?php endforeach; ?>
               <?php endif; ?>
             </tbody>
-            <tfoot>
-              <tr style="font-weight:700;background:#F8FAFC;">
-                <td colspan="9">
-                  Total em aberto: <?php echo (int) $openChargesCount; ?> cobrança(s) •
-                  Valor total: R$ <?php echo number_format($openChargesAmount, 2, ',', '.'); ?> •
-                  Sem cobrança gerada no Asaas: <?php echo (int) $openChargesMissingAsaas; ?>
-                </td>
-              </tr>
-            </tfoot>
           </table>
         </div>
         <div id="inadimplentes-summary" class="open-charges-summary"></div>
