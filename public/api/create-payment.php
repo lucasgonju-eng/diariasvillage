@@ -70,8 +70,6 @@ if ($diariaId === '') {
 
 $today = date('Y-m-d');
 $hour = (int) date('H');
-// Valor padrão da diária planejada.
-$plannedAmount = 77.00;
 
 if (!in_array($billingType, ['PIX', 'DEBIT_CARD'], true)) {
     Helpers::json(['ok' => false, 'error' => 'Forma de pagamento inválida.'], 422);
@@ -143,17 +141,10 @@ if ($date === $today) {
         ], 422);
     }
 
-    if ($hour < 10) {
-        $dailyType = 'planejada';
-        $amount = $plannedAmount;
-    } else {
-        $dailyType = 'emergencial';
-        $amount = 97.00;
-    }
-} else {
-    $dailyType = 'planejada';
-    $amount = $plannedAmount;
 }
+$chargeRule = Helpers::resolveDayUseCharge($date);
+$dailyType = (string) ($chargeRule['daily_type'] ?? 'planejada');
+$amount = (float) ($chargeRule['amount'] ?? 77.00);
 
 $asaas = new AsaasClient(new HttpClient());
 $portalLink = Helpers::baseUrl() ?: 'https://diarias.village.einsteinhub.co';

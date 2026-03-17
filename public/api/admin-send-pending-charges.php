@@ -118,13 +118,15 @@ try {
             'asaas_customer_id' => $customerId,
         ]);
     }
+    $chargeDate = (string) ($paymentRow['payment_date'] ?? $today);
+    $chargeRule = Helpers::resolveDayUseCharge($chargeDate);
 
     $payment = $asaas->createPayment([
         'customer' => $customerId,
         'billingType' => 'PIX',
-        'value' => (float) ($paymentRow['amount'] ?? 0),
+        'value' => (float) ($chargeRule['amount'] ?? 77.00),
         'dueDate' => $today,
-        'description' => 'Diária emergencial - cobrança manual - Einstein Village',
+        'description' => 'Diária ' . ($chargeRule['daily_type'] ?? 'planejada') . ' - cobrança manual - Einstein Village',
     ]);
     if (!$payment['ok']) {
         $results[] = ['id' => $paymentId, 'ok' => false, 'error' => extractAsaasError($payment)];
@@ -135,8 +137,9 @@ try {
     $invoiceUrl = $paymentData['invoiceUrl'] ?? $paymentData['bankSlipUrl'] ?? $portalLink;
     $dailyRaw = (string) ($paymentRow['daily_type'] ?? '');
     $dailyParts = explode('|', $dailyRaw, 2);
+    $dailyBaseType = (string) ($chargeRule['daily_type'] ?? 'planejada');
     $dateLabel = $dailyParts[1] ?? date('d/m/Y', strtotime((string) ($paymentRow['payment_date'] ?? $today)));
-    $amountFormatted = number_format((float) ($paymentRow['amount'] ?? 0), 2, ',', '.');
+    $amountFormatted = number_format((float) ($chargeRule['amount'] ?? 77.00), 2, ',', '.');
 
     $mailHtml = '<p>Olá!</p>'
       . '<p>Identificamos uma diária pendente de <strong>' . htmlspecialchars((string) ($student['name'] ?? 'Aluno'), ENT_QUOTES, 'UTF-8') . '</strong>.</p>'
@@ -153,6 +156,8 @@ try {
         'billing_type' => 'PIX_MANUAL',
         'status' => 'pending',
         'asaas_payment_id' => $paymentData['id'] ?? null,
+        'amount' => (float) ($chargeRule['amount'] ?? 77.00),
+        'daily_type' => $dailyBaseType . '|' . $dateLabel,
     ]);
     if (!($updatePayment['ok'] ?? false)) {
         $results[] = ['id' => $paymentId, 'ok' => false, 'error' => 'Cobrança criada no Asaas, mas falhou ao atualizar status local.'];

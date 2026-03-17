@@ -787,8 +787,10 @@ $guardianEmail = trim((string) ($guardian['email'] ?? ''));
 $guardianDoc = preg_replace('/\D+/', '', (string) ($guardian['parent_document'] ?? '')) ?? '';
 $guardianPhone = preg_replace('/\D+/', '', (string) ($guardian['parent_phone'] ?? '')) ?? '';
 $customerId = trim((string) ($guardian['asaas_customer_id'] ?? ''));
-$amount = 97.00;
-$dailyType = 'emergencial|' . formatDateBr($attendanceDate);
+$chargeRule = Helpers::resolveDayUseCharge($attendanceDate);
+$amount = (float) ($chargeRule['amount'] ?? 77.00);
+$dailyBaseType = (string) ($chargeRule['daily_type'] ?? 'planejada');
+$dailyType = $dailyBaseType . '|' . formatDateBr($attendanceDate);
 $today = date('Y-m-d');
 $dueDate = $attendanceDate < $today ? $today : $attendanceDate;
 $asaasError = '';
@@ -838,7 +840,7 @@ if ($asaasError === '' && $customerId !== '') {
         'billingType' => 'PIX',
         'value' => $amount,
         'dueDate' => $dueDate,
-        'description' => 'Diária emergencial - ' . ($studentName !== '' ? $studentName : 'Aluno') . ' - ' . formatDateBr($attendanceDate),
+        'description' => 'Diária ' . $dailyBaseType . ' - ' . ($studentName !== '' ? $studentName : 'Aluno') . ' - ' . formatDateBr($attendanceDate),
     ]);
     if ($payment['ok'] ?? false) {
         $paymentData = $payment['data'] ?? [];

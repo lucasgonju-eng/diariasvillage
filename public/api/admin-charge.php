@@ -282,9 +282,17 @@ try {
         }
 
         $dayUseDatesForPayment = array_map(static fn($isoDate) => date('d/m/Y', strtotime($isoDate)), $monthlyOverflowDates);
-        $daysCount = count($dayUseDatesForPayment);
-        $amount = 97.00 * $daysCount;
-        $dailyType = 'emergencial|' . implode(', ', $dayUseDatesForPayment);
+        $amount = 0.0;
+        $hasEmergencialDate = false;
+        foreach ($monthlyOverflowDates as $isoDate) {
+            $chargeRule = Helpers::resolveDayUseCharge((string) $isoDate);
+            $amount += (float) ($chargeRule['amount'] ?? 77.00);
+            if (($chargeRule['daily_type'] ?? 'planejada') === 'emergencial') {
+                $hasEmergencialDate = true;
+            }
+        }
+        $dailyBaseType = $hasEmergencialDate ? 'emergencial' : 'planejada';
+        $dailyType = $dailyBaseType . '|' . implode(', ', $dayUseDatesForPayment);
         $paymentDateValue = $monthlyOverflowDates[0] ?? $today;
 
         // Apenas salva localmente em fila para aparecer na aba Inadimplentes.
