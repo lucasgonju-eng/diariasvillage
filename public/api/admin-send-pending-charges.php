@@ -12,6 +12,34 @@ use App\HttpClient;
 use App\Mailer;
 use App\SupabaseClient;
 
+function resolveDayUseChargeLocal(string $dayUseDate): array
+{
+    $timestamp = strtotime($dayUseDate);
+    if ($timestamp === false) {
+        return ['amount' => 77.00, 'daily_type' => 'planejada'];
+    }
+    $dayUseIso = date('Y-m-d', $timestamp);
+    $tz = new \DateTimeZone('America/Sao_Paulo');
+    $now = new \DateTimeImmutable('now', $tz);
+    $today = $now->format('Y-m-d');
+    $hour = (int) $now->format('H');
+    $promoDeadline = '2026-03-16';
+
+    if ($dayUseIso <= $promoDeadline) {
+        return ['amount' => 77.00, 'daily_type' => 'planejada'];
+    }
+
+    if ($dayUseIso > $today) {
+        return ['amount' => 77.00, 'daily_type' => 'planejada'];
+    }
+
+    if ($dayUseIso === $today && $hour < 10) {
+        return ['amount' => 77.00, 'daily_type' => 'planejada'];
+    }
+
+    return ['amount' => 97.00, 'daily_type' => 'emergencial'];
+}
+
 function extractAsaasError(array $response): string
 {
     $data = $response['data'] ?? null;
@@ -116,7 +144,7 @@ function resolveQueuedChargeRule(array $paymentRow, string $today): array
     $hasEmergencial = false;
     $dateLabels = [];
     foreach ($isoKeys as $isoDate) {
-        $rule = Helpers::resolveDayUseCharge((string) $isoDate);
+        $rule = resolveDayUseChargeLocal((string) $isoDate);
         $amount += (float) ($rule['amount'] ?? 77.0);
         if (($rule['daily_type'] ?? 'planejada') === 'emergencial') {
             $hasEmergencial = true;
@@ -136,7 +164,9 @@ if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated']
 }
 
 try {
-    Helpers::requirePost();
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+        Helpers::json(['ok' => false, 'error' => 'Método inválido.'], 405);
+    }
     $payload = json_decode(file_get_contents('php://input'), true);
     if (!is_array($payload)) {
         $payload = [];
