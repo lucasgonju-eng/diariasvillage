@@ -3088,7 +3088,7 @@ if (sendSelectedPendingButton) {
         let res;
         let data;
         try {
-          res = await fetch('/api/admin-send-pending-charges.php', {
+          res = await fetch('/api/admin-send-pending-charges-v2.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ payment_ids: chunk }),
