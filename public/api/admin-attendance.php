@@ -654,20 +654,6 @@ foreach ($payments as $payment) {
 }
 
 if ($hasPaidSameDate || $hasOpenSameDate) {
-    if ($isAudit) {
-        Helpers::json([
-            'ok' => true,
-            'audit' => true,
-            'blocked' => true,
-            'blocked_reason' => $hasPaidSameDate ? 'already_paid' : 'already_open',
-            'message' => $hasPaidSameDate
-                ? 'Bloqueado: esta diária já foi paga no SaaS.'
-                : 'Bloqueado: já existe cobrança em aberto para essa data.',
-            'student_id' => $studentId,
-            'attendance_date' => $attendanceDate,
-        ]);
-    }
-
     $rows[$targetIndex]['status'] = $hasPaidSameDate
         ? AttendanceCalls::STATUS_BLOQUEADA_JA_PAGA
         : AttendanceCalls::STATUS_BLOQUEADA_DUPLICIDADE;
@@ -680,6 +666,7 @@ if ($hasPaidSameDate || $hasOpenSameDate) {
 
     Helpers::json([
         'ok' => true,
+        'audit' => $isAudit,
         'blocked' => true,
         'blocked_reason' => $hasPaidSameDate ? 'already_paid' : 'already_open',
         'item' => $rows[$targetIndex],
@@ -744,24 +731,6 @@ if (is_array($plan) && in_array((int) ($plan['weekly_days'] ?? 0), [2, 3, 4, 5],
         sort($usedWithCall);
         $remaining = max(0, $weeklyDays - count($usedWithCall));
 
-        if ($isAudit) {
-            Helpers::json([
-                'ok' => true,
-                'audit' => true,
-                'blocked' => true,
-                'blocked_reason' => 'monthly_covered',
-                'message' => 'Aluno mensalista: sem cobrança para essa data. Datas da semana: ' . formatDateListBr($usedWithCall),
-                'monthly' => [
-                    'weekly_days' => $weeklyDays,
-                    'attendance_date' => $attendanceDate,
-                    'week_key' => $weekKey,
-                    'used_dates' => $usedWithCall,
-                    'remaining_days' => $remaining,
-                ],
-                'student_id' => $studentId,
-            ]);
-        }
-
         $rows[$targetIndex]['status'] = AttendanceCalls::STATUS_ALUNO_MENSALISTA;
         $rows[$targetIndex]['reviewed_at'] = date('c');
         $rows[$targetIndex]['reviewed_by'] = 'admin';
@@ -773,6 +742,7 @@ if (is_array($plan) && in_array((int) ($plan['weekly_days'] ?? 0), [2, 3, 4, 5],
 
         Helpers::json([
             'ok' => true,
+            'audit' => $isAudit,
             'blocked' => true,
             'blocked_reason' => 'monthly_covered',
             'item' => $rows[$targetIndex],
