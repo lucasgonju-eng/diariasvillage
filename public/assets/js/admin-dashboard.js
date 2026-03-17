@@ -2468,6 +2468,7 @@ async function handleAttendanceAction(event) {
             'Auditoria: já existe cobrança em aberto para esta data. Resultado: cobrança bloqueada.',
             { title: 'Auditoria de cobrança' },
           );
+          finalizeWithoutCharge = true;
         } else if (blockedReason === 'missing_guardian') {
           await showAdminAlert(
             'Auditoria: responsável inválido/ausente para gerar cobrança. Resultado: cobrança bloqueada.',
@@ -2486,7 +2487,12 @@ async function handleAttendanceAction(event) {
             setAttendanceMessage(data?.error || 'Falha ao finalizar autorização sem cobrança.', true);
             return;
           }
-          setAttendanceMessage(data?.message || 'Chamada autorizada sem cobrança.');
+          const blockedAfterApprove = String(data?.blocked_reason || '');
+          if (blockedAfterApprove === 'already_paid' || blockedAfterApprove === 'already_open') {
+            setAttendanceMessage('Já existe cobrança para essa data', true);
+          } else {
+            setAttendanceMessage(data?.message || 'Chamada autorizada sem cobrança.');
+          }
           await loadAttendanceCalls(true);
           return;
         }
