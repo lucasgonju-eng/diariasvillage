@@ -24,29 +24,33 @@ if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated']
     Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
 }
 
-Helpers::requirePost();
-$payload = json_decode(file_get_contents('php://input'), true);
-$paymentIds = $payload['payment_ids'] ?? [];
-if (!is_array($paymentIds) || empty($paymentIds)) {
-    Helpers::json(['ok' => false, 'error' => 'Nenhuma cobrança pendente selecionada.'], 422);
-}
+try {
+    Helpers::requirePost();
+    $payload = json_decode(file_get_contents('php://input'), true);
+    if (!is_array($payload)) {
+        $payload = [];
+    }
+    $paymentIds = $payload['payment_ids'] ?? [];
+    if (!is_array($paymentIds) || empty($paymentIds)) {
+        Helpers::json(['ok' => false, 'error' => 'Nenhuma cobrança pendente selecionada.'], 422);
+    }
 
-$paymentIds = array_values(array_unique(array_filter(array_map(
-    static fn($id) => trim((string) $id),
-    $paymentIds
-))));
-if (empty($paymentIds)) {
-    Helpers::json(['ok' => false, 'error' => 'IDs inválidos.'], 422);
-}
+    $paymentIds = array_values(array_unique(array_filter(array_map(
+        static fn($id) => trim((string) $id),
+        $paymentIds
+    ))));
+    if (empty($paymentIds)) {
+        Helpers::json(['ok' => false, 'error' => 'IDs inválidos.'], 422);
+    }
 
-$asaas = new AsaasClient(new HttpClient());
-$mailer = new Mailer();
-$client = new SupabaseClient(new HttpClient());
-$today = date('Y-m-d');
-$portalLink = Helpers::baseUrl() ?: 'https://village.einsteinhub.co';
-$results = [];
+    $asaas = new AsaasClient(new HttpClient());
+    $mailer = new Mailer();
+    $client = new SupabaseClient(new HttpClient());
+    $today = date('Y-m-d');
+    $portalLink = Helpers::baseUrl() ?: 'https://diarias.village.einsteinhub.co';
+    $results = [];
 
-foreach ($paymentIds as $paymentId) {
+    foreach ($paymentIds as $paymentId) {
     $paymentResult = $client->select(
         'payments',
         'select=id,guardian_id,student_id,payment_date,daily_type,amount,status,billing_type'
@@ -156,11 +160,20 @@ foreach ($paymentIds as $paymentId) {
     }
 
     $results[] = ['id' => $paymentId, 'ok' => true, 'invoice_url' => $invoiceUrl];
-}
+    }
 
-$failures = array_values(array_filter($results, static fn($row) => !($row['ok'] ?? false)));
-Helpers::json([
-    'ok' => empty($failures),
-    'results' => $results,
-    'error' => empty($failures) ? null : ($failures[0]['error'] ?? 'Falha ao enviar cobranças pendentes.'),
-]);
+    $failures = array_values(array_filter($results, static fn($row) => !($row['ok'] ?? false)));
+    Helpers::json([
+        'ok' => empty($failures),
+        'results' => $results,
+        'error' => empty($failures) ? null : ($failures[0]['error'] ?? 'Falha ao enviar cobranças pendentes.'),
+    ]);
+} catch (\Throwable $e) {
+    $logPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'error_log_custom.txt';
+    @file_put_contents($logPath, '[admin-send-pending-charges] ' . $e->getMessage() . PHP_EOL, FILE_APPEND);
+    Helpers::json([
+        'ok' => false,
+        'error' => 'Falha interna ao enviar cobranças pendentes.',
+        'details' => $e->getMessage(),
+    ], 500);
+}

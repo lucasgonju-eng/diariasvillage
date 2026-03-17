@@ -60,6 +60,19 @@ foreach ($allUnpaidRows as $row) {
     }
     $manualPending[] = $row;
 }
+$openChargesCount = count($queuedPending) + count($manualPending);
+$openChargesAmount = 0.0;
+$openChargesMissingAsaas = 0;
+foreach ($queuedPending as $row) {
+    $openChargesAmount += (float) ($row['amount'] ?? 0);
+    $openChargesMissingAsaas++;
+}
+foreach ($manualPending as $row) {
+    $openChargesAmount += (float) ($row['amount'] ?? 0);
+    if (trim((string) ($row['asaas_payment_id'] ?? '')) === '') {
+        $openChargesMissingAsaas++;
+    }
+}
 
 $monthlyItems = MonthlyStudents::load();
 $monthlyById = MonthlyStudents::mapByStudentId($monthlyItems);
@@ -465,6 +478,16 @@ if (!empty($exclusionsLog)) {
     .office-preview-item{background:#fff;border:1px solid #E2E8F0;border-radius:10px;padding:8px}
     .office-preview-item strong{display:block;color:#0F172A}
     .office-preview-item .meta{font-size:12px;color:#475569}
+    .open-charges-summary{
+      margin-top:10px;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid #E2E8F0;
+      background:#F8FAFC;
+      font-size:13px;
+      color:#0F172A;
+      font-weight:700;
+    }
     .hidden{display:none}
     .bulk-mail-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0}
     .bulk-mail-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin:10px 0}
@@ -828,6 +851,7 @@ if (!empty($exclusionsLog)) {
                     data-student="<?php echo htmlspecialchars((string) ($student['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
                     data-dayuse-date="<?php echo htmlspecialchars((string) $datesLabel, ENT_QUOTES, 'UTF-8'); ?>"
                     data-amount="<?php echo htmlspecialchars((string) ($payment['amount'] ?? 0), ENT_QUOTES, 'UTF-8'); ?>"
+                    data-has-asaas="0"
                     data-monthly="<?php echo $isMonthlyCheck ? '1' : '0'; ?>"
                     data-monthly-days="<?php echo $isMonthlyCheck ? htmlspecialchars((string) $monthlyDays, ENT_QUOTES, 'UTF-8') : ''; ?>"
                   >
@@ -840,7 +864,7 @@ if (!empty($exclusionsLog)) {
                     <td><?php echo htmlspecialchars($datesLabel, ENT_QUOTES, 'UTF-8'); ?></td>
                     <td>R$ <?php echo $amount; ?></td>
                     <td>
-                      Na fila (não enviada)
+                      Na fila (não enviada no Asaas)
                       <?php if ($isMonthlyCheck): ?>
                         <span class="monthly-check-badge"><?php echo htmlspecialchars($monthlyWarning . ' • ' . $monthlyDays . ' dias', ENT_QUOTES, 'UTF-8'); ?></span>
                       <?php endif; ?>
@@ -880,8 +904,12 @@ if (!empty($exclusionsLog)) {
                     $isMonthlyCheck = is_array($monthlyMeta);
                     $monthlyDays = (int) ($monthlyMeta['weekly_days'] ?? 0);
                     $monthlyWarning = $isMonthlyCheck ? 'Aluno mensalista. Checar' : '';
+                    $hasAsaasId = trim((string) ($payment['asaas_payment_id'] ?? '')) !== '';
                     if ($isMonthlyCheck) {
                         $statusLabel .= ' • ' . $monthlyWarning;
+                    }
+                    if (!$hasAsaasId) {
+                        $statusLabel .= ' • Sem ID Asaas';
                     }
                   ?>
                   <tr
@@ -890,6 +918,7 @@ if (!empty($exclusionsLog)) {
                     data-student="<?php echo htmlspecialchars((string) ($student['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
                     data-dayuse-date="<?php echo htmlspecialchars((string) $datesLabel, ENT_QUOTES, 'UTF-8'); ?>"
                     data-amount="<?php echo htmlspecialchars((string) ($payment['amount'] ?? 0), ENT_QUOTES, 'UTF-8'); ?>"
+                    data-has-asaas="<?php echo $hasAsaasId ? '1' : '0'; ?>"
                     data-monthly="<?php echo $isMonthlyCheck ? '1' : '0'; ?>"
                     data-monthly-days="<?php echo $isMonthlyCheck ? htmlspecialchars((string) $monthlyDays, ENT_QUOTES, 'UTF-8') : ''; ?>"
                   >
@@ -919,8 +948,18 @@ if (!empty($exclusionsLog)) {
                 <?php endforeach; ?>
               <?php endif; ?>
             </tbody>
+            <tfoot>
+              <tr style="font-weight:700;background:#F8FAFC;">
+                <td colspan="9">
+                  Total em aberto: <?php echo (int) $openChargesCount; ?> cobrança(s) •
+                  Valor total: R$ <?php echo number_format($openChargesAmount, 2, ',', '.'); ?> •
+                  Sem cobrança gerada no Asaas: <?php echo (int) $openChargesMissingAsaas; ?>
+                </td>
+              </tr>
+            </tfoot>
           </table>
         </div>
+        <div id="inadimplentes-summary" class="open-charges-summary"></div>
       </section>
 
       <section id="tab-recebidas" class="<?php echo $activeTab === 'recebidas' ? '' : 'hidden'; ?>">

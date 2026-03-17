@@ -24,6 +24,7 @@ const chargeMessage = document.querySelector('#charge-message');
 const sendSelectedPendingButton = document.querySelector('#send-selected-pending');
 const selectAllPendingInput = document.querySelector('#select-all-pending');
 const sendPendingMessage = document.querySelector('#send-pending-message');
+const inadimplentesSummary = document.querySelector('#inadimplentes-summary');
 const pendingDeleteButtons = document.querySelectorAll('.js-delete-payment');
 let inadimplentesDuplicatesPopupShown = false;
 let inadimplentesMonthlyPopupShown = false;
@@ -2971,6 +2972,21 @@ function showSendPendingMessage(text, isError = false) {
   sendPendingMessage.className = `charge-message ${isError ? 'error' : 'success'}`;
 }
 
+function updateInadimplentesSummary() {
+  if (!inadimplentesSummary) return;
+  const rows = [...document.querySelectorAll('.inadimplente-row')];
+  const totalCount = rows.length;
+  const totalAmount = rows.reduce((sum, row) => sum + Number(row.getAttribute('data-amount') || 0), 0);
+  const missingAsaasCount = rows.reduce(
+    (sum, row) => sum + (row.getAttribute('data-has-asaas') === '1' ? 0 : 1),
+    0,
+  );
+  inadimplentesSummary.textContent =
+    `Total em aberto: ${totalCount} cobrança(s) • ` +
+    `Valor total: ${formatCurrency(totalAmount)} • ` +
+    `Sem cobrança gerada no Asaas: ${missingAsaasCount}`;
+}
+
 if (selectAllPendingInput) {
   selectAllPendingInput.addEventListener('change', () => {
     const checked = !!selectAllPendingInput.checked;
@@ -3027,7 +3043,9 @@ if (sendSelectedPendingButton) {
         if (statusCell) {
           statusCell.textContent = 'Aguardando pagamento';
         }
+        row.setAttribute('data-has-asaas', '1');
       });
+      updateInadimplentesSummary();
 
       if (selectAllPendingInput) {
         selectAllPendingInput.checked = false;
@@ -3182,6 +3200,7 @@ pendingDeleteButtons.forEach((button) => {
         return;
       }
       row.remove();
+      updateInadimplentesSummary();
       showSendPendingMessage('Cobrança excluída com motivo: Cobrança em duplicidade.');
       maybeAlertInadimplentesDuplicates(true);
     } catch {
@@ -4443,3 +4462,4 @@ if (initialTab === 'email-massa') {
   loadBulkMailData();
 }
 loadStudents();
+updateInadimplentesSummary();

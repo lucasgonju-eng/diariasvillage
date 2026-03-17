@@ -12,6 +12,7 @@ foreach ($bootstrapCandidates as $bootstrapFile) {
 date_default_timezone_set('America/Sao_Paulo');
 
 use App\AttendanceCalls;
+use App\AsaasClient;
 use App\Helpers;
 use App\HttpClient;
 use App\Mailer;
@@ -92,12 +93,25 @@ function normalizeAttendanceKey(string $value): string
     return trim($value);
 }
 
+function extractAsaasError(array $response): string
+{
+    if (!empty($response['error'])) {
+        return (string) $response['error'];
+    }
+    $data = $response['data'] ?? null;
+    if (is_array($data) && !empty($data['message'])) {
+        return (string) $data['message'];
+    }
+    return 'Falha ao processar cobrança no Asaas.';
+}
+
 if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
     Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
 }
 
 $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
 $client = new SupabaseClient(new HttpClient());
+$asaas = new AsaasClient(new HttpClient());
 
 if ($method === 'GET') {
     $from = parseAttendanceDate((string) ($_GET['from'] ?? ''));
@@ -731,7 +745,7 @@ if (is_array($plan) && in_array((int) ($plan['weekly_days'] ?? 0), [2, 3, 4, 5],
 
 $guardianResult = $client->select(
     'guardians',
-    'select=id,parent_name,email,parent_phone,parent_document,created_at'
+    'select=id,parent_name,email,parent_phone,parent_document,asaas_customer_id,created_at'
         . '&student_id=eq.' . urlencode($studentId)
         . '&order=created_at.desc&limit=200'
 );
@@ -768,16 +782,80 @@ if (!is_array($guardian) || empty($guardian['id'])) {
     ], 422);
 }
 
-$insertPayment = $client->insert('payments', [[
+$guardianName = trim((string) ($guardian['parent_name'] ?? 'Responsável'));
+$guardianEmail = trim((string) ($guardian['email'] ?? ''));
+$guardianDoc = preg_replace('/\D+/', '', (string) ($guardian['parent_document'] ?? '')) ?? '';
+$guardianPhone = preg_replace('/\D+/', '', (string) ($guardian['parent_phone'] ?? '')) ?? '';
+$customerId = trim((string) ($guardian['asaas_customer_id'] ?? ''));
+$amount = 97.00;
+$dailyType = 'emergencial|' . formatDateBr($attendanceDate);
+$today = date('Y-m-d');
+$dueDate = $attendanceDate < $today ? $today : $attendanceDate;
+$asaasError = '';
+
+if ($customerId === '') {
+    $customerPayload = [
+        'name' => $guardianName !== '' ? $guardianName : 'Responsável',
+    ];
+    if ($guardianEmail !== '' && filter_var($guardianEmail, FILTER_VALIDATE_EMAIL)) {
+        $customerPayload['email'] = $guardianEmail;
+    }
+    if ($guardianDoc !== '') {
+        $customerPayload['cpfCnpj'] = $guardianDoc;
+    }
+    if ($guardianPhone !== '') {
+        $customerPayload['mobilePhone'] = $guardianPhone;
+    }
+    $customer = $asaas->createCustomer($customerPayload);
+    if ($customer['ok'] ?? false) {
+        $customerId = trim((string) ($customer['data']['id'] ?? ''));
+        if ($customerId !== '') {
+            $client->update('guardians', 'id=eq.' . urlencode((string) ($guardian['id'] ?? '')), [
+                'asaas_customer_id' => $customerId,
+            ]);
+        } else {
+            $asaasError = 'Cliente Asaas inválido.';
+        }
+    } else {
+        $asaasError = extractAsaasError($customer);
+    }
+}
+
+$insertPayload = [
     'guardian_id' => (string) ($guardian['id'] ?? ''),
     'student_id' => $studentId,
     'payment_date' => $attendanceDate,
-    'daily_type' => 'emergencial|' . formatDateBr($attendanceDate),
-    'amount' => 97.00,
+    'daily_type' => $dailyType,
+    'amount' => $amount,
     'status' => 'queued',
     'billing_type' => 'PIX_MANUAL_QUEUE',
     'asaas_payment_id' => null,
-]]);
+];
+
+if ($asaasError === '' && $customerId !== '') {
+    $payment = $asaas->createPayment([
+        'customer' => $customerId,
+        'billingType' => 'PIX',
+        'value' => $amount,
+        'dueDate' => $dueDate,
+        'description' => 'Diária emergencial - ' . ($studentName !== '' ? $studentName : 'Aluno') . ' - ' . formatDateBr($attendanceDate),
+    ]);
+    if ($payment['ok'] ?? false) {
+        $paymentData = $payment['data'] ?? [];
+        $asaasPaymentId = trim((string) ($paymentData['id'] ?? ''));
+        if ($asaasPaymentId !== '') {
+            $insertPayload['status'] = 'pending';
+            $insertPayload['billing_type'] = 'PIX_MANUAL';
+            $insertPayload['asaas_payment_id'] = $asaasPaymentId;
+        } else {
+            $asaasError = 'Cobrança criada no Asaas sem ID retornado.';
+        }
+    } else {
+        $asaasError = extractAsaasError($payment);
+    }
+}
+
+$insertPayment = $client->insert('payments', [[$insertPayload]]);
 
 if (!($insertPayment['ok'] ?? false) || empty($insertPayment['data'][0])) {
     $rows[$targetIndex]['status'] = AttendanceCalls::STATUS_ERRO_COBRANCA;
@@ -797,12 +875,18 @@ $rows[$targetIndex]['status'] = AttendanceCalls::STATUS_AUTORIZADA_COBRANCA;
 $rows[$targetIndex]['queue_payment_id'] = (string) ($payment['id'] ?? '');
 $rows[$targetIndex]['reviewed_at'] = date('c');
 $rows[$targetIndex]['reviewed_by'] = 'admin';
-$rows[$targetIndex]['review_note'] = 'Autorizada pelo admin e cobrança emergencial lançada na fila.';
+$rows[$targetIndex]['review_note'] = $asaasError === ''
+    ? 'Autorizada pelo admin e cobrança emergencial criada no Asaas.'
+    : 'Autorizada pelo admin, mas falha no Asaas (' . $asaasError . '). Cobrança ficou na fila para reenvio.';
 saveAttendanceRowsOrFail($rows);
 
 Helpers::json([
     'ok' => true,
     'item' => $rows[$targetIndex],
-    'message' => 'Autorizada com sucesso. Cobrança emergencial lançada na fila.',
+    'message' => $asaasError === ''
+        ? 'Autorizada com sucesso. Cobrança emergencial criada no Asaas.'
+        : 'Autorizada com sucesso, mas houve falha ao gerar no Asaas. Cobrança ficou na fila para envio manual.',
+    'asaas_error' => $asaasError !== '' ? $asaasError : null,
+    'created_in_asaas' => $asaasError === '',
 ]);
 
