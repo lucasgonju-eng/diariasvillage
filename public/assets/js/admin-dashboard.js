@@ -2466,7 +2466,14 @@ async function handleAttendanceAction(event) {
           );
         }
       }
-      setAttendanceMessage(data?.message || 'Chamada autorizada.');
+      const charge = data?.charge || null;
+      if (charge?.payment_id) {
+        const channel = charge?.asaas_payment_id ? 'Asaas' : 'fila interna';
+        const suffix = ` Cobrança #${charge.payment_id} (${channel}).`;
+        setAttendanceMessage((data?.message || 'Chamada autorizada.') + suffix);
+      } else {
+        setAttendanceMessage(data?.message || 'Chamada autorizada.');
+      }
       await loadAttendanceCalls(true);
     } catch {
       setAttendanceMessage('Falha ao autorizar chamada.', true);

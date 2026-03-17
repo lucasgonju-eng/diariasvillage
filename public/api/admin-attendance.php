@@ -890,5 +890,13 @@ Helpers::json([
         : 'Autorizada com sucesso, mas houve falha ao gerar no Asaas. Cobrança ficou na fila para envio manual.',
     'asaas_error' => $asaasError !== '' ? $asaasError : null,
     'created_in_asaas' => $asaasError === '',
+    'charge' => [
+        'payment_id' => (string) ($payment['id'] ?? ''),
+        'status' => (string) ($payment['status'] ?? ''),
+        'billing_type' => (string) ($payment['billing_type'] ?? ''),
+        'asaas_payment_id' => (string) ($payment['asaas_payment_id'] ?? ''),
+        'student_id' => $studentId,
+        'attendance_date' => $attendanceDate,
+    ],
 ]);
 
