@@ -6,6 +6,78 @@ use App\HttpClient;
 use App\MonthlyStudents;
 use App\SupabaseClient;
 
+function parseBrDateToIso(string $raw): ?string
+{
+    $raw = trim($raw);
+    if ($raw === '') {
+        return null;
+    }
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $raw)) {
+        return $raw;
+    }
+    if (preg_match('/^\d{2}\/\d{2}\/\d{2,4}$/', $raw)) {
+        [$day, $month, $year] = explode('/', $raw);
+        $yearInt = (int) $year;
+        if ($yearInt < 100) {
+            $yearInt += 2000;
+        }
+        if (!checkdate((int) $month, (int) $day, $yearInt)) {
+            return null;
+        }
+        return sprintf('%04d-%02d-%02d', $yearInt, (int) $month, (int) $day);
+    }
+    $time = strtotime($raw);
+    if ($time === false) {
+        return null;
+    }
+    return date('Y-m-d', $time);
+}
+
+function extractDayUseIsoDatesFromPaymentRow(array $paymentRow): array
+{
+    $dailyRaw = trim((string) ($paymentRow['daily_type'] ?? ''));
+    $datesLabel = '';
+    if ($dailyRaw !== '') {
+        $parts = explode('|', $dailyRaw, 2);
+        $datesLabel = trim((string) ($parts[1] ?? ''));
+    }
+
+    $dates = [];
+    if ($datesLabel !== '') {
+        foreach (explode(',', $datesLabel) as $chunk) {
+            $iso = parseBrDateToIso((string) $chunk);
+            if ($iso !== null) {
+                $dates[$iso] = true;
+            }
+        }
+    }
+
+    if (empty($dates)) {
+        $fallbackIso = parseBrDateToIso((string) ($paymentRow['payment_date'] ?? ''));
+        if ($fallbackIso !== null) {
+            $dates[$fallbackIso] = true;
+        }
+    }
+
+    $keys = array_keys($dates);
+    sort($keys);
+    return $keys;
+}
+
+function resolveOpenAmountFromPaymentRow(array $paymentRow): float
+{
+    $dates = extractDayUseIsoDatesFromPaymentRow($paymentRow);
+    if (empty($dates)) {
+        return (float) ($paymentRow['amount'] ?? 0);
+    }
+    $total = 0.0;
+    foreach ($dates as $isoDate) {
+        $rule = Helpers::resolveDayUseCharge((string) $isoDate);
+        $total += (float) ($rule['amount'] ?? 77.0);
+    }
+    return $total;
+}
+
 if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
     header('Location: /admin/');
     exit;
@@ -838,7 +910,8 @@ if (!empty($exclusionsLog)) {
                   <?php
                     $student = $payment['students'] ?? [];
                     $guardian = $payment['guardians'] ?? [];
-                    $amount = number_format((float) $payment['amount'], 2, ',', '.');
+                    $effectiveAmount = resolveOpenAmountFromPaymentRow((array) $payment);
+                    $amount = number_format($effectiveAmount, 2, ',', '.');
                     $created = $payment['created_at'] ? date('d/m/Y H:i', strtotime($payment['created_at'])) : '-';
                     $dailyParts = explode('|', $payment['daily_type'] ?? '', 2);
                     $datesLabel = $dailyParts[1] ?? date('d/m/Y', strtotime($payment['payment_date']));
@@ -860,7 +933,7 @@ if (!empty($exclusionsLog)) {
                     data-student="<?php echo htmlspecialchars((string) ($student['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
                     data-dayuse-date="<?php echo htmlspecialchars((string) $datesLabel, ENT_QUOTES, 'UTF-8'); ?>"
                     data-dayuse-count="<?php echo (int) $dayUseCount; ?>"
-                    data-amount="<?php echo htmlspecialchars((string) ($payment['amount'] ?? 0), ENT_QUOTES, 'UTF-8'); ?>"
+                    data-amount="<?php echo htmlspecialchars((string) $effectiveAmount, ENT_QUOTES, 'UTF-8'); ?>"
                     data-has-asaas="0"
                     data-monthly="<?php echo $isMonthlyCheck ? '1' : '0'; ?>"
                     data-monthly-days="<?php echo $isMonthlyCheck ? htmlspecialchars((string) $monthlyDays, ENT_QUOTES, 'UTF-8') : ''; ?>"
@@ -900,7 +973,8 @@ if (!empty($exclusionsLog)) {
                   <?php
                     $student = $payment['students'] ?? [];
                     $guardian = $payment['guardians'] ?? [];
-                    $amount = number_format((float) $payment['amount'], 2, ',', '.');
+                    $effectiveAmount = resolveOpenAmountFromPaymentRow((array) $payment);
+                    $amount = number_format($effectiveAmount, 2, ',', '.');
                     $created = $payment['created_at'] ? date('d/m/Y H:i', strtotime($payment['created_at'])) : '-';
                     $dailyParts = explode('|', $payment['daily_type'] ?? '', 2);
                     $datesLabel = $dailyParts[1] ?? date('d/m/Y', strtotime($payment['payment_date']));
@@ -937,7 +1011,7 @@ if (!empty($exclusionsLog)) {
                     data-student="<?php echo htmlspecialchars((string) ($student['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
                     data-dayuse-date="<?php echo htmlspecialchars((string) $datesLabel, ENT_QUOTES, 'UTF-8'); ?>"
                     data-dayuse-count="<?php echo (int) $dayUseCount; ?>"
-                    data-amount="<?php echo htmlspecialchars((string) ($payment['amount'] ?? 0), ENT_QUOTES, 'UTF-8'); ?>"
+                    data-amount="<?php echo htmlspecialchars((string) $effectiveAmount, ENT_QUOTES, 'UTF-8'); ?>"
                     data-has-asaas="<?php echo $hasAsaasId ? '1' : '0'; ?>"
                     data-monthly="<?php echo $isMonthlyCheck ? '1' : '0'; ?>"
                     data-monthly-days="<?php echo $isMonthlyCheck ? htmlspecialchars((string) $monthlyDays, ENT_QUOTES, 'UTF-8') : ''; ?>"

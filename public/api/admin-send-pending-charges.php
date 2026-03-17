@@ -20,6 +20,83 @@ function extractAsaasError(array $response): string
     return 'Falha ao processar cobrança no Asaas.';
 }
 
+function parseBrDateToIso(string $raw): ?string
+{
+    $raw = trim($raw);
+    if ($raw === '') {
+        return null;
+    }
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $raw)) {
+        return $raw;
+    }
+    if (preg_match('/^\d{2}\/\d{2}\/\d{2,4}$/', $raw)) {
+        [$day, $month, $year] = explode('/', $raw);
+        $yearInt = (int) $year;
+        if ($yearInt < 100) {
+            $yearInt += 2000;
+        }
+        if (!checkdate((int) $month, (int) $day, $yearInt)) {
+            return null;
+        }
+        return sprintf('%04d-%02d-%02d', $yearInt, (int) $month, (int) $day);
+    }
+    $time = strtotime($raw);
+    if ($time === false) {
+        return null;
+    }
+    return date('Y-m-d', $time);
+}
+
+/**
+ * @return array{amount: float, daily_base_type: string, date_label: string}
+ */
+function resolveQueuedChargeRule(array $paymentRow, string $today): array
+{
+    $dailyRaw = trim((string) ($paymentRow['daily_type'] ?? ''));
+    $parts = explode('|', $dailyRaw, 2);
+    $datesLabelRaw = trim((string) ($parts[1] ?? ''));
+
+    $isoDates = [];
+    if ($datesLabelRaw !== '') {
+        foreach (explode(',', $datesLabelRaw) as $chunk) {
+            $iso = parseBrDateToIso((string) $chunk);
+            if ($iso !== null) {
+                $isoDates[$iso] = true;
+            }
+        }
+    }
+    if (empty($isoDates)) {
+        $fallback = parseBrDateToIso((string) ($paymentRow['payment_date'] ?? ''));
+        if ($fallback !== null) {
+            $isoDates[$fallback] = true;
+        }
+    }
+    if (empty($isoDates)) {
+        $isoDates[$today] = true;
+    }
+
+    $isoKeys = array_keys($isoDates);
+    sort($isoKeys);
+
+    $amount = 0.0;
+    $hasEmergencial = false;
+    $dateLabels = [];
+    foreach ($isoKeys as $isoDate) {
+        $rule = Helpers::resolveDayUseCharge((string) $isoDate);
+        $amount += (float) ($rule['amount'] ?? 77.0);
+        if (($rule['daily_type'] ?? 'planejada') === 'emergencial') {
+            $hasEmergencial = true;
+        }
+        $dateLabels[] = date('d/m/Y', strtotime((string) $isoDate));
+    }
+
+    return [
+        'amount' => $amount,
+        'daily_base_type' => $hasEmergencial ? 'emergencial' : 'planejada',
+        'date_label' => implode(', ', $dateLabels),
+    ];
+}
+
 if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
     Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
 }
@@ -118,15 +195,14 @@ try {
             'asaas_customer_id' => $customerId,
         ]);
     }
-    $chargeDate = (string) ($paymentRow['payment_date'] ?? $today);
-    $chargeRule = Helpers::resolveDayUseCharge($chargeDate);
+    $chargeRule = resolveQueuedChargeRule((array) $paymentRow, $today);
 
     $payment = $asaas->createPayment([
         'customer' => $customerId,
         'billingType' => 'PIX',
         'value' => (float) ($chargeRule['amount'] ?? 77.00),
         'dueDate' => $today,
-        'description' => 'Diária ' . ($chargeRule['daily_type'] ?? 'planejada') . ' - cobrança manual - Einstein Village',
+        'description' => 'Diária ' . ($chargeRule['daily_base_type'] ?? 'planejada') . ' - cobrança manual - Einstein Village',
     ]);
     if (!$payment['ok']) {
         $results[] = ['id' => $paymentId, 'ok' => false, 'error' => extractAsaasError($payment)];
@@ -135,10 +211,8 @@ try {
 
     $paymentData = $payment['data'] ?? [];
     $invoiceUrl = $paymentData['invoiceUrl'] ?? $paymentData['bankSlipUrl'] ?? $portalLink;
-    $dailyRaw = (string) ($paymentRow['daily_type'] ?? '');
-    $dailyParts = explode('|', $dailyRaw, 2);
-    $dailyBaseType = (string) ($chargeRule['daily_type'] ?? 'planejada');
-    $dateLabel = $dailyParts[1] ?? date('d/m/Y', strtotime((string) ($paymentRow['payment_date'] ?? $today)));
+    $dailyBaseType = (string) ($chargeRule['daily_base_type'] ?? 'planejada');
+    $dateLabel = (string) ($chargeRule['date_label'] ?? date('d/m/Y', strtotime((string) ($paymentRow['payment_date'] ?? $today))));
     $amountFormatted = number_format((float) ($chargeRule['amount'] ?? 77.00), 2, ',', '.');
 
     $mailHtml = '<p>Olá!</p>'
