@@ -3068,25 +3068,59 @@ if (sendSelectedPendingButton) {
 
     sendSelectedPendingButton.setAttribute('disabled', 'disabled');
     const originalText = sendSelectedPendingButton.textContent;
-    sendSelectedPendingButton.textContent = 'Enviando...';
+    sendSelectedPendingButton.textContent = 'Enviando em lotes...';
     showSendPendingMessage('');
 
     try {
-      const res = await fetch('/api/admin-send-pending-charges.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ payment_ids: selected }),
-      });
-      const data = await res.json();
-      const results = Array.isArray(data?.results) ? data.results : [];
-      const successIds = results
-        .filter((row) => row && row.ok && row.id)
-        .map((row) => String(row.id));
-      const failures = results.filter((row) => row && !row.ok);
+      const batchSize = 10;
+      const chunks = [];
+      for (let i = 0; i < selected.length; i += batchSize) {
+        chunks.push(selected.slice(i, i + batchSize));
+      }
 
-      if (!res.ok && !successIds.length) {
-        showSendPendingMessage(data?.error || 'Falha ao enviar cobranças da fila.', true);
-        return;
+      const successIds = [];
+      const failures = [];
+      let processed = 0;
+
+      for (const chunk of chunks) {
+        processed += chunk.length;
+        sendSelectedPendingButton.textContent = `Enviando (${processed}/${selected.length})...`;
+        let res;
+        let data;
+        try {
+          res = await fetch('/api/admin-send-pending-charges.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ payment_ids: chunk }),
+          });
+          try {
+            data = await res.json();
+          } catch {
+            data = null;
+          }
+        } catch {
+          chunk.forEach((id) => {
+            failures.push({ id, ok: false, error: 'Falha de rede ao enviar lote.' });
+          });
+          continue;
+        }
+
+        const results = Array.isArray(data?.results) ? data.results : [];
+        const chunkSuccessIds = results
+          .filter((row) => row && row.ok && row.id)
+          .map((row) => String(row.id));
+        const chunkFailures = results.filter((row) => row && !row.ok);
+        successIds.push(...chunkSuccessIds);
+        failures.push(...chunkFailures);
+
+        if (!res.ok && chunkSuccessIds.length === 0) {
+          const batchError = data?.error || 'Falha ao enviar lote de cobranças.';
+          chunk.forEach((id) => {
+            if (!chunkFailures.some((row) => String(row?.id || '') === String(id))) {
+              failures.push({ id, ok: false, error: batchError });
+            }
+          });
+        }
       }
 
       successIds.forEach((paymentId) => {
