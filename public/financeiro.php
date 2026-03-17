@@ -326,7 +326,7 @@ if (!empty($studentIds)) {
     }
 }
 
-$cutoffDate = '2026-03-15';
+$cutoffDate = '2026-03-16';
 $rows = [];
 $totalBase = 0.0;
 $totalEffective = 0.0;

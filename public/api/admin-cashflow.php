@@ -195,7 +195,7 @@ if (!in_array($monthlyMode, ['subtract', 'show'], true)) {
 }
 $excludeStudentTerms = parse_filter_terms((string) ($_GET['exclude_student'] ?? ''));
 $excludeGenericTerms = parse_filter_terms((string) ($_GET['exclude_term'] ?? ''));
-$transitionCutoff = '2026-03-15';
+$transitionCutoff = '2026-03-16';
 
 $client = new SupabaseClient(new HttpClient());
 $paymentsResult = $client->select(
