@@ -615,13 +615,17 @@ if ($studentId === '') {
 
 $paymentsResult = $client->select(
     'payments',
-    'select=id,student_id,payment_date,daily_type,amount,status,billing_type,guardian_id,created_at'
+    'select=id,student_id,payment_date,daily_type,amount,status,billing_type,guardian_id,created_at,paid_at'
         . '&student_id=eq.' . urlencode($studentId)
         . '&order=created_at.desc&limit=5000'
 );
-$payments = (($paymentsResult['ok'] ?? false) && is_array($paymentsResult['data'] ?? null))
-    ? $paymentsResult['data']
-    : [];
+if (!($paymentsResult['ok'] ?? false) || !is_array($paymentsResult['data'] ?? null)) {
+    Helpers::json([
+        'ok' => false,
+        'error' => 'Não foi possível validar histórico de cobranças deste aluno. Operação bloqueada para evitar cobrança indevida.',
+    ], 503);
+}
+$payments = $paymentsResult['data'];
 
 $hasPaidSameDate = false;
 $hasOpenSameDate = false;
@@ -640,7 +644,8 @@ foreach ($payments as $payment) {
     if (!in_array($attendanceDate, $dates, true)) {
         continue;
     }
-    if ($status === 'paid') {
+    $isPaid = $status === 'paid' || !empty($payment['paid_at']);
+    if ($isPaid) {
         $hasPaidSameDate = true;
     } else {
         $hasOpenSameDate = true;
@@ -670,6 +675,13 @@ if ($hasPaidSameDate || $hasOpenSameDate) {
 }
 
 $monthlyItems = MonthlyStudents::load();
+$monthlyStoragePath = MonthlyStudents::storagePath();
+if (!is_file($monthlyStoragePath)) {
+    Helpers::json([
+        'ok' => false,
+        'error' => 'Cadastro de mensalistas indisponível no momento. Operação bloqueada para evitar cobrança indevida.',
+    ], 503);
+}
 $monthlyById = MonthlyStudents::mapByStudentId($monthlyItems);
 $monthlyByName = MonthlyStudents::mapByNormalizedName($monthlyItems);
 $plan = MonthlyStudents::resolvePlan($studentId, $studentName, $monthlyById, $monthlyByName);
