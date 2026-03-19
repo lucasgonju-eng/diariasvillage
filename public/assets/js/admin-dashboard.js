@@ -3455,10 +3455,33 @@ resendFebChargeButtons.forEach((button) => {
       }
       updateInadimplentesSummary();
 
+      const emailSent = data?.email_sent !== false;
+      const asaasPaymentId = String(data?.asaas_payment_id || '').trim();
+      const invoiceUrl = String(data?.invoice_url || '').trim();
       const successMessage = data?.created_new_charge
         ? 'Nova cobrança criada no Asaas e reenviada para o responsável.'
         : 'Cobrança de fevereiro reenviada para o responsável.';
-      showSendPendingMessage(successMessage);
+      if (emailSent) {
+        showSendPendingMessage(successMessage);
+      } else {
+        showSendPendingMessage(
+          `${successMessage} Atenção: houve falha no envio do e-mail ao responsável.`,
+          true,
+        );
+      }
+
+      const details = [
+        `Aluno: ${student}`,
+        `Cobrança no Asaas: ${data?.created_new_charge ? 'Nova criada' : 'Cobrança existente reutilizada'}`,
+        `E-mail para o responsável: ${emailSent ? 'Enviado com sucesso' : 'Falhou no envio'}`,
+      ];
+      if (asaasPaymentId) {
+        details.push(`ID Asaas: ${asaasPaymentId}`);
+      }
+      if (invoiceUrl) {
+        details.push(`Link de pagamento: ${invoiceUrl}`);
+      }
+      await showAdminAlert(details.join('\n'), { title: 'Resultado do reenvio' });
     } catch {
       showSendPendingMessage('Falha ao reenviar cobrança de fevereiro.', true);
     } finally {

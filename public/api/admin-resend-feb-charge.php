@@ -290,8 +290,10 @@ try {
         \App\Helpers::json(array(
             'ok' => true,
             'created_new_charge' => $createdNewCharge,
+            'reused_existing_charge' => !$createdNewCharge,
             'invoice_url' => $invoiceUrl,
             'asaas_payment_id' => $effectiveAsaasPaymentId !== '' ? $effectiveAsaasPaymentId : null,
+            'email_sent' => false,
             'warning' => 'Cobrança preparada, mas houve falha no envio do e-mail.',
         ));
     }
@@ -299,8 +301,10 @@ try {
     \App\Helpers::json(array(
         'ok' => true,
         'created_new_charge' => $createdNewCharge,
+        'reused_existing_charge' => !$createdNewCharge,
         'invoice_url' => $invoiceUrl,
         'asaas_payment_id' => $effectiveAsaasPaymentId !== '' ? $effectiveAsaasPaymentId : null,
+        'email_sent' => true,
     ));
 } catch (Throwable $e) {
     @file_put_contents(
