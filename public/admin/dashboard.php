@@ -1060,7 +1060,7 @@ if (!empty($exclusionsLog)) {
                       </button>
                       <?php if ($canResendFebruaryCharge): ?>
                         <button
-                          class="btn btn-ghost btn-sm js-resend-feb-charge"
+                          class="btn btn-primary btn-sm js-resend-feb-charge"
                           type="button"
                           data-id="<?php echo htmlspecialchars((string) ($payment['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
                           style="margin-top:6px;"
