@@ -14,6 +14,7 @@ date_default_timezone_set('America/Sao_Paulo');
 use App\Helpers;
 use App\HttpClient;
 use App\MonthlyStudents;
+use App\AsaasClient;
 use App\SupabaseClient;
 
 function parse_day_type(string $raw): string
@@ -327,6 +328,9 @@ if (!empty($studentIds)) {
 }
 
 $cutoffDate = '2026-03-16';
+$asaas = new AsaasClient(new HttpClient());
+$paymentLinksByAsaasId = [];
+$paymentStatusByAsaasId = [];
 $rows = [];
 $totalBase = 0.0;
 $totalEffective = 0.0;
@@ -363,6 +367,26 @@ foreach ($payments as $payment) {
     $statusLabel = $isReceived ? 'Pago' : 'Pendente';
     $statusRank = $statusRaw === 'paid' ? 2 : 1;
     $createdAtRaw = (string) ($payment['created_at'] ?? '');
+    $asaasPaymentId = trim((string) ($payment['asaas_payment_id'] ?? ''));
+    $payUrl = '';
+    if ($isOpen && $asaasPaymentId !== '') {
+        if (!array_key_exists($asaasPaymentId, $paymentLinksByAsaasId)) {
+            $paymentLinksByAsaasId[$asaasPaymentId] = '';
+            $paymentStatusByAsaasId[$asaasPaymentId] = '';
+            $asaasResponse = $asaas->getPayment($asaasPaymentId);
+            if (($asaasResponse['ok'] ?? false) && is_array($asaasResponse['data'] ?? null)) {
+                $asaasData = $asaasResponse['data'];
+                $paymentLinksByAsaasId[$asaasPaymentId] = trim((string) ($asaasData['invoiceUrl'] ?? ($asaasData['bankSlipUrl'] ?? '')));
+                $paymentStatusByAsaasId[$asaasPaymentId] = strtoupper(trim((string) ($asaasData['status'] ?? '')));
+            }
+        }
+        $payUrl = (string) ($paymentLinksByAsaasId[$asaasPaymentId] ?? '');
+        $asaasStatus = (string) ($paymentStatusByAsaasId[$asaasPaymentId] ?? '');
+        if (in_array($asaasStatus, ['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH'], true)) {
+            $statusLabel = 'Pago';
+            $statusRank = 2;
+        }
+    }
 
     $isSingleDate = count($dates) === 1;
     $baseSingle = ($storedAmount > 0 && $isSingleDate && $storedAmount > 97.01) ? $storedAmount : $basePerDay;
@@ -386,6 +410,7 @@ foreach ($payments as $payment) {
             'status' => $statusLabel,
             'status_rank' => $statusRank,
             'created_at' => $createdAtRaw,
+            'pay_url' => $payUrl,
         ];
     }
 }
@@ -458,6 +483,8 @@ $economy = max(0, $totalBase - $totalEffective);
     .status-badge{display:inline-flex;align-items:center;justify-content:center;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;line-height:1.2;border:1px solid transparent}
     .status-paid{background:#e8f1ff;color:#1e4f9c;border-color:#c9dcff}
     .status-pending{background:#fff1f1;color:#a13a3a;border-color:#f3caca}
+    .finance-pay-btn{padding:8px 12px;border-radius:12px;font-size:12px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;min-width:72px}
+    .finance-pay-muted{font-size:12px;color:#64748b}
   </style>
 </head>
 <body>
@@ -532,12 +559,13 @@ $economy = max(0, $totalBase - $totalEffective);
                 <th>Valor base</th>
                 <th>Valor final</th>
                 <th>Status</th>
+                <th>Ação</th>
               </tr>
             </thead>
             <tbody>
               <?php if (empty($rows)): ?>
                 <tr>
-                  <td colspan="6">Nenhuma diária encontrada para esta conta.</td>
+                  <td colspan="7">Nenhuma diária encontrada para esta conta.</td>
                 </tr>
               <?php else: ?>
                 <?php foreach ($rows as $row): ?>
@@ -562,10 +590,26 @@ $economy = max(0, $totalBase - $totalEffective);
                       <?php
                         $statusText = (string) ($row['status'] ?? '');
                         $statusClass = strtolower(trim($statusText)) === 'pago' ? 'status-paid' : 'status-pending';
+                        $payUrl = trim((string) ($row['pay_url'] ?? ''));
+                        $isPending = strtolower(trim($statusText)) === 'pendente';
                       ?>
                       <span class="status-badge <?php echo $statusClass; ?>">
                         <?php echo htmlspecialchars($statusText, ENT_QUOTES, 'UTF-8'); ?>
                       </span>
+                    </td>
+                    <td>
+                      <?php if ($isPending && $payUrl !== ''): ?>
+                        <a
+                          class="btn btn-primary btn-sm finance-pay-btn"
+                          href="<?php echo htmlspecialchars($payUrl, ENT_QUOTES, 'UTF-8'); ?>"
+                        >
+                          PAGAR
+                        </a>
+                      <?php elseif ($isPending): ?>
+                        <span class="finance-pay-muted">Link indisponível</span>
+                      <?php else: ?>
+                        -
+                      <?php endif; ?>
                     </td>
                   </tr>
                 <?php endforeach; ?>
@@ -578,6 +622,7 @@ $economy = max(0, $totalBase - $totalEffective);
                   <td><?php echo htmlspecialchars(money($pendingBase), ENT_QUOTES, 'UTF-8'); ?></td>
                   <td><?php echo htmlspecialchars(money($pendingEffective), ENT_QUOTES, 'UTF-8'); ?></td>
                   <td>Pendente</td>
+                  <td>-</td>
                 </tr>
               </tfoot>
             <?php endif; ?>
