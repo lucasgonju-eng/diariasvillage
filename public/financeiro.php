@@ -126,6 +126,8 @@ function mask_cpf(string $digits): string
 
 $user = Helpers::requireAuthWeb();
 $client = new SupabaseClient(new HttpClient());
+$financeiroError = isset($_SESSION['financeiro_error']) ? (string) $_SESSION['financeiro_error'] : '';
+unset($_SESSION['financeiro_error']);
 $guardianIds = [];
 $studentIdsScope = [];
 $sessionGuardianId = trim((string) ($user['id'] ?? ''));
@@ -367,6 +369,8 @@ foreach ($payments as $payment) {
     $statusLabel = $isReceived ? 'Pago' : 'Pendente';
     $statusRank = $statusRaw === 'paid' ? 2 : 1;
     $createdAtRaw = (string) ($payment['created_at'] ?? '');
+    $paymentId = trim((string) ($payment['id'] ?? ''));
+    $payProxyUrl = $paymentId !== '' ? '/api/financeiro-pay.php?payment_id=' . rawurlencode($paymentId) : '';
     $asaasPaymentId = trim((string) ($payment['asaas_payment_id'] ?? ''));
     $payUrl = '';
     if ($isOpen && $asaasPaymentId !== '') {
@@ -410,7 +414,9 @@ foreach ($payments as $payment) {
             'status' => $statusLabel,
             'status_rank' => $statusRank,
             'created_at' => $createdAtRaw,
+            'payment_id' => $paymentId,
             'pay_url' => $payUrl,
+            'pay_proxy_url' => $payProxyUrl,
         ];
     }
 }
@@ -550,6 +556,11 @@ $economy = max(0, $totalBase - $totalEffective);
         </div>
 
         <div style="overflow-x:auto;background:#fff;border:1px solid #e6ebf3;border-radius:14px;padding:8px;">
+          <?php if ($financeiroError !== ''): ?>
+            <div class="error" style="margin:8px 8px 12px 8px;">
+              <?php echo htmlspecialchars($financeiroError, ENT_QUOTES, 'UTF-8'); ?>
+            </div>
+          <?php endif; ?>
           <table class="finance-table">
             <thead>
               <tr>
@@ -591,6 +602,7 @@ $economy = max(0, $totalBase - $totalEffective);
                         $statusText = (string) ($row['status'] ?? '');
                         $statusClass = strtolower(trim($statusText)) === 'pago' ? 'status-paid' : 'status-pending';
                         $payUrl = trim((string) ($row['pay_url'] ?? ''));
+                        $payProxyUrl = trim((string) ($row['pay_proxy_url'] ?? ''));
                         $isPending = strtolower(trim($statusText)) === 'pendente';
                       ?>
                       <span class="status-badge <?php echo $statusClass; ?>">
@@ -602,6 +614,13 @@ $economy = max(0, $totalBase - $totalEffective);
                         <a
                           class="btn btn-primary btn-sm finance-pay-btn"
                           href="<?php echo htmlspecialchars($payUrl, ENT_QUOTES, 'UTF-8'); ?>"
+                        >
+                          PAGAR
+                        </a>
+                      <?php elseif ($isPending && $payProxyUrl !== ''): ?>
+                        <a
+                          class="btn btn-primary btn-sm finance-pay-btn"
+                          href="<?php echo htmlspecialchars($payProxyUrl, ENT_QUOTES, 'UTF-8'); ?>"
                         >
                           PAGAR
                         </a>
