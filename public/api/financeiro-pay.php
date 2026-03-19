@@ -27,6 +27,98 @@ $redirectWithError = static function (string $message): void {
     exit;
 };
 
+function parseDateToIsoLocal(string $raw): ?string
+{
+    $raw = trim($raw);
+    if ($raw === '') {
+        return null;
+    }
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $raw)) {
+        return $raw;
+    }
+    if (preg_match('/^\d{2}\/\d{2}\/\d{2,4}$/', $raw)) {
+        [$day, $month, $year] = explode('/', $raw);
+        $yearInt = (int) $year;
+        if ($yearInt < 100) {
+            $yearInt += 2000;
+        }
+        if (!checkdate((int) $month, (int) $day, $yearInt)) {
+            return null;
+        }
+        return sprintf('%04d-%02d-%02d', $yearInt, (int) $month, (int) $day);
+    }
+    $time = strtotime($raw);
+    if ($time === false) {
+        return null;
+    }
+    return date('Y-m-d', $time);
+}
+
+function extractIsoDatesFromPaymentLocal(array $payment): array
+{
+    $dailyRaw = trim((string) ($payment['daily_type'] ?? ''));
+    $parts = explode('|', $dailyRaw, 2);
+    $datesLabelRaw = trim((string) ($parts[1] ?? ''));
+    $dates = [];
+    if ($datesLabelRaw !== '') {
+        $tokens = array_map('trim', explode(',', str_replace([';', '+'], ',', $datesLabelRaw)));
+        foreach ($tokens as $token) {
+            $iso = parseDateToIsoLocal((string) $token);
+            if ($iso !== null) {
+                $dates[$iso] = true;
+            }
+        }
+    }
+    if (empty($dates)) {
+        $fallback = parseDateToIsoLocal((string) ($payment['payment_date'] ?? ''));
+        if ($fallback !== null) {
+            $dates[$fallback] = true;
+        }
+    }
+    $keys = array_keys($dates);
+    sort($keys);
+    return $keys;
+}
+
+function resolveDayUseChargeLocal(string $dayUseDate): float
+{
+    $timestamp = strtotime($dayUseDate);
+    if ($timestamp === false) {
+        return 77.00;
+    }
+    $dayUseIso = date('Y-m-d', $timestamp);
+    $tz = new DateTimeZone('America/Sao_Paulo');
+    $now = new DateTimeImmutable('now', $tz);
+    $today = $now->format('Y-m-d');
+    $hour = (int) $now->format('H');
+    $promoDeadline = '2026-03-16';
+
+    if ($dayUseIso <= $promoDeadline) {
+        return 77.00;
+    }
+    if ($dayUseIso > $today) {
+        return 77.00;
+    }
+    if ($dayUseIso === $today && $hour < 10) {
+        return 77.00;
+    }
+    return 97.00;
+}
+
+function resolveExpectedAmountForPayment(array $payment): float
+{
+    $isoDates = extractIsoDatesFromPaymentLocal($payment);
+    if (empty($isoDates)) {
+        $stored = (float) ($payment['amount'] ?? 0);
+        return $stored > 0 ? $stored : 77.00;
+    }
+    $total = 0.0;
+    foreach ($isoDates as $isoDate) {
+        $total += resolveDayUseChargeLocal((string) $isoDate);
+    }
+    return $total > 0 ? $total : 77.00;
+}
+
 $user = Helpers::requireAuthWeb();
 $paymentId = trim((string) ($_GET['payment_id'] ?? ''));
 if ($paymentId === '') {
@@ -46,6 +138,7 @@ $payment = $paymentResult['data'][0] ?? null;
 if (!$payment) {
     $redirectWithError('Cobrança não encontrada.');
 }
+$expectedAmount = resolveExpectedAmountForPayment((array) $payment);
 
 $sessionGuardianId = trim((string) ($user['id'] ?? ''));
 $sessionStudentId = trim((string) ($user['student_id'] ?? ''));
@@ -123,7 +216,11 @@ if ($existingAsaasPaymentId !== '') {
             exit;
         }
         $invoiceUrl = trim((string) ($asaasData['invoiceUrl'] ?? ($asaasData['bankSlipUrl'] ?? '')));
+        $asaasValue = (float) ($asaasData['value'] ?? 0);
         if ($asaasStatus === 'OVERDUE' || $invoiceUrl === '') {
+            $shouldCreateNew = true;
+        } elseif ($expectedAmount > 0 && $asaasValue > 0 && abs($asaasValue - $expectedAmount) > 0.009) {
+            // Se o valor no Asaas divergir da regra vigente (ex.: desconto), recria no valor correto.
             $shouldCreateNew = true;
         } else {
             $shouldCreateNew = false;
@@ -133,10 +230,7 @@ if ($existingAsaasPaymentId !== '') {
     }
 }
 
-$amount = (float) ($payment['amount'] ?? 0);
-if ($amount <= 0) {
-    $amount = 77.00;
-}
+$amount = $expectedAmount > 0 ? $expectedAmount : 77.00;
 $dailyTypeRaw = strtolower(trim((string) (explode('|', (string) ($payment['daily_type'] ?? ''), 2)[0] ?? 'planejada')));
 $dailyBaseType = $dailyTypeRaw === 'emergencial' ? 'emergencial' : 'planejada';
 
