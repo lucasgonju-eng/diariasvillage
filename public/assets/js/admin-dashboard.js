@@ -31,6 +31,7 @@ const syncChargesPaymentsInadimplentesButton = document.querySelector('#sync-cha
 const syncChargesPaymentsInadimplentesMessage = document.querySelector('#sync-charges-payments-inadimplentes-message');
 const inadimplentesSummary = document.querySelector('#inadimplentes-summary');
 const pendingDeleteButtons = document.querySelectorAll('.js-delete-payment');
+const resendFebChargeButtons = document.querySelectorAll('.js-resend-feb-charge');
 let inadimplentesDuplicatesPopupShown = false;
 let inadimplentesMonthlyPopupShown = false;
 const syncRecebidasButton = document.querySelector('#sync-recebidas-btn');
@@ -3405,6 +3406,64 @@ pendingDeleteButtons.forEach((button) => {
       showSendPendingMessage('Falha ao excluir cobrança.', true);
     } finally {
       button.removeAttribute('disabled');
+    }
+  });
+});
+
+resendFebChargeButtons.forEach((button) => {
+  button.addEventListener('click', async () => {
+    if (!(button instanceof HTMLElement)) return;
+    const paymentId = button.dataset.id;
+    const row = button.closest('tr');
+    if (!paymentId || !row) return;
+
+    const student = row.getAttribute('data-student') || 'Aluno';
+    const dayUseDates = row.getAttribute('data-dayuse-date') || '-';
+    const amountRaw = Number(row.getAttribute('data-amount') || 0);
+    const amount = formatCurrency(amountRaw);
+    const statusCell = row.children?.[6];
+    const currentStatus = (statusCell?.textContent || '').trim() || 'Pendente no Asaas';
+
+    const confirmed = await showAdminConfirm(
+      `Reenviar cobrança de fevereiro para o responsável?\n\nAluno: ${student}\nDatas do day-use: ${dayUseDates}\nValor: ${amount}\nStatus atual: ${currentStatus}\n\nSe estiver vencida no Asaas, uma nova cobrança será criada automaticamente.`,
+      { title: 'Reenviar cobrança de fevereiro', confirmText: 'Reenviar' },
+    );
+    if (!confirmed) return;
+
+    button.setAttribute('disabled', 'disabled');
+    const originalText = button.textContent;
+    button.textContent = 'Reenviando...';
+    showSendPendingMessage('Reenviando cobrança de fevereiro...', false);
+
+    try {
+      const res = await fetch('/api/admin-resend-feb-charge.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payment_id: paymentId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        showSendPendingMessage(data?.error || 'Falha ao reenviar cobrança de fevereiro.', true);
+        return;
+      }
+
+      row.setAttribute('data-has-asaas', '1');
+      if (statusCell) {
+        statusCell.textContent = data?.created_new_charge
+          ? 'Pendente no Asaas (nova cobrança criada)'
+          : 'Pendente no Asaas (cobrança reenviada)';
+      }
+      updateInadimplentesSummary();
+
+      const successMessage = data?.created_new_charge
+        ? 'Nova cobrança criada no Asaas e reenviada para o responsável.'
+        : 'Cobrança de fevereiro reenviada para o responsável.';
+      showSendPendingMessage(successMessage);
+    } catch {
+      showSendPendingMessage('Falha ao reenviar cobrança de fevereiro.', true);
+    } finally {
+      button.removeAttribute('disabled');
+      button.textContent = originalText;
     }
   });
 });

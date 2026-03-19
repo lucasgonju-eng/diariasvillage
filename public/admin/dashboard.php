@@ -78,6 +78,21 @@ function resolveOpenAmountFromPaymentRow(array $paymentRow): float
     return $total;
 }
 
+function isFebruaryChargeOnly(array $paymentRow): bool
+{
+    $dates = extractDayUseIsoDatesFromPaymentRow($paymentRow);
+    if (empty($dates)) {
+        return false;
+    }
+    foreach ($dates as $isoDate) {
+        $month = substr((string) $isoDate, 5, 2);
+        if ($month !== '02') {
+            return false;
+        }
+    }
+    return true;
+}
+
 if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
     header('Location: /admin/');
     exit;
@@ -1000,6 +1015,10 @@ if (!empty($exclusionsLog)) {
                     $monthlyDays = (int) ($monthlyMeta['weekly_days'] ?? 0);
                     $monthlyWarning = $isMonthlyCheck ? 'Aluno mensalista. Checar' : '';
                     $hasAsaasId = trim((string) ($payment['asaas_payment_id'] ?? '')) !== '';
+                    $isFebruaryOnly = isFebruaryChargeOnly((array) $payment);
+                    $canResendFebruaryCharge = $hasAsaasId
+                        && $isFebruaryOnly
+                        && !in_array($statusRaw, ['paid', 'canceled', 'cancelled', 'deleted', 'refunded'], true);
                     if ($isMonthlyCheck) {
                         $statusLabel .= ' • ' . $monthlyWarning;
                     }
@@ -1039,6 +1058,16 @@ if (!empty($exclusionsLog)) {
                       >
                         Excluir
                       </button>
+                      <?php if ($canResendFebruaryCharge): ?>
+                        <button
+                          class="btn btn-ghost btn-sm js-resend-feb-charge"
+                          type="button"
+                          data-id="<?php echo htmlspecialchars((string) ($payment['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                          style="margin-top:6px;"
+                        >
+                          Reenviar cobrança (fev)
+                        </button>
+                      <?php endif; ?>
                     </td>
                   </tr>
                 <?php endforeach; ?>
@@ -1954,7 +1983,7 @@ if (!empty($exclusionsLog)) {
     window.__monthlyStudents = <?php echo json_encode($monthlyRowsForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
     window.__adminCanApproveAttendance = <?php echo $canAttendanceApprove ? 'true' : 'false'; ?>;
   </script>
-  <script src="/assets/js/admin-dashboard.js?v=68"></script>
+  <script src="/assets/js/admin-dashboard.js?v=69"></script>
   <script>
     (function () {
       function activateTab(name) {
