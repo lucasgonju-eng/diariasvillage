@@ -61,6 +61,7 @@ const attendanceStudentInput = document.querySelector('#attendance-student');
 const attendanceOfficeInput = document.querySelector('#attendance-office');
 const attendanceAddButton = document.querySelector('#attendance-add-btn');
 const attendanceCloseDayButton = document.querySelector('#attendance-close-day-btn');
+const attendanceGoInadimplentesButton = document.querySelector('#attendance-go-inadimplentes-btn');
 const attendanceMessage = document.querySelector('#attendance-message');
 const attendanceTbody = document.querySelector('#attendance-tbody');
 const attendanceDayList = document.querySelector('#attendance-day-list');
@@ -2878,6 +2879,14 @@ if (attendanceStudentInput) {
 if (attendanceCloseDayButton) {
   attendanceCloseDayButton.addEventListener('click', () => {
     closeAttendanceDay();
+  });
+}
+
+if (attendanceGoInadimplentesButton) {
+  attendanceGoInadimplentesButton.addEventListener('click', () => {
+    setActiveTab('inadimplentes');
+    maybeAlertInadimplentesDuplicates();
+    maybeAlertInadimplentesMonthly();
   });
 }
 

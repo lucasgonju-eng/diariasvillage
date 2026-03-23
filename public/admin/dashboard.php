@@ -568,6 +568,18 @@ if (!empty($exclusionsLog)) {
       font-weight:800;
     }
     .btn-sync-reconcile:hover{filter:brightness(.97)}
+    .btn-warning-yellow{
+      color:#3f2f00;
+      border-color:#e7b600;
+      background:#ffd43b;
+      font-weight:800;
+    }
+    .btn-warning-yellow:hover{
+      background:#ffc107;
+      border-color:#d8a900;
+      color:#2f2300;
+      filter:none;
+    }
     .hidden{display:none}
     .bulk-mail-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0}
     .bulk-mail-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin:10px 0}
@@ -813,8 +825,10 @@ if (!empty($exclusionsLog)) {
           <div class="form-group" style="display:flex;align-items:flex-end;gap:8px;">
             <button id="attendance-add-btn" class="btn btn-primary btn-sm" type="button">Adicionar aluno ao dia</button>
             <button id="attendance-close-day-btn" class="btn btn-primary btn-sm" type="button">Fechar dia de chamada</button>
+            <button id="attendance-go-inadimplentes-btn" class="btn btn-warning-yellow btn-sm" type="button">Soltar a fila</button>
           </div>
         </div>
+        <p class="muted" style="margin:-4px 0 10px 0;">Após autorizar, use "Soltar a fila" e clique em "Enviar cobranças da fila".</p>
         <h3 style="margin:8px 0;">Lista do dia (pré-fechamento)</h3>
         <div style="overflow-x:auto;margin-bottom:12px;">
           <table class="admin-table">
@@ -1983,7 +1997,7 @@ if (!empty($exclusionsLog)) {
     window.__monthlyStudents = <?php echo json_encode($monthlyRowsForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
     window.__adminCanApproveAttendance = <?php echo $canAttendanceApprove ? 'true' : 'false'; ?>;
   </script>
-  <script src="/assets/js/admin-dashboard.js?v=69"></script>
+  <script src="/assets/js/admin-dashboard.js?v=70"></script>
   <script>
     (function () {
       function activateTab(name) {

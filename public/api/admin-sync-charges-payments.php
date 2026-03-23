@@ -523,15 +523,9 @@ try {
         $response = $asaas->getPayment($asaasId);
         $asaasData = ($response['ok'] ?? false) ? ($response['data'] ?? null) : null;
         if (!$asaasData || !is_array($asaasData)) {
+            // Não cancelar localmente quando houver falha de consulta.
+            // Em instabilidade de rede/Asaas, o status local deve ser preservado.
             $summary['payments_not_found']++;
-            if (empty($payment['paid_at']) && strtolower((string) ($payment['status'] ?? '')) !== 'paid') {
-                $update = $client->update('payments', 'id=eq.' . urlencode($paymentId), [
-                    'status' => 'canceled',
-                ]);
-                if ($update['ok'] ?? false) {
-                    $summary['payments_canceled_updated']++;
-                }
-            }
             continue;
         }
 
@@ -545,6 +539,16 @@ try {
                 if ($update['ok'] ?? false) {
                     $summary['payments_paid_updated']++;
                 }
+            }
+            continue;
+        }
+
+        if (asaas_status_is_open($asaasStatus)) {
+            $currentStatus = strtolower((string) ($payment['status'] ?? ''));
+            if (!in_array($currentStatus, ['pending', 'pending_asaas', 'overdue', 'awaiting_risk_analysis'], true)) {
+                $client->update('payments', 'id=eq.' . urlencode($paymentId), [
+                    'status' => 'pending_asaas',
+                ]);
             }
             continue;
         }
