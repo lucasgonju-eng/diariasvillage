@@ -105,6 +105,15 @@ function extractAsaasError(array $response): string
     return 'Falha ao processar cobrança no Asaas.';
 }
 
+function isDeliverableGuardianEmail(string $email): bool
+{
+    $email = trim($email);
+    if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        return false;
+    }
+    return !preg_match('/@(diariasvillage|placeholder)\.local$/i', $email);
+}
+
 if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
     Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
 }
@@ -811,17 +820,23 @@ $guardians = (($guardianResult['ok'] ?? false) && is_array($guardianResult['data
     : [];
 
 $guardian = null;
+$fallbackGuardianWithAnyEmail = null;
 foreach ($guardians as $row) {
     if (!is_array($row)) {
         continue;
     }
     $email = trim((string) ($row['email'] ?? ''));
-    if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    if ($fallbackGuardianWithAnyEmail === null && $email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $fallbackGuardianWithAnyEmail = $row;
+    }
+    if (isDeliverableGuardianEmail($email)) {
         $guardian = $row;
         break;
     }
 }
-if ($guardian === null && !empty($guardians[0]) && is_array($guardians[0])) {
+if ($guardian === null && is_array($fallbackGuardianWithAnyEmail)) {
+    $guardian = $fallbackGuardianWithAnyEmail;
+} elseif ($guardian === null && !empty($guardians[0]) && is_array($guardians[0])) {
     $guardian = $guardians[0];
 }
 
@@ -884,11 +899,35 @@ if ($isAudit) {
     ]);
 }
 
+if ($guardianEmail !== '' && !isDeliverableGuardianEmail($guardianEmail)) {
+    if ($isAudit) {
+        Helpers::json([
+            'ok' => true,
+            'audit' => true,
+            'blocked' => true,
+            'blocked_reason' => 'missing_guardian',
+            'error' => 'Responsável sem e-mail válido para entrega (placeholder). Atualize o e-mail antes de autorizar.',
+            'student_id' => $studentId,
+            'attendance_date' => $attendanceDate,
+        ]);
+    }
+    $rows[$targetIndex]['status'] = AttendanceCalls::STATUS_ERRO_COBRANCA;
+    $rows[$targetIndex]['reviewed_at'] = date('c');
+    $rows[$targetIndex]['reviewed_by'] = 'admin';
+    $rows[$targetIndex]['review_note'] = 'Responsável com e-mail placeholder. Atualize o e-mail para autorizar a cobrança.';
+    saveAttendanceRowsOrFail($rows);
+    Helpers::json([
+        'ok' => false,
+        'item' => $rows[$targetIndex],
+        'error' => 'Responsável sem e-mail válido para entrega (placeholder). Atualize o e-mail antes de autorizar.',
+    ], 422);
+}
+
 if ($customerId === '') {
     $customerPayload = [
         'name' => $guardianName !== '' ? $guardianName : 'Responsável',
     ];
-    if ($guardianEmail !== '' && filter_var($guardianEmail, FILTER_VALIDATE_EMAIL)) {
+    if (isDeliverableGuardianEmail($guardianEmail)) {
         $customerPayload['email'] = $guardianEmail;
     }
     if ($guardianDoc !== '') {

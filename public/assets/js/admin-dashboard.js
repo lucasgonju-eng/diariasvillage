@@ -3162,6 +3162,13 @@ if (selectAllPendingInput) {
 
 if (sendSelectedPendingButton) {
   sendSelectedPendingButton.addEventListener('click', async () => {
+    const queueCheckboxes = [...document.querySelectorAll('.pending-send-checkbox')]
+      .filter((el) => el instanceof HTMLInputElement);
+    const visibleQueueCheckboxes = queueCheckboxes.filter((checkbox) => {
+      if (checkbox.disabled) return false;
+      const row = checkbox.closest('.inadimplente-row');
+      return !row || row.style.display !== 'none';
+    });
     const selectedRows = [...document.querySelectorAll('.pending-send-checkbox')]
       .filter((el) => el instanceof HTMLInputElement && el.checked)
       .map((el) => ({ id: el.value, row: el.closest('.inadimplente-row') }))
@@ -3177,7 +3184,14 @@ if (sendSelectedPendingButton) {
     const selected = selectedRows.map((item) => item.id);
 
     if (!selected.length) {
-      showSendPendingMessage('Selecione ao menos uma cobrança da fila de envio.', true);
+      if (!visibleQueueCheckboxes.length) {
+        showSendPendingMessage(
+          'Não há cobrança "na fila de envio" neste filtro. Este aluno já está em "Pendente no Asaas".',
+          true,
+        );
+      } else {
+        showSendPendingMessage('Selecione ao menos uma cobrança da fila de envio.', true);
+      }
       return;
     }
 
@@ -3195,6 +3209,7 @@ if (sendSelectedPendingButton) {
 
       const successIds = [];
       const failures = [];
+      const warnings = [];
       let processed = 0;
 
       for (const chunk of chunks) {
@@ -3225,8 +3240,13 @@ if (sendSelectedPendingButton) {
           .filter((row) => row && row.ok && row.id)
           .map((row) => String(row.id));
         const chunkFailures = results.filter((row) => row && !row.ok);
+        const chunkWarnings = results
+          .filter((row) => row && row.ok && row.warning)
+          .map((row) => String(row.warning).trim())
+          .filter(Boolean);
         successIds.push(...chunkSuccessIds);
         failures.push(...chunkFailures);
+        warnings.push(...chunkWarnings);
 
         if (!res.ok && chunkSuccessIds.length === 0) {
           const batchError = data?.error || 'Falha ao enviar lote de cobranças.';
@@ -3268,7 +3288,12 @@ if (sendSelectedPendingButton) {
       }
 
       if (successIds.length) {
-        showSendPendingMessage('Cobranças da fila enviadas com sucesso. Tabela atualizada sem recarregar a página.');
+        const warningSuffix = warnings.length
+          ? ` Avisos de e-mail: ${warnings.length}.`
+          : '';
+        showSendPendingMessage(
+          `Cobranças da fila enviadas com sucesso. Tabela atualizada sem recarregar a página.${warningSuffix}`,
+        );
         return;
       }
 

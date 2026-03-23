@@ -86,6 +86,15 @@ function parseDateToIso($raw)
     return date('Y-m-d', $time);
 }
 
+function isDeliverableGuardianEmailLocal($email)
+{
+    $email = trim((string) $email);
+    if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        return false;
+    }
+    return !preg_match('/@(diariasvillage|placeholder)\.local$/i', $email);
+}
+
 function extractIsoDates($paymentRow, $todayIso)
 {
     $dailyRaw = trim((string) (isset($paymentRow['daily_type']) ? $paymentRow['daily_type'] : ''));
@@ -291,8 +300,12 @@ try {
 
             $guardianName = trim((string) ($guardian['parent_name'] ?? 'Responsável'));
             $guardianEmail = trim((string) ($guardian['email'] ?? ''));
-            if ($guardianEmail === '' || !filter_var($guardianEmail, FILTER_VALIDATE_EMAIL)) {
-                $results[] = array('id' => $paymentId, 'ok' => false, 'error' => 'E-mail do responsável inválido.');
+            if (!isDeliverableGuardianEmailLocal($guardianEmail)) {
+                $results[] = array(
+                    'id' => $paymentId,
+                    'ok' => false,
+                    'error' => 'E-mail do responsável inválido ou placeholder. Atualize o e-mail antes de enviar.',
+                );
                 continue;
             }
             $guardianDoc = preg_replace('/\D+/', '', (string) ($guardian['parent_document'] ?? ''));
