@@ -105,6 +105,39 @@ function extractAsaasError(array $response): string
     return 'Falha ao processar cobrança no Asaas.';
 }
 
+/**
+ * @param mixed $raw
+ */
+function parseOptionalDiscountAmount($raw): array
+{
+    if ($raw === null) {
+        return ['ok' => true, 'amount' => 0.0];
+    }
+    if (is_string($raw)) {
+        $raw = trim($raw);
+        if ($raw === '') {
+            return ['ok' => true, 'amount' => 0.0];
+        }
+        $normalized = str_replace(['R$', 'r$', ' '], '', $raw);
+        $normalized = str_replace('.', '', $normalized);
+        $normalized = str_replace(',', '.', $normalized);
+    } elseif (is_int($raw) || is_float($raw)) {
+        $normalized = (string) $raw;
+    } else {
+        return ['ok' => false, 'error' => 'Desconto inválido.'];
+    }
+
+    if (!is_numeric($normalized)) {
+        return ['ok' => false, 'error' => 'Desconto inválido. Use apenas números.'];
+    }
+    $amount = round((float) $normalized, 2);
+    if ($amount < 0) {
+        return ['ok' => false, 'error' => 'Desconto não pode ser negativo.'];
+    }
+
+    return ['ok' => true, 'amount' => $amount];
+}
+
 function isDeliverableGuardianEmail(string $email): bool
 {
     $email = trim($email);
@@ -872,7 +905,22 @@ $guardianDoc = preg_replace('/\D+/', '', (string) ($guardian['parent_document'] 
 $guardianPhone = preg_replace('/\D+/', '', (string) ($guardian['parent_phone'] ?? '')) ?? '';
 $customerId = trim((string) ($guardian['asaas_customer_id'] ?? ''));
 $chargeRule = Helpers::resolveDayUseCharge($attendanceDate);
-$amount = (float) ($chargeRule['amount'] ?? 77.00);
+$baseAmount = (float) ($chargeRule['amount'] ?? 77.00);
+$discountAmount = 0.0;
+if (!$isAudit) {
+    $discountResult = parseOptionalDiscountAmount($payload['discount_amount'] ?? null);
+    if (!($discountResult['ok'] ?? false)) {
+        Helpers::json(['ok' => false, 'error' => (string) ($discountResult['error'] ?? 'Desconto inválido.')], 422);
+    }
+    $discountAmount = (float) ($discountResult['amount'] ?? 0.0);
+    if ($discountAmount >= $baseAmount) {
+        Helpers::json([
+            'ok' => false,
+            'error' => 'Desconto deve ser menor que o valor da diária.',
+        ], 422);
+    }
+}
+$amount = round($baseAmount - $discountAmount, 2);
 $dailyBaseType = (string) ($chargeRule['daily_type'] ?? 'planejada');
 $dailyType = $dailyBaseType . '|' . formatDateBr($attendanceDate);
 $today = date('Y-m-d');
@@ -893,6 +941,11 @@ if ($isAudit) {
         'attendance_date' => $attendanceDate,
         'guardian_id' => (string) ($guardian['id'] ?? ''),
         'guardian_email' => $guardianEmail,
+        'charge_preview' => [
+            'base_amount' => $baseAmount,
+            'discount_amount' => 0.0,
+            'final_amount' => $baseAmount,
+        ],
         'monthly' => is_array($plan) ? [
             'weekly_days' => (int) ($plan['weekly_days'] ?? 0),
         ] : null,
@@ -1005,9 +1058,12 @@ $rows[$targetIndex]['status'] = AttendanceCalls::STATUS_AUTORIZADA_COBRANCA;
 $rows[$targetIndex]['queue_payment_id'] = (string) ($payment['id'] ?? '');
 $rows[$targetIndex]['reviewed_at'] = date('c');
 $rows[$targetIndex]['reviewed_by'] = 'admin';
+$discountNote = $discountAmount > 0
+    ? ' Desconto aplicado: R$ ' . number_format($discountAmount, 2, ',', '.') . '.'
+    : '';
 $rows[$targetIndex]['review_note'] = $asaasError === ''
-    ? 'Autorizada pelo admin e cobrança emergencial criada no Asaas.'
-    : 'Autorizada pelo admin, mas falha no Asaas (' . $asaasError . '). Cobrança ficou na fila para reenvio.';
+    ? 'Autorizada pelo admin e cobrança emergencial criada no Asaas.' . $discountNote
+    : 'Autorizada pelo admin, mas falha no Asaas (' . $asaasError . '). Cobrança ficou na fila para reenvio.' . $discountNote;
 saveAttendanceRowsOrFail($rows);
 
 Helpers::json([
@@ -1023,6 +1079,9 @@ Helpers::json([
         'status' => (string) ($payment['status'] ?? ''),
         'billing_type' => (string) ($payment['billing_type'] ?? ''),
         'asaas_payment_id' => (string) ($payment['asaas_payment_id'] ?? ''),
+        'base_amount' => $baseAmount,
+        'discount_amount' => $discountAmount,
+        'final_amount' => $amount,
         'student_id' => $studentId,
         'attendance_date' => $attendanceDate,
     ],

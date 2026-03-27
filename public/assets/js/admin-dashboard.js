@@ -460,6 +460,79 @@ function showAdminDateInput(initialValue = '') {
   });
 }
 
+function parseDiscountInput(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return { ok: true, value: null };
+  const normalized = raw.replace(/\s+/g, '').replace(/^R\$/i, '').replace(/\./g, '').replace(',', '.');
+  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) {
+    return { ok: false, error: 'Desconto inválido. Use formato como 10,00.' };
+  }
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return { ok: false, error: 'Desconto inválido.' };
+  }
+  if (parsed === 0) return { ok: true, value: null };
+  return { ok: true, value: Math.round(parsed * 100) / 100 };
+}
+
+function showAdminDiscountInput() {
+  const ui = ensureAdminDialog();
+  ui.title.textContent = 'Criar desconto (opcional)';
+  ui.message.textContent =
+    'Informe o desconto em R$ para esta cobrança.\nDeixe em branco para autorizar sem desconto.';
+  ui.confirm.textContent = 'Autorizar e cobrar';
+  ui.cancel.textContent = 'Cancelar';
+  ui.cancel.classList.remove('hidden');
+  if (ui.input) {
+    ui.input.classList.remove('hidden');
+    ui.input.placeholder = 'Ex.: 10,00';
+    ui.input.value = '';
+    ui.input.setAttribute('inputmode', 'decimal');
+  }
+  ui.overlay.classList.remove('hidden');
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = (result) => {
+      if (settled) return;
+      settled = true;
+      ui.overlay.classList.add('hidden');
+      ui.confirm.removeEventListener('click', onConfirm);
+      ui.cancel.removeEventListener('click', onCancel);
+      ui.overlay.removeEventListener('click', onOverlayClick);
+      document.removeEventListener('keydown', onKeyDown);
+      if (ui.input) {
+        ui.input.classList.add('hidden');
+        ui.input.placeholder = '';
+        ui.input.setAttribute('inputmode', 'numeric');
+      }
+      resolve(result);
+    };
+    const onConfirm = () => settle({ ok: true, value: String(ui.input?.value || '').trim() });
+    const onCancel = () => settle({ ok: false, value: '' });
+    const onOverlayClick = (event) => {
+      if (event.target === ui.overlay) settle({ ok: false, value: '' });
+    };
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        settle({ ok: false, value: '' });
+        return;
+      }
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        onConfirm();
+      }
+    };
+
+    ui.confirm.addEventListener('click', onConfirm);
+    ui.cancel.addEventListener('click', onCancel);
+    ui.overlay.addEventListener('click', onOverlayClick);
+    document.addEventListener('keydown', onKeyDown);
+    if (ui.input) ui.input.focus();
+  });
+}
+
 function getCashflowDefaultFromDate() {
   const now = new Date();
   const year = now.getFullYear();
@@ -2532,8 +2605,27 @@ async function handleAttendanceAction(event) {
         return;
       }
 
+      let discountAmount = null;
+      if (adminCanApproveAttendance) {
+        const discountResult = await showAdminDiscountInput();
+        if (!discountResult?.ok) {
+          setAttendanceMessage('Autorização cancelada antes de gerar cobrança.');
+          return;
+        }
+        const parsedDiscount = parseDiscountInput(discountResult?.value || '');
+        if (!parsedDiscount.ok) {
+          setAttendanceMessage(parsedDiscount.error || 'Desconto inválido.', true);
+          return;
+        }
+        discountAmount = parsedDiscount.value;
+      }
+
       setAttendanceMessage('Autorizando chamada...');
-      const { res, data } = await postAttendanceAction({ action: 'approve', id });
+      const approvePayload = { action: 'approve', id };
+      if (typeof discountAmount === 'number' && discountAmount > 0) {
+        approvePayload.discount_amount = discountAmount;
+      }
+      const { res, data } = await postAttendanceAction(approvePayload);
       if (!res.ok || !data?.ok) {
         setAttendanceMessage(data?.error || 'Falha ao autorizar chamada.', true);
         return;
@@ -2569,7 +2661,11 @@ async function handleAttendanceAction(event) {
       const charge = data?.charge || null;
       if (charge?.payment_id) {
         const channel = charge?.asaas_payment_id ? 'Asaas' : 'fila interna';
-        const suffix = ` Cobrança #${charge.payment_id} (${channel}).`;
+        const discountSuffix =
+          Number(charge?.discount_amount || 0) > 0
+            ? ` Desconto: ${formatCurrency(charge.discount_amount)}.`
+            : '';
+        const suffix = ` Cobrança #${charge.payment_id} (${channel}).${discountSuffix}`;
         setAttendanceMessage((data?.message || 'Chamada autorizada.') + suffix);
       } else {
         setAttendanceMessage(data?.message || 'Chamada autorizada.');
@@ -3195,6 +3291,21 @@ if (sendSelectedPendingButton) {
       return;
     }
 
+    let batchDiscountAmount = null;
+    if (adminCanApproveAttendance) {
+      const discountResult = await showAdminDiscountInput();
+      if (!discountResult?.ok) {
+        showSendPendingMessage('Envio cancelado antes de processar as cobranças.');
+        return;
+      }
+      const parsedDiscount = parseDiscountInput(discountResult?.value || '');
+      if (!parsedDiscount.ok) {
+        showSendPendingMessage(parsedDiscount.error || 'Desconto inválido.', true);
+        return;
+      }
+      batchDiscountAmount = parsedDiscount.value;
+    }
+
     sendSelectedPendingButton.setAttribute('disabled', 'disabled');
     const originalText = sendSelectedPendingButton.textContent;
     sendSelectedPendingButton.textContent = 'Enviando em lotes...';
@@ -3221,7 +3332,12 @@ if (sendSelectedPendingButton) {
           res = await fetch('/api/admin-send-pending-charges-v2.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ payment_ids: chunk }),
+            body: JSON.stringify({
+              payment_ids: chunk,
+              ...(typeof batchDiscountAmount === 'number' && batchDiscountAmount > 0
+                ? { discount_amount: batchDiscountAmount }
+                : {}),
+            }),
           });
           try {
             data = await res.json();
@@ -3291,8 +3407,12 @@ if (sendSelectedPendingButton) {
         const warningSuffix = warnings.length
           ? ` Avisos de e-mail: ${warnings.length}.`
           : '';
+        const discountSuffix =
+          typeof batchDiscountAmount === 'number' && batchDiscountAmount > 0
+            ? ` Desconto aplicado: ${formatCurrency(batchDiscountAmount)} por cobrança.`
+            : '';
         showSendPendingMessage(
-          `Cobranças da fila enviadas com sucesso. Tabela atualizada sem recarregar a página.${warningSuffix}`,
+          `Cobranças da fila enviadas com sucesso. Tabela atualizada sem recarregar a página.${discountSuffix}${warningSuffix}`,
         );
         return;
       }

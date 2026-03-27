@@ -171,6 +171,35 @@ function resolveChargeRule($paymentRow, $todayIso)
     );
 }
 
+function parseOptionalDiscountAmount($raw)
+{
+    if ($raw === null) {
+        return array('ok' => true, 'amount' => 0.0);
+    }
+    if (is_string($raw)) {
+        $raw = trim($raw);
+        if ($raw === '') {
+            return array('ok' => true, 'amount' => 0.0);
+        }
+        $normalized = str_replace(array('R$', 'r$', ' '), '', $raw);
+        $normalized = str_replace('.', '', $normalized);
+        $normalized = str_replace(',', '.', $normalized);
+    } elseif (is_int($raw) || is_float($raw)) {
+        $normalized = (string) $raw;
+    } else {
+        return array('ok' => false, 'error' => 'Desconto inválido.');
+    }
+
+    if (!is_numeric($normalized)) {
+        return array('ok' => false, 'error' => 'Desconto inválido. Use apenas números.');
+    }
+    $amount = round((float) $normalized, 2);
+    if ($amount < 0) {
+        return array('ok' => false, 'error' => 'Desconto não pode ser negativo.');
+    }
+    return array('ok' => true, 'amount' => $amount);
+}
+
 if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
     \App\Helpers::json(array('ok' => false, 'error' => 'Não autorizado.'), 401);
 }
@@ -202,6 +231,14 @@ try {
     $paymentIds = array_keys($normalizedIds);
     if (empty($paymentIds)) {
         \App\Helpers::json(array('ok' => false, 'error' => 'IDs inválidos.'), 422);
+    }
+    $discountResult = parseOptionalDiscountAmount($payload['discount_amount'] ?? null);
+    if (empty($discountResult['ok'])) {
+        \App\Helpers::json(array('ok' => false, 'error' => (string) ($discountResult['error'] ?? 'Desconto inválido.')), 422);
+    }
+    $discountAmount = (float) ($discountResult['amount'] ?? 0.0);
+    if ($discountAmount > 0 && (($_SESSION['admin_user'] ?? '') !== 'admin')) {
+        \App\Helpers::json(array('ok' => false, 'error' => 'Apenas admin pode aplicar desconto.'), 403);
     }
 
     $asaas = new \App\AsaasClient(new \App\HttpClient());
@@ -333,10 +370,21 @@ try {
                 $client->update('guardians', 'id=eq.' . urlencode((string) $guardian['id']), array('asaas_customer_id' => $customerId));
             }
 
+            $baseAmount = (float) ($chargeRule['amount'] ?? 77.00);
+            if ($discountAmount >= $baseAmount) {
+                $results[] = array(
+                    'id' => $paymentId,
+                    'ok' => false,
+                    'error' => 'Desconto deve ser menor que o valor da cobrança.',
+                );
+                continue;
+            }
+            $finalAmount = round($baseAmount - $discountAmount, 2);
+
             $payment = $asaas->createPayment(array(
                 'customer' => $customerId,
                 'billingType' => 'PIX',
-                'value' => (float) ($chargeRule['amount'] ?? 77.00),
+                'value' => $finalAmount,
                 'dueDate' => $today,
                 'description' => 'Diária ' . ($chargeRule['daily_base_type'] ?? 'planejada') . ' - cobrança manual - Einstein Village',
             ));
@@ -349,13 +397,13 @@ try {
             $invoiceUrl = (string) ($paymentData['invoiceUrl'] ?? ($paymentData['bankSlipUrl'] ?? $portalLink));
             $dailyBaseType = (string) ($chargeRule['daily_base_type'] ?? 'planejada');
             $dateLabel = (string) ($chargeRule['date_label'] ?? date('d/m/Y'));
-            $amountFormatted = number_format((float) ($chargeRule['amount'] ?? 77.00), 2, ',', '.');
+            $amountFormatted = number_format($finalAmount, 2, ',', '.');
 
             $update = $client->update('payments', 'id=eq.' . urlencode($paymentId), array(
                 'billing_type' => 'PIX_MANUAL',
                 'status' => 'pending_asaas',
                 'asaas_payment_id' => isset($paymentData['id']) ? $paymentData['id'] : null,
-                'amount' => (float) ($chargeRule['amount'] ?? 77.00),
+                'amount' => $finalAmount,
                 'daily_type' => $dailyBaseType . '|' . $dateLabel,
             ));
             if (!($update['ok'] ?? false)) {
@@ -379,7 +427,14 @@ try {
                 $warning = 'Cobrança criada, mas houve exceção no envio do e-mail.';
             }
 
-            $row = array('id' => $paymentId, 'ok' => true, 'invoice_url' => $invoiceUrl);
+            $row = array(
+                'id' => $paymentId,
+                'ok' => true,
+                'invoice_url' => $invoiceUrl,
+                'base_amount' => $baseAmount,
+                'discount_amount' => $discountAmount,
+                'final_amount' => $finalAmount,
+            );
             if ($warning !== null) {
                 $row['warning'] = $warning;
             }
