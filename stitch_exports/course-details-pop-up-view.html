@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Course Details Modal</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "royal-blue": "#002366",
+                        "royal-blue-dark": "#001a4d",
+                        "royal-blue-light": "#1a3b80",
+                        "golden-yellow": "#FFD700",
+                        "golden-yellow-light": "#fff4b3",
+                        "background-light": "#f6f7f8",
+                        "background-dark": "#111821",
+                        "neutral-surface": "#f0f4f8",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: { "DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px" },
+                    boxShadow: {
+                        "soft": "0 10px 40px -10px rgba(0,35,102,0.15)",
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }.backdrop-glass {
+            background: rgba(0, 35, 102, 0.25);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }.custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: #cbd5e1;
+            border-radius: 20px;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark min-h-screen flex items-center justify-center p-4">
+<div aria-hidden="true" class="fixed inset-0 z-0 w-full h-full overflow-hidden pointer-events-none">
+<div class="absolute inset-0 bg-white dark:bg-[#0f151b]">
+<div class="h-16 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-[#111821] flex items-center px-8">
+<div class="w-32 h-6 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+</div>
+<div class="p-8 grid grid-cols-4 gap-6">
+<div class="h-40 bg-gray-100 dark:bg-gray-800 rounded-xl"></div>
+<div class="h-40 bg-gray-100 dark:bg-gray-800 rounded-xl"></div>
+<div class="h-40 bg-gray-100 dark:bg-gray-800 rounded-xl"></div>
+<div class="h-40 bg-gray-100 dark:bg-gray-800 rounded-xl"></div>
+<div class="h-96 col-span-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700"></div>
+<div class="h-96 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700"></div>
+</div>
+</div>
+</div>
+<div class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 backdrop-glass transition-all duration-300">
+<div class="relative w-full max-w-4xl max-h-[90vh] flex flex-col bg-white dark:bg-[#1a222c] rounded-lg shadow-soft overflow-hidden transition-all transform scale-100 ring-1 ring-royal-blue/10">
+<div class="flex items-center justify-between px-6 py-5 border-b border-royal-blue-light/20 shrink-0 bg-royal-blue z-10">
+<div class="flex items-center gap-4">
+<div class="flex flex-col">
+<h2 class="text-2xl font-bold text-white tracking-tight">Advanced Calculus</h2>
+<span class="text-sm text-gray-200 mt-0.5">MATH 201 • Section 03</span>
+</div>
+<span class="inline-flex items-center justify-center px-3 py-1 rounded-full bg-golden-yellow text-royal-blue-dark text-xs font-bold uppercase tracking-wider shadow-sm">
+                        4 Credits
+                    </span>
+</div>
+<button class="text-white/70 hover:text-white transition-colors p-2 rounded-lg hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-golden-yellow">
+<span class="material-symbols-outlined text-2xl">close</span>
+</button>
+</div>
+<div class="flex-1 overflow-y-auto custom-scrollbar p-6 lg:p-8">
+<div class="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-8 lg:gap-12">
+<div class="flex flex-col gap-8">
+<section>
+<h3 class="text-lg font-bold text-royal-blue dark:text-white mb-3 flex items-center gap-2">
+<span class="material-symbols-outlined text-golden-yellow text-xl">description</span>
+                                Course Description
+                            </h3>
+<p class="text-gray-600 dark:text-gray-300 leading-relaxed">
+                                This advanced course covers limits, continuity, differentiation, and integration of functions of a single variable. Students will master fundamental theorems and apply integration techniques to solve complex problems. The curriculum emphasizes both theoretical understanding and practical application in engineering and physical sciences contexts.
+                            </p>
+</section>
+<section>
+<h3 class="text-lg font-bold text-royal-blue dark:text-white mb-3 flex items-center gap-2">
+<span class="material-symbols-outlined text-golden-yellow text-xl">school</span>
+                                Learning Objectives
+                            </h3>
+<ul class="space-y-3">
+<li class="flex items-start gap-3">
+<span class="mt-1.5 w-1.5 h-1.5 rounded-full bg-golden-yellow shrink-0"></span>
+<span class="text-gray-600 dark:text-gray-300 text-sm">Understand and apply the rigorous definitions of limits and continuity.</span>
+</li>
+<li class="flex items-start gap-3">
+<span class="mt-1.5 w-1.5 h-1.5 rounded-full bg-golden-yellow shrink-0"></span>
+<span class="text-gray-600 dark:text-gray-300 text-sm">Master differentiation techniques for transcendental functions.</span>
+</li>
+<li class="flex items-start gap-3">
+<span class="mt-1.5 w-1.5 h-1.5 rounded-full bg-golden-yellow shrink-0"></span>
+<span class="text-gray-600 dark:text-gray-300 text-sm">Apply integration to calculate areas, volumes, and arc lengths.</span>
+</li>
+<li class="flex items-start gap-3">
+<span class="mt-1.5 w-1.5 h-1.5 rounded-full bg-golden-yellow shrink-0"></span>
+<span class="text-gray-600 dark:text-gray-300 text-sm">Analyze infinite sequences and series for convergence.</span>
+</li>
+</ul>
+</section>
+<section>
+<h3 class="text-lg font-bold text-royal-blue dark:text-white mb-3 flex items-center gap-2">
+<span class="material-symbols-outlined text-golden-yellow text-xl">account_tree</span>
+                                Prerequisites
+                            </h3>
+<div class="flex flex-wrap gap-3">
+<button class="group flex items-center gap-2 pl-3 pr-4 py-2 bg-neutral-surface dark:bg-gray-800 rounded-lg border border-transparent hover:border-royal-blue/30 hover:bg-white dark:hover:bg-gray-700 transition-all shadow-sm">
+<span class="w-8 h-8 flex items-center justify-center rounded bg-white dark:bg-gray-900 text-royal-blue font-bold text-xs shadow-sm border border-gray-100 dark:border-gray-700 ring-1 ring-transparent group-hover:ring-golden-yellow/50">101</span>
+<div class="flex flex-col items-start">
+<span class="text-xs font-semibold text-gray-900 dark:text-gray-100 group-hover:text-royal-blue transition-colors">Calculus I</span>
+<span class="text-[10px] text-gray-500">MATH Dept.</span>
+</div>
+<span class="material-symbols-outlined text-gray-400 group-hover:text-royal-blue text-sm ml-1">open_in_new</span>
+</button>
+<button class="group flex items-center gap-2 pl-3 pr-4 py-2 bg-neutral-surface dark:bg-gray-800 rounded-lg border border-transparent hover:border-royal-blue/30 hover:bg-white dark:hover:bg-gray-700 transition-all shadow-sm">
+<span class="w-8 h-8 flex items-center justify-center rounded bg-white dark:bg-gray-900 text-royal-blue font-bold text-xs shadow-sm border border-gray-100 dark:border-gray-700 ring-1 ring-transparent group-hover:ring-golden-yellow/50">105</span>
+<div class="flex flex-col items-start">
+<span class="text-xs font-semibold text-gray-900 dark:text-gray-100 group-hover:text-royal-blue transition-colors">Algebra II</span>
+<span class="text-[10px] text-gray-500">MATH Dept.</span>
+</div>
+<span class="material-symbols-outlined text-gray-400 group-hover:text-royal-blue text-sm ml-1">open_in_new</span>
+</button>
+</div>
+</section>
+</div>
+<div class="flex flex-col gap-6">
+<div class="bg-neutral-surface dark:bg-gray-800/50 rounded-xl p-5 lg:p-6 border border-gray-100 dark:border-gray-800">
+<div class="flex items-center gap-4 mb-6 pb-6 border-b border-gray-200 dark:border-gray-700">
+<div class="relative">
+<img alt="Smiling female professor with glasses in professional attire" class="w-14 h-14 rounded-full object-cover border-2 border-white dark:border-gray-600 shadow-sm" data-alt="Professor portrait" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCXv973qxFaMThiHCAm9HgOmlYpu_lartD_GQAe0FWeQAiOn5EynpnPhFbI4OsLvDCrzYSg-ITir3EoWbIN1T5NgmtbBq-dGpaFfaTcaA5UI-_pQ_mm1yyzj0_HmenjJiAPmY0sPMal30aD4g20CXQBONM1sT0MhHlgktl395Lt849YSfCLMfUn7MYa5F8O3Oe03P8T_PUGa8WLZUMMaRWFvfKrwhK5AYemx3pd5D36GUbjokcxQpOi5pysj55W3Rnaf0Q8-II_MA4"/>
+<div class="absolute -bottom-1 -right-1 bg-white dark:bg-gray-700 rounded-full p-0.5 shadow-sm">
+<span class="material-symbols-outlined text-royal-blue text-sm bg-golden-yellow rounded-full p-0.5">verified</span>
+</div>
+</div>
+<div>
+<p class="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wide">Instructor</p>
+<h4 class="text-base font-bold text-royal-blue dark:text-white">Dr. Sarah Jenkins</h4>
+<div class="flex items-center gap-1 mt-0.5">
+<span class="material-symbols-outlined text-golden-yellow text-sm fill-current">star</span>
+<span class="text-sm font-medium text-gray-700 dark:text-gray-200">4.8</span>
+<span class="text-xs text-gray-400">(124 reviews)</span>
+</div>
+</div>
+</div>
+<div class="space-y-4">
+<div class="flex gap-3">
+<div class="w-10 h-10 rounded-lg bg-white dark:bg-gray-700 flex items-center justify-center shrink-0 shadow-sm text-royal-blue dark:text-primary-300 ring-1 ring-gray-100 dark:ring-gray-600">
+<span class="material-symbols-outlined">schedule</span>
+</div>
+<div>
+<p class="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wide">Schedule</p>
+<p class="text-sm font-semibold text-gray-900 dark:text-white mt-0.5">Tue, Thu</p>
+<p class="text-sm text-gray-600 dark:text-gray-300">10:00 AM - 12:00 PM</p>
+</div>
+</div>
+<div class="flex gap-3">
+<div class="w-10 h-10 rounded-lg bg-white dark:bg-gray-700 flex items-center justify-center shrink-0 shadow-sm text-royal-blue dark:text-primary-300 ring-1 ring-gray-100 dark:ring-gray-600">
+<span class="material-symbols-outlined">location_on</span>
+</div>
+<div>
+<p class="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wide">Location</p>
+<p class="text-sm font-semibold text-gray-900 dark:text-white mt-0.5">Science Hall B</p>
+<p class="text-sm text-gray-600 dark:text-gray-300">Room 302</p>
+</div>
+</div>
+<div class="mt-4 rounded-lg overflow-hidden h-32 relative border border-gray-200 dark:border-gray-600 group cursor-pointer">
+<img alt="Top down view of university campus buildings" class="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" data-alt="Campus Map Preview" data-location="University Campus Map" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD5c7zK6x8QxjoPG2veNcLvRtfqUKyzSPl0fX1JpQZSs0xPEU79Yhqn-PBnjEFPlLIGaUWJERZG9xxCGr4dN3wvqqeUc6oqFJ0U88MieuL2KFby_RsF9t5nkBvcSKPexSTQtbLP6X79otIbaHUpN7rTLL1EccCyHVkqeS8t8JGpOIzLepwfdUYvxLiBYbK7viB_rsm-BPDchRXeFw48PAW5uWWeKpNUcUzMRNEgdjpIgWzOELB0v_929BElc-09hYZkfO6KtAJQCFk"/>
+<div class="absolute inset-0 bg-gradient-to-t from-royal-blue-dark/80 to-transparent flex items-end p-3">
+<div class="flex items-center gap-1 text-white text-xs font-medium">
+<span class="material-symbols-outlined text-sm text-golden-yellow">map</span>
+                                            View on Campus Map
+                                        </div>
+</div>
+</div>
+</div>
+</div>
+<div class="bg-royal-blue/5 dark:bg-blue-900/20 border border-royal-blue/10 dark:border-blue-800/50 rounded-xl p-4 flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-royal-blue text-xl">group</span>
+<div class="flex flex-col">
+<span class="text-xs font-medium text-royal-blue-light dark:text-blue-200">Seats Available</span>
+<span class="text-sm font-bold text-royal-blue dark:text-blue-100">5 of 40 Left</span>
+</div>
+</div>
+<div class="h-2 w-20 bg-gray-200 dark:bg-blue-800 rounded-full overflow-hidden">
+<div class="h-full bg-golden-yellow w-[85%] rounded-full shadow-sm"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="px-6 py-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-[#1a222c] shrink-0 flex items-center justify-end gap-3 z-10">
+<button class="px-6 py-2.5 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors border border-gray-200 dark:border-gray-700">
+                    Close
+                </button>
+<button class="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold text-white bg-royal-blue hover:bg-royal-blue-light transition-all shadow-md hover:shadow-lg border-2 border-transparent hover:border-golden-yellow focus:ring-4 focus:ring-royal-blue/20">
+<span class="material-symbols-outlined text-lg text-golden-yellow">calendar_add_on</span>
+                    Add to Schedule
+                </button>
+</div>
+</div>
+</div>
+
+</body></html>

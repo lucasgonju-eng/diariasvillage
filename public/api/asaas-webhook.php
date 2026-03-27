@@ -149,7 +149,7 @@ if (!$paymentResult['ok'] || empty($paymentResult['data'])) {
                 $studentName = $pendenciaRow['student_name'] ?? 'Aluno';
                 $amount = '77,00';
                 $paymentDateFormatted = $dayUseDate ? date('d/m/Y', strtotime($dayUseDate)) : '-';
-                $portalLink = Helpers::baseUrl() ?: 'https://village.einsteinhub.co';
+                $portalLink = Helpers::baseUrl() ?: 'https://diarias.village.einsteinhub.co';
                 $paymentLink = $payment['invoiceUrl'] ?? $payment['bankSlipUrl'] ?? $portalLink;
 
                 $pendenciaTemplate = <<<'HTML'
@@ -323,7 +323,7 @@ if ($guardian) {
     $datesLabel = $dailyParts[1] ?? date('d/m/Y', strtotime($paymentRow['payment_date']));
     $paymentDate = $datesLabel;
     $dailyLabel = $dailyBase === 'emergencial' ? 'Emergencial' : 'Planejada';
-    $portalLink = Helpers::baseUrl() ?: 'https://village.einsteinhub.co';
+    $portalLink = Helpers::baseUrl() ?: 'https://diarias.village.einsteinhub.co';
     $paymentLink = $payment['invoiceUrl'] ?? $payment['bankSlipUrl'] ?? $portalLink;
     $guardianDocument = $guardian['parent_document'] ?? '';
 

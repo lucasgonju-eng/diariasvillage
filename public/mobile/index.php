@@ -73,7 +73,7 @@ if ($r !== null) {
     // Simulador iPhone 16 – servido inline (não depende de arquivo extra no deploy)
     if ($page === 'simulator-iphone16') {
         header('Content-Type: text/html; charset=utf-8');
-        $base = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'village.einsteinhub.co') . '/mobile/';
+        $base = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'diarias.village.einsteinhub.co') . '/mobile/';
         $appUrl = $base . '?page=tela_inicial';
         ?>
 <!DOCTYPE html>

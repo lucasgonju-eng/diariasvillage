@@ -22,7 +22,7 @@ class Mailer
                 ? PHPMailer::ENCRYPTION_SMTPS
                 : PHPMailer::ENCRYPTION_STARTTLS;
 
-            $from = Env::get('EMAIL_FROM', 'Diarias Village <nao-responder@village.einsteinhub.co>');
+            $from = Env::get('EMAIL_FROM', 'Diarias Village <nao-responder@diarias.village.einsteinhub.co>');
             if (preg_match('/^(.+)\s<(.+)>$/', $from, $matches)) {
                 $mail->setFrom($matches[2], $matches[1]);
             } else {

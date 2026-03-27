@@ -12,10 +12,10 @@ Em **Settings → Secrets and variables → Actions**, adicione:
 
 | Secret | Onde pegar |
 |--------|------------|
-| `FTP_SERVER` | Hostinger → FTP Accounts → Servidor (ex: `ftp.village.einsteinhub.co` ou o host FTP) |
+| `FTP_SERVER` | Hostinger → FTP Accounts → Servidor (ex: `ftp.diarias.village.einsteinhub.co` ou o host FTP) |
 | `FTP_USERNAME` | Usuario FTP do Hostinger |
 | `FTP_PASSWORD` | Senha do usuario FTP |
-| `FTP_SERVER_DIR` | Pasta remota onde subir (ex: `/domains/village.einsteinhub.co`). No Hostinger, costuma ser a pasta do dominio. |
+| `FTP_SERVER_DIR` | Pasta remota onde subir (ex: `/domains/diarias.village.einsteinhub.co`). No Hostinger, costuma ser a pasta do dominio. |
 
 ### 2. Document root no Hostinger
 
@@ -31,7 +31,7 @@ O deploy nao envia o `.env`. Crie manualmente no servidor **dentro de `public_ht
 1. Copie `.env.example` para `.env` e preencha as chaves.
 2. `composer install`
 3. Crie o schema no Supabase usando `supabase/schema.sql`.
-4. Configure o webhook da Asaas para `https://village.einsteinhub.co/api/asaas-webhook.php`.
+4. Configure o webhook da Asaas para `https://diarias.village.einsteinhub.co/api/asaas-webhook.php`.
 
 ## Pastas
 - `public/`: arquivos publicos e endpoints

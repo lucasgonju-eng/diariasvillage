@@ -21,7 +21,7 @@ if (!$result['ok'] || empty($result['data'])) {
     } else {
         $client->update('guardians', 'id=eq.' . $record['guardian_id'], ['verified_at' => date('c')]);
         $client->update('verification_tokens', 'id=eq.' . $record['id'], ['expires_at' => date('c')]);
-        $status = 'E-mail confirmado! Agora voce pode entrar.';
+        $status = 'E-mail confirmado! Agora você pode entrar.';
     }
 }
 ?>
