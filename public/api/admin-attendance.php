@@ -138,6 +138,23 @@ function parseOptionalDiscountAmount($raw): array
     return ['ok' => true, 'amount' => $amount];
 }
 
+function normalizeDayUseType(string $raw): ?string
+{
+    $value = strtolower(trim($raw));
+    if ($value === '') {
+        return null;
+    }
+    if (in_array($value, ['planejada', 'emergencial'], true)) {
+        return $value;
+    }
+    return null;
+}
+
+function baseAmountByDayUseType(string $dayUseType): float
+{
+    return $dayUseType === 'emergencial' ? 97.00 : 77.00;
+}
+
 function isDeliverableGuardianEmail(string $email): bool
 {
     $email = trim($email);
@@ -315,6 +332,9 @@ if ($action === 'close_day') {
             'reviewed_at' => '',
             'reviewed_by' => '',
             'review_note' => '',
+            'day_use_type' => 'emergencial',
+            'discount_amount' => 0.0,
+            'discount_reason' => '',
             'queue_payment_id' => '',
             'warning' => '',
         ];
@@ -394,48 +414,98 @@ if ($action === 'edit') {
     }
 
     $target = $rows[$targetIndex];
+    $currentType = normalizeDayUseType((string) ($target['day_use_type'] ?? '')) ?? 'emergencial';
+    $inputTypeRaw = trim((string) ($payload['day_use_type'] ?? ''));
+    $inputType = normalizeDayUseType($inputTypeRaw);
+    if ($inputTypeRaw !== '' && $inputType === null) {
+        Helpers::json(['ok' => false, 'error' => 'Tipo de day use inválido. Use Planejada ou Emergencial.'], 422);
+    }
+    $newType = $inputType ?? $currentType;
+
+    $discountResult = parseOptionalDiscountAmount($payload['discount_amount'] ?? null);
+    if (!($discountResult['ok'] ?? false)) {
+        Helpers::json(['ok' => false, 'error' => (string) ($discountResult['error'] ?? 'Desconto inválido.')], 422);
+    }
+    $newDiscount = (float) ($discountResult['amount'] ?? 0.0);
+    $newDiscountReason = trim((string) ($payload['discount_reason'] ?? ''));
+    if ($newDiscount > 0 && $newDiscountReason === '') {
+        Helpers::json(['ok' => false, 'error' => 'Informe o motivo do desconto.'], 422);
+    }
+    $baseAmount = baseAmountByDayUseType($newType);
+    if ($newDiscount >= $baseAmount) {
+        Helpers::json(['ok' => false, 'error' => 'Desconto deve ser menor que o valor da diária.'], 422);
+    }
+    $finalAmount = round($baseAmount - $newDiscount, 2);
+
     $oldDate = parseAttendanceDate((string) ($target['attendance_date'] ?? ''));
     if ($oldDate === null) {
         $oldDate = (string) ($target['attendance_date'] ?? '');
     }
-    if ($oldDate === $newDate) {
-        Helpers::json(['ok' => true, 'item' => $target, 'message' => 'Data Day Use já está correta.']);
+    $oldDiscount = round((float) ($target['discount_amount'] ?? 0.0), 2);
+    $oldDiscountReason = trim((string) ($target['discount_reason'] ?? ''));
+    if (
+        $oldDate === $newDate
+        && $currentType === $newType
+        && abs($oldDiscount - $newDiscount) < 0.001
+        && $oldDiscountReason === $newDiscountReason
+    ) {
+        Helpers::json(['ok' => true, 'item' => $target, 'message' => 'Nenhuma alteração foi informada.']);
     }
 
     $studentId = trim((string) ($target['student_id'] ?? ''));
-    foreach ($rows as $checkRow) {
-        if (!is_array($checkRow)) {
-            continue;
-        }
-        if ((string) ($checkRow['id'] ?? '') === $id) {
-            continue;
-        }
-        if ($studentId === '' || (string) ($checkRow['student_id'] ?? '') !== $studentId) {
-            continue;
-        }
-        if ((string) ($checkRow['attendance_date'] ?? '') !== $newDate) {
-            continue;
-        }
-        if ((string) ($checkRow['status'] ?? '') !== AttendanceCalls::STATUS_REJEITADA) {
-            Helpers::json([
-                'ok' => false,
-                'error' => 'Já existe chamada ativa para esse aluno na nova Data Day Use.',
-            ], 409);
+    if ($oldDate !== $newDate) {
+        foreach ($rows as $checkRow) {
+            if (!is_array($checkRow)) {
+                continue;
+            }
+            if ((string) ($checkRow['id'] ?? '') === $id) {
+                continue;
+            }
+            if ($studentId === '' || (string) ($checkRow['student_id'] ?? '') !== $studentId) {
+                continue;
+            }
+            if ((string) ($checkRow['attendance_date'] ?? '') !== $newDate) {
+                continue;
+            }
+            if ((string) ($checkRow['status'] ?? '') !== AttendanceCalls::STATUS_REJEITADA) {
+                Helpers::json([
+                    'ok' => false,
+                    'error' => 'Já existe chamada ativa para esse aluno na nova Data Day Use.',
+                ], 409);
+            }
         }
     }
 
     $rows[$targetIndex]['attendance_date'] = $newDate;
+    $rows[$targetIndex]['day_use_type'] = $newType;
+    $rows[$targetIndex]['discount_amount'] = $newDiscount;
+    $rows[$targetIndex]['discount_reason'] = $newDiscountReason;
     $rows[$targetIndex]['reviewed_at'] = date('c');
     $rows[$targetIndex]['reviewed_by'] = (string) ($_SESSION['admin_user'] ?? '');
-    $rows[$targetIndex]['review_note'] = 'Data Day Use ajustada manualmente de '
-        . formatDateBr((string) $oldDate) . ' para ' . formatDateBr($newDate) . '.';
+    $reviewChanges = [];
+    if ($oldDate !== $newDate) {
+        $reviewChanges[] = 'Data: ' . formatDateBr((string) $oldDate) . ' -> ' . formatDateBr($newDate);
+    }
+    if ($currentType !== $newType) {
+        $reviewChanges[] = 'Tipo: ' . $currentType . ' -> ' . $newType;
+    }
+    if (abs($oldDiscount - $newDiscount) >= 0.001) {
+        $reviewChanges[] = 'Desconto: R$ ' . number_format($oldDiscount, 2, ',', '.')
+            . ' -> R$ ' . number_format($newDiscount, 2, ',', '.');
+    }
+    if ($oldDiscountReason !== $newDiscountReason && $newDiscountReason !== '') {
+        $reviewChanges[] = 'Motivo desconto: ' . $newDiscountReason;
+    }
+    $rows[$targetIndex]['review_note'] = 'Day Use ajustado manualmente. '
+        . (empty($reviewChanges) ? '' : implode(' | ', $reviewChanges));
 
     $updatedPayment = false;
     $queuePaymentId = trim((string) ($rows[$targetIndex]['queue_payment_id'] ?? ''));
     if ($queuePaymentId !== '') {
         $updatePayment = $client->update('payments', 'id=eq.' . urlencode($queuePaymentId), [
             'payment_date' => $newDate,
-            'daily_type' => 'emergencial|' . formatDateBr($newDate),
+            'daily_type' => $newType . '|' . formatDateBr($newDate),
+            'amount' => $finalAmount,
         ]);
         $updatedPayment = (bool) ($updatePayment['ok'] ?? false);
     }
@@ -447,8 +517,8 @@ if ($action === 'edit') {
         'item' => $rows[$targetIndex],
         'updated_payment' => $updatedPayment,
         'message' => $updatedPayment
-            ? 'Data Day Use atualizada na chamada e na cobrança vinculada.'
-            : 'Data Day Use atualizada na chamada.',
+            ? 'Day Use atualizado na chamada e na cobrança vinculada.'
+            : 'Day Use atualizado na chamada.',
     ]);
 }
 
@@ -536,6 +606,9 @@ if ($action === 'create') {
         'reviewed_at' => '',
         'reviewed_by' => '',
         'review_note' => '',
+        'day_use_type' => 'emergencial',
+        'discount_amount' => 0.0,
+        'discount_reason' => '',
         'queue_payment_id' => '',
         'warning' => '',
     ];
@@ -905,14 +978,28 @@ $guardianDoc = preg_replace('/\D+/', '', (string) ($guardian['parent_document'] 
 $guardianPhone = preg_replace('/\D+/', '', (string) ($guardian['parent_phone'] ?? '')) ?? '';
 $customerId = trim((string) ($guardian['asaas_customer_id'] ?? ''));
 $chargeRule = Helpers::resolveDayUseCharge($attendanceDate);
-$baseAmount = (float) ($chargeRule['amount'] ?? 77.00);
-$discountAmount = 0.0;
+$storedDayUseType = normalizeDayUseType((string) ($target['day_use_type'] ?? ''));
+$requestedDayUseType = normalizeDayUseType((string) ($payload['day_use_type'] ?? ''));
+$dailyBaseType = $requestedDayUseType
+    ?? $storedDayUseType
+    ?? (string) ($chargeRule['daily_type'] ?? 'planejada');
+if (!in_array($dailyBaseType, ['planejada', 'emergencial'], true)) {
+    $dailyBaseType = 'planejada';
+}
+$baseAmount = baseAmountByDayUseType($dailyBaseType);
+$discountAmount = round((float) ($target['discount_amount'] ?? 0.0), 2);
+$discountReason = trim((string) ($target['discount_reason'] ?? ''));
 if (!$isAudit) {
-    $discountResult = parseOptionalDiscountAmount($payload['discount_amount'] ?? null);
-    if (!($discountResult['ok'] ?? false)) {
-        Helpers::json(['ok' => false, 'error' => (string) ($discountResult['error'] ?? 'Desconto inválido.')], 422);
+    if (array_key_exists('discount_amount', $payload)) {
+        $discountResult = parseOptionalDiscountAmount($payload['discount_amount'] ?? null);
+        if (!($discountResult['ok'] ?? false)) {
+            Helpers::json(['ok' => false, 'error' => (string) ($discountResult['error'] ?? 'Desconto inválido.')], 422);
+        }
+        $discountAmount = (float) ($discountResult['amount'] ?? 0.0);
     }
-    $discountAmount = (float) ($discountResult['amount'] ?? 0.0);
+    if (array_key_exists('discount_reason', $payload)) {
+        $discountReason = trim((string) ($payload['discount_reason'] ?? ''));
+    }
     if ($discountAmount >= $baseAmount) {
         Helpers::json([
             'ok' => false,
@@ -921,7 +1008,6 @@ if (!$isAudit) {
     }
 }
 $amount = round($baseAmount - $discountAmount, 2);
-$dailyBaseType = (string) ($chargeRule['daily_type'] ?? 'planejada');
 $dailyType = $dailyBaseType . '|' . formatDateBr($attendanceDate);
 $today = date('Y-m-d');
 $dueDate = $attendanceDate < $today ? $today : $attendanceDate;
@@ -1056,14 +1142,20 @@ if (!($insertPayment['ok'] ?? false) || empty($insertPayment['data'][0])) {
 $payment = $insertPayment['data'][0];
 $rows[$targetIndex]['status'] = AttendanceCalls::STATUS_AUTORIZADA_COBRANCA;
 $rows[$targetIndex]['queue_payment_id'] = (string) ($payment['id'] ?? '');
+$rows[$targetIndex]['day_use_type'] = $dailyBaseType;
+$rows[$targetIndex]['discount_amount'] = $discountAmount;
+$rows[$targetIndex]['discount_reason'] = $discountReason;
 $rows[$targetIndex]['reviewed_at'] = date('c');
 $rows[$targetIndex]['reviewed_by'] = 'admin';
 $discountNote = $discountAmount > 0
     ? ' Desconto aplicado: R$ ' . number_format($discountAmount, 2, ',', '.') . '.'
     : '';
+$discountReasonNote = ($discountAmount > 0 && $discountReason !== '')
+    ? ' Motivo: ' . $discountReason . '.'
+    : '';
 $rows[$targetIndex]['review_note'] = $asaasError === ''
-    ? 'Autorizada pelo admin e cobrança emergencial criada no Asaas.' . $discountNote
-    : 'Autorizada pelo admin, mas falha no Asaas (' . $asaasError . '). Cobrança ficou na fila para reenvio.' . $discountNote;
+    ? 'Autorizada pelo admin e cobrança ' . $dailyBaseType . ' criada no Asaas.' . $discountNote . $discountReasonNote
+    : 'Autorizada pelo admin, mas falha no Asaas (' . $asaasError . '). Cobrança ficou na fila para reenvio.' . $discountNote . $discountReasonNote;
 saveAttendanceRowsOrFail($rows);
 
 Helpers::json([

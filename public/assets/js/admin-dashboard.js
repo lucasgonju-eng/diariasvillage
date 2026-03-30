@@ -252,6 +252,42 @@ function ensureAdminDialog() {
         gap:8px;
       }
       .admin-dialog-actions .hidden{display:none}
+      .admin-dialog-form{
+        display:grid;
+        grid-template-columns:1fr;
+        gap:10px;
+      }
+      .admin-dialog-form-row{
+        display:grid;
+        grid-template-columns:1fr;
+        gap:6px;
+      }
+      .admin-dialog-form label{
+        font-size:12px;
+        font-weight:700;
+        color:#334155;
+      }
+      .admin-dialog-form input,
+      .admin-dialog-form select{
+        width:100%;
+        padding:10px 12px;
+        border:1px solid #CBD5E1;
+        border-radius:10px;
+        font-size:14px;
+        line-height:1.2;
+        background:#fff;
+        color:#0F172A;
+      }
+      .admin-dialog-form small{
+        display:block;
+        font-size:12px;
+        color:#64748B;
+      }
+      .admin-dialog-form-error{
+        min-height:18px;
+        font-size:12px;
+        color:#B91C1C;
+      }
     `;
     document.head.appendChild(style);
   }
@@ -261,7 +297,7 @@ function ensureAdminDialog() {
   overlay.innerHTML = `
     <div class="admin-dialog-panel" role="dialog" aria-modal="true" aria-labelledby="admin-dialog-title">
       <h3 id="admin-dialog-title" class="admin-dialog-title"></h3>
-      <p class="admin-dialog-message"></p>
+      <div class="admin-dialog-message"></div>
       <input class="admin-dialog-input hidden" type="text" inputmode="numeric" />
       <div class="admin-dialog-actions">
         <button type="button" class="btn btn-ghost btn-sm admin-dialog-cancel">Cancelar</button>
@@ -473,6 +509,154 @@ function parseDiscountInput(value) {
   }
   if (parsed === 0) return { ok: true, value: null };
   return { ok: true, value: Math.round(parsed * 100) / 100 };
+}
+
+function formatDiscountInputValue(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) return '';
+  return amount.toFixed(2).replace('.', ',');
+}
+
+function normalizeDayUseTypeValue(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'planejada' || normalized === 'emergencial') return normalized;
+  return 'emergencial';
+}
+
+function showAdminAttendanceEditInput(initialValue = {}) {
+  const ui = ensureAdminDialog();
+  ui.title.textContent = 'Editar Day Use';
+  ui.confirm.textContent = 'Salvar';
+  ui.cancel.textContent = 'Cancelar';
+  ui.cancel.classList.remove('hidden');
+  if (ui.input) {
+    ui.input.classList.add('hidden');
+    ui.input.value = '';
+    ui.input.placeholder = '';
+  }
+
+  const initialDate = toShortMaskedDate(initialValue.attendance_date || '');
+  const initialType = normalizeDayUseTypeValue(initialValue.day_use_type || '');
+  const initialDiscount = formatDiscountInputValue(initialValue.discount_amount);
+  const initialReason = String(initialValue.discount_reason || '').trim();
+  ui.message.innerHTML = `
+    <div class="admin-dialog-form">
+      <div class="admin-dialog-form-row">
+        <label for="admin-attendance-edit-date">Data Day Use (DD/MM/AA)</label>
+        <input id="admin-attendance-edit-date" type="text" inputmode="numeric" placeholder="DD/MM/AA" value="${escapeHtml(initialDate)}" />
+      </div>
+      <div class="admin-dialog-form-row">
+        <label for="admin-attendance-edit-type">Tipo de day use</label>
+        <select id="admin-attendance-edit-type">
+          <option value="planejada" ${initialType === 'planejada' ? 'selected' : ''}>Planejada</option>
+          <option value="emergencial" ${initialType === 'emergencial' ? 'selected' : ''}>Emergencial</option>
+        </select>
+      </div>
+      <div class="admin-dialog-form-row">
+        <label for="admin-attendance-edit-discount">Desconto (R$)</label>
+        <input id="admin-attendance-edit-discount" type="text" inputmode="decimal" placeholder="Ex.: 10,00" value="${escapeHtml(initialDiscount)}" />
+        <small>Deixe em branco para não aplicar desconto.</small>
+      </div>
+      <div class="admin-dialog-form-row">
+        <label for="admin-attendance-edit-reason">Motivo do desconto</label>
+        <input id="admin-attendance-edit-reason" type="text" placeholder="Ex.: Fidelização / ajuste comercial" value="${escapeHtml(initialReason)}" />
+      </div>
+      <div class="admin-dialog-form-error" id="admin-attendance-edit-error"></div>
+    </div>
+  `;
+  ui.overlay.classList.remove('hidden');
+
+  const dateInput = ui.message.querySelector('#admin-attendance-edit-date');
+  const typeInput = ui.message.querySelector('#admin-attendance-edit-type');
+  const discountInput = ui.message.querySelector('#admin-attendance-edit-discount');
+  const reasonInput = ui.message.querySelector('#admin-attendance-edit-reason');
+  const errorBox = ui.message.querySelector('#admin-attendance-edit-error');
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = (result) => {
+      if (settled) return;
+      settled = true;
+      ui.overlay.classList.add('hidden');
+      ui.confirm.removeEventListener('click', onConfirm);
+      ui.cancel.removeEventListener('click', onCancel);
+      ui.overlay.removeEventListener('click', onOverlayClick);
+      document.removeEventListener('keydown', onKeyDown);
+      if (dateInput) dateInput.removeEventListener('input', onDateInput);
+      resolve(result);
+    };
+    const setError = (message) => {
+      if (errorBox) errorBox.textContent = String(message || '');
+    };
+    const onDateInput = () => {
+      if (!dateInput) return;
+      applyShortDateMask(dateInput);
+    };
+    const onConfirm = () => {
+      const dateValue = String(dateInput?.value || '').trim();
+      if (!/^\d{2}\/\d{2}\/\d{2}$/.test(dateValue)) {
+        setError('Data inválida. Use exatamente DD/MM/AA.');
+        dateInput?.focus();
+        return;
+      }
+      const dayUseType = normalizeDayUseTypeValue(typeInput?.value || '');
+      const discountResult = parseDiscountInput(String(discountInput?.value || ''));
+      if (!discountResult.ok) {
+        setError(discountResult.error || 'Desconto inválido.');
+        discountInput?.focus();
+        return;
+      }
+      const discountAmount = discountResult.value;
+      const discountReason = String(reasonInput?.value || '').trim();
+      if (discountAmount !== null && discountAmount > 0 && !discountReason) {
+        setError('Informe o motivo quando houver desconto.');
+        reasonInput?.focus();
+        return;
+      }
+      setError('');
+      settle({
+        ok: true,
+        value: {
+          attendance_date: dateValue,
+          day_use_type: dayUseType,
+          discount_amount: discountAmount,
+          discount_reason: discountReason,
+        },
+      });
+    };
+    const onCancel = () => settle({ ok: false, value: null });
+    const onOverlayClick = (event) => {
+      if (event.target === ui.overlay) {
+        settle({ ok: false, value: null });
+      }
+    };
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        settle({ ok: false, value: null });
+        return;
+      }
+      if (event.key === 'Enter') {
+        const tagName = String(event.target?.tagName || '').toLowerCase();
+        if (tagName !== 'button') {
+          event.preventDefault();
+          onConfirm();
+        }
+      }
+    };
+
+    ui.confirm.addEventListener('click', onConfirm);
+    ui.cancel.addEventListener('click', onCancel);
+    ui.overlay.addEventListener('click', onOverlayClick);
+    document.addEventListener('keydown', onKeyDown);
+    if (dateInput) {
+      dateInput.addEventListener('input', onDateInput);
+      applyShortDateMask(dateInput);
+      dateInput.focus();
+    } else {
+      ui.confirm.focus();
+    }
+  });
 }
 
 function showAdminDiscountInput() {
@@ -2177,6 +2361,21 @@ function attendanceStatusLabel(status) {
   return map[String(status || '').trim()] || status || '-';
 }
 
+function attendanceTypeLabel(type) {
+  const normalized = String(type || '').trim().toLowerCase();
+  if (normalized === 'planejada') return 'Planejada';
+  if (normalized === 'emergencial') return 'Emergencial';
+  return '-';
+}
+
+function attendanceDiscountLabel(item) {
+  const discount = Number(item?.discount_amount || 0);
+  if (!Number.isFinite(discount) || discount <= 0) return '-';
+  const reason = String(item?.discount_reason || '').trim();
+  if (!reason) return formatCurrency(discount);
+  return `${formatCurrency(discount)} (${reason})`;
+}
+
 function compareByStudentName(a, b) {
   const aName = normalizeSearchText(a?.student_name || a?.name || '');
   const bName = normalizeSearchText(b?.student_name || b?.name || '');
@@ -2224,7 +2423,7 @@ function renderAttendanceRows(items) {
   const rows = Array.isArray(items) ? [...items] : [];
   rows.sort(compareByStudentName);
   if (!rows.length) {
-    attendanceTbody.innerHTML = '<tr><td colspan="8">Nenhuma chamada lançada.</td></tr>';
+    attendanceTbody.innerHTML = '<tr><td colspan="10">Nenhuma chamada lançada.</td></tr>';
     return;
   }
   attendanceTbody.innerHTML = rows
@@ -2246,13 +2445,17 @@ function renderAttendanceRows(items) {
       if (canRetryCharge) {
         actionParts.push(`<button class="btn btn-primary btn-sm js-attendance-retry" type="button" data-id="${escapeHtml(item.id || '')}">Relançar</button>`);
       }
-      actionParts.push(`<button class="btn btn-primary btn-sm js-attendance-edit" type="button" data-id="${escapeHtml(item.id || '')}" data-date="${escapeHtml(item.attendance_date || '')}">Editar</button>`);
+      actionParts.push(
+        `<button class="btn btn-primary btn-sm js-attendance-edit" type="button" data-id="${escapeHtml(item.id || '')}" data-date="${escapeHtml(item.attendance_date || '')}" data-day-use-type="${escapeHtml(item.day_use_type || '')}" data-discount-amount="${escapeHtml(item.discount_amount ?? '')}" data-discount-reason="${escapeHtml(item.discount_reason || '')}">Editar</button>`,
+      );
       const actions = actionParts.join('');
       return `
         <tr data-attendance-id="${escapeHtml(item.id || '')}" data-attendance-date="${escapeHtml(item.attendance_date || '')}">
           <td>${escapeHtml(formatDateBR(item.attendance_date || '-'))}</td>
           <td>${escapeHtml(item.student_name || '-')}</td>
           <td>${escapeHtml(office)}</td>
+          <td>${escapeHtml(attendanceTypeLabel(item.day_use_type || ''))}</td>
+          <td>${escapeHtml(attendanceDiscountLabel(item))}</td>
           <td>${escapeHtml(attendanceStatusLabel(item.status || ''))}</td>
           <td>${escapeHtml(item.created_by_user || item.created_by_role || '-')}</td>
           <td>${escapeHtml(formatDateTimeBR(item.created_at || ''))}</td>
@@ -2483,26 +2686,49 @@ async function handleAttendanceAction(event) {
 
   if (editButton) {
     const currentRaw = String(editButton.getAttribute('data-date') || '').trim();
-    const promptResult = await showAdminDateInput(currentRaw);
+    const currentType = String(editButton.getAttribute('data-day-use-type') || '').trim().toLowerCase();
+    const currentDiscountRaw = String(editButton.getAttribute('data-discount-amount') || '').trim();
+    const currentDiscount = currentDiscountRaw === '' ? null : Number(currentDiscountRaw);
+    const currentDiscountReason = String(editButton.getAttribute('data-discount-reason') || '').trim();
+    const promptResult = await showAdminAttendanceEditInput({
+      attendance_date: currentRaw,
+      day_use_type: currentType,
+      discount_amount: Number.isFinite(currentDiscount) ? currentDiscount : null,
+      discount_reason: currentDiscountReason,
+    });
     if (!promptResult?.ok) return;
-    const newDate = String(promptResult.value || '').trim();
+    const newDate = String(promptResult.value?.attendance_date || '').trim();
+    const newType = String(promptResult.value?.day_use_type || '').trim().toLowerCase();
+    const discountAmount = promptResult.value?.discount_amount ?? null;
+    const discountReason = String(promptResult.value?.discount_reason || '').trim();
     if (!newDate) {
       setAttendanceMessage('Informe uma data válida para edição.', true);
       return;
     }
+    if (newType !== 'planejada' && newType !== 'emergencial') {
+      setAttendanceMessage('Selecione um tipo de day use válido.', true);
+      return;
+    }
 
     actionButton.setAttribute('disabled', 'disabled');
-    setAttendanceMessage('Atualizando Data Day Use...');
+    setAttendanceMessage('Atualizando Day Use...');
     try {
-      const { res, data } = await postAttendanceAction({ action: 'edit', id, attendance_date: newDate });
+      const { res, data } = await postAttendanceAction({
+        action: 'edit',
+        id,
+        attendance_date: newDate,
+        day_use_type: newType,
+        discount_amount: discountAmount,
+        discount_reason: discountReason,
+      });
       if (!res.ok || !data?.ok) {
-        setAttendanceMessage(data?.error || 'Falha ao editar Data Day Use.', true);
+        setAttendanceMessage(data?.error || 'Falha ao editar Day Use.', true);
         return;
       }
-      setAttendanceMessage(data?.message || 'Data Day Use atualizada.');
+      setAttendanceMessage(data?.message || 'Day Use atualizado.');
       await loadAttendanceCalls(true);
     } catch {
-      setAttendanceMessage('Falha ao editar Data Day Use.', true);
+      setAttendanceMessage('Falha ao editar Day Use.', true);
     } finally {
       actionButton.removeAttribute('disabled');
     }

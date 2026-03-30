@@ -871,6 +871,8 @@ if (!empty($exclusionsLog)) {
                 <th>Data Day Use</th>
                 <th>Aluno</th>
                 <th>Oficina</th>
+                <th>Tipo</th>
+                <th>Desconto</th>
                 <th>Status</th>
                 <th>Lançado por</th>
                 <th>Lançado em</th>
@@ -880,7 +882,7 @@ if (!empty($exclusionsLog)) {
             </thead>
             <tbody id="attendance-tbody">
               <tr>
-                <td colspan="8">Nenhuma chamada lançada.</td>
+                <td colspan="10">Nenhuma chamada lançada.</td>
               </tr>
             </tbody>
           </table>

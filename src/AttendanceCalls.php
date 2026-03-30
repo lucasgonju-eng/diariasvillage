@@ -91,6 +91,9 @@ final class AttendanceCalls
                 'reviewed_at' => (string) ($row['reviewed_at'] ?? ''),
                 'reviewed_by' => trim((string) ($row['reviewed_by'] ?? '')),
                 'review_note' => trim((string) ($row['review_note'] ?? '')),
+                'day_use_type' => trim((string) ($row['day_use_type'] ?? '')),
+                'discount_amount' => round((float) ($row['discount_amount'] ?? 0), 2),
+                'discount_reason' => trim((string) ($row['discount_reason'] ?? '')),
                 'queue_payment_id' => trim((string) ($row['queue_payment_id'] ?? '')),
                 'warning' => trim((string) ($row['warning'] ?? '')),
             ];
@@ -166,6 +169,9 @@ final class AttendanceCalls
                 'reviewed_at' => (string) ($row['reviewed_at'] ?? ''),
                 'reviewed_by' => trim((string) ($row['reviewed_by'] ?? '')),
                 'review_note' => trim((string) ($row['review_note'] ?? '')),
+                'day_use_type' => trim((string) ($row['day_use_type'] ?? '')),
+                'discount_amount' => round((float) ($row['discount_amount'] ?? 0), 2),
+                'discount_reason' => trim((string) ($row['discount_reason'] ?? '')),
                 'queue_payment_id' => trim((string) ($row['queue_payment_id'] ?? '')),
                 'warning' => trim((string) ($row['warning'] ?? '')),
             ];
