@@ -66,6 +66,19 @@ foreach ($bootstrapCandidates as $bootstrapFile) {
               <label>Senha</label>
               <input type="password" id="login-password" required />
             </div>
+            <div class="form-group forgot-password-wrap">
+              <a class="forgot-password-link" href="/primeiro-acesso.php">Esqueci minha senha</a>
+            </div>
+            <div class="form-group whatsapp-help-wrap">
+              <a
+                class="whatsapp-help-button"
+                href="https://wa.me/5562994416681?text=Ol%C3%A1%21%20Tenho%20d%C3%BAvidas%20ou%20sugest%C3%B5es%20sobre%20o%20Di%C3%A1rias%20Village."
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Dúvidas? Sugestões?
+              </a>
+            </div>
             <button class="btn btn-primary btn-block" type="submit">Entrar</button>
             <div id="login-message"></div>
           </form>
