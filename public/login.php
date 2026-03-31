@@ -1,5 +1,14 @@
 <?php
-require_once dirname(__DIR__) . '/src/Bootstrap.php';
+$bootstrapCandidates = [
+    __DIR__ . '/src/Bootstrap.php',
+    dirname(__DIR__) . '/src/Bootstrap.php',
+];
+foreach ($bootstrapCandidates as $bootstrapFile) {
+    if (is_file($bootstrapFile)) {
+        require_once $bootstrapFile;
+        break;
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
