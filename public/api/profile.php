@@ -90,7 +90,7 @@ try {
                     $authError = is_array($authData)
                         ? ($authData['msg'] ?? $authData['message'] ?? $authData['error_description'] ?? null)
                         : null;
-                    Helpers::json(['ok' => false, 'error' => $authError ?: 'Perfil salvo, mas falhou ao atualizar a senha de autenticação.'], 500);
+                    error_log('profile.php auth password sync failed for ' . $email . ': ' . ($authError ?: ($authUpdate['error'] ?? 'erro desconhecido')));
                 }
             }
         }

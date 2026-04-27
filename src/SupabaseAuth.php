@@ -59,7 +59,7 @@ class SupabaseAuth
     {
         return $this->http->request(
             'PUT',
-            $this->url . '/auth/v1/admin/user/' . $userId,
+            $this->url . '/auth/v1/admin/users/' . $userId,
             $this->headers(),
             $attrs
         );

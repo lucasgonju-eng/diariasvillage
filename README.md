@@ -97,4 +97,5 @@ Quando o CPF nao existe em `guardians`, o login cai em `Credenciais invalidas` e
 - Sintoma: DevTools mostra `api/profile.php 500` e `Unexpected end of JSON input`.
 - Causa: o frontend tentava interpretar como JSON uma resposta 500 vazia/inesperada do endpoint de perfil.
 - Correcao aplicada: `api/profile.php` agora valida payload/sessao, sempre responde JSON em falhas e sincroniza a nova senha com o Supabase Auth quando o e-mail do responsavel existe no Auth. O `profile.js` tambem passou a ler a resposta como texto antes de parsear JSON, exibindo mensagem amigavel quando o servidor falha.
+- Ajuste posterior: a rota de atualizacao do Supabase Auth foi corrigida para `/auth/v1/admin/users/{id}`. Se a sincronizacao externa falhar, o perfil nao bloqueia a tela porque a senha local em `guardians.password_hash` ja foi atualizada e o login possui fallback local.
 
