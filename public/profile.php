@@ -248,6 +248,6 @@ $studentClass = trim((string) (($studentRow['class_name'] ?? '') ?: ($studentRow
     </div>
   </footer>
 
-  <script src="/assets/js/profile.js?v=2"></script>
+  <script src="/assets/js/profile.js?v=3"></script>
 </body>
 </html>

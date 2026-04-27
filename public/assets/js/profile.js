@@ -70,15 +70,23 @@ if (profileForm) {
       password_confirm: document.querySelector('#new-password-confirm').value,
     };
 
-    const res = await fetch('/api/profile.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    let data = null;
+    try {
+      const res = await fetch('/api/profile.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-    const data = await res.json();
-    if (!data.ok) {
-      profileMessage.textContent = data.error || 'Não foi possível atualizar.';
+      const raw = await res.text();
+      data = raw ? JSON.parse(raw) : null;
+      if (!res.ok || !data || !data.ok) {
+        profileMessage.textContent = data?.error || 'Não foi possível atualizar.';
+        profileMessage.className = 'error';
+        return;
+      }
+    } catch (err) {
+      profileMessage.textContent = 'Erro inesperado ao atualizar perfil.';
       profileMessage.className = 'error';
       return;
     }
