@@ -43,7 +43,7 @@ function attendance_status_label(string $status): string
 {
     $map = [
         AttendanceCalls::STATUS_EM_REVISAO => 'Pendente de autorização',
-        AttendanceCalls::STATUS_AUTORIZADA_COBRANCA => 'Pendente',
+        AttendanceCalls::STATUS_AUTORIZADA_COBRANCA => 'Cobrança removida',
         AttendanceCalls::STATUS_REJEITADA => 'Rejeitada',
         AttendanceCalls::STATUS_ALUNO_MENSALISTA => 'Mensalista',
         AttendanceCalls::STATUS_BLOQUEADA_JA_PAGA => 'Já paga',
@@ -524,6 +524,10 @@ foreach ($attendanceCalls as $call) {
     if ($discountAmount > 0 && $discountAmount < $effectiveAmount) {
         $effectiveAmount = round($effectiveAmount - $discountAmount, 2);
     }
+    $statusLabel = attendance_status_label((string) ($call['status'] ?? ''));
+    if ($statusLabel === 'Cobrança removida') {
+        $effectiveAmount = 0.0;
+    }
 
     $totalBase += $baseAmount;
     $totalEffective += $effectiveAmount;
@@ -534,7 +538,7 @@ foreach ($attendanceCalls as $call) {
         'type' => $typeLabel,
         'base_amount' => $baseAmount,
         'effective_amount' => $effectiveAmount,
-        'status' => attendance_status_label((string) ($call['status'] ?? '')),
+        'status' => $statusLabel,
         'status_rank' => 0,
         'created_at' => (string) ($call['created_at'] ?? ''),
         'payment_id' => '',
@@ -737,6 +741,8 @@ $economy = max(0, $totalBase - $totalEffective);
                             $statusClass = 'status-review';
                         } elseif ($statusNormalized === 'erro na cobrança') {
                             $statusClass = 'status-error';
+                        } elseif ($statusNormalized === 'cobrança removida') {
+                            $statusClass = 'status-neutral';
                         } else {
                             $statusClass = 'status-neutral';
                         }
