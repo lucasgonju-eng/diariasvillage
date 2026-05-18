@@ -175,7 +175,7 @@ $asaas = new AsaasClient(new HttpClient());
 if ($method === 'GET') {
     $from = parseAttendanceDate((string) ($_GET['from'] ?? ''));
     $to = parseAttendanceDate((string) ($_GET['to'] ?? ''));
-    $pendingOnly = (string) ($_GET['pending_only'] ?? '') === '1';
+    $pendingOnly = (string) ($_GET['show_all'] ?? '') !== '1';
     $items = AttendanceCalls::load();
     if ($from !== null) {
         $items = array_values(array_filter($items, static fn($row): bool => (string) ($row['attendance_date'] ?? '') >= $from));

@@ -78,7 +78,7 @@ function statusLabel(string $status): string
 
 $from = parseDateFilter((string) ($_GET['from'] ?? ''));
 $to = parseDateFilter((string) ($_GET['to'] ?? ''));
-$pendingOnly = (string) ($_GET['pending_only'] ?? '') === '1';
+$pendingOnly = (string) ($_GET['show_all'] ?? '') !== '1';
 
 $items = AttendanceCalls::load();
 if ($from !== null) {

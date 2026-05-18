@@ -2393,7 +2393,7 @@ function getAttendanceFilterParams() {
   const to = String(attendanceFilterToInput?.value || '').trim();
   if (from) params.set('from', from);
   if (to) params.set('to', to);
-  if (attendancePendingOnlyInput?.checked) params.set('pending_only', '1');
+  if (attendancePendingOnlyInput && !attendancePendingOnlyInput.checked) params.set('show_all', '1');
   return params;
 }
 
