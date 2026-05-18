@@ -580,6 +580,28 @@ if (!empty($exclusionsLog)) {
       color:#2f2300;
       filter:none;
     }
+    .attendance-pending-filter{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding:10px 12px;
+      border:1px solid #BFD0EE;
+      border-radius:12px;
+      background:#E8F0FF;
+      color:#0A1B4D;
+      font-weight:800;
+      min-height:42px;
+    }
+    .attendance-pending-filter input{
+      width:16px;
+      height:16px;
+      accent-color:#1f5fff;
+      flex:0 0 auto;
+    }
+    .attendance-pending-filter span{
+      color:#0A1B4D;
+      line-height:1.25;
+    }
     .hidden{display:none}
     .bulk-mail-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0}
     .bulk-mail-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin:10px 0}
@@ -857,6 +879,13 @@ if (!empty($exclusionsLog)) {
           <div class="form-group">
             <label>Até</label>
             <input id="attendance-filter-to" type="date" />
+          </div>
+          <div class="form-group">
+            <label>Autorização</label>
+            <label class="attendance-pending-filter" for="attendance-pending-only">
+              <input id="attendance-pending-only" type="checkbox" checked />
+              <span>Mostrar só pendentes de autorização</span>
+            </label>
           </div>
           <div class="form-group" style="display:flex;align-items:flex-end;gap:8px;">
             <button id="attendance-filter-btn" class="btn btn-ghost btn-sm" type="button">Filtrar</button>

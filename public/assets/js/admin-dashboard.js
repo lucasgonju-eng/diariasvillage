@@ -67,6 +67,7 @@ const attendanceTbody = document.querySelector('#attendance-tbody');
 const attendanceDayList = document.querySelector('#attendance-day-list');
 const attendanceFilterFromInput = document.querySelector('#attendance-filter-from');
 const attendanceFilterToInput = document.querySelector('#attendance-filter-to');
+const attendancePendingOnlyInput = document.querySelector('#attendance-pending-only');
 const attendanceFilterButton = document.querySelector('#attendance-filter-btn');
 const attendanceClearButton = document.querySelector('#attendance-clear-btn');
 const attendanceExportButton = document.querySelector('#attendance-export-btn');
@@ -2392,6 +2393,7 @@ function getAttendanceFilterParams() {
   const to = String(attendanceFilterToInput?.value || '').trim();
   if (from) params.set('from', from);
   if (to) params.set('to', to);
+  if (attendancePendingOnlyInput?.checked) params.set('pending_only', '1');
   return params;
 }
 
@@ -3222,6 +3224,13 @@ if (attendanceClearButton) {
   attendanceClearButton.addEventListener('click', () => {
     if (attendanceFilterFromInput) attendanceFilterFromInput.value = '';
     if (attendanceFilterToInput) attendanceFilterToInput.value = '';
+    if (attendancePendingOnlyInput) attendancePendingOnlyInput.checked = true;
+    loadAttendanceCalls(true);
+  });
+}
+
+if (attendancePendingOnlyInput) {
+  attendancePendingOnlyInput.addEventListener('change', () => {
     loadAttendanceCalls(true);
   });
 }

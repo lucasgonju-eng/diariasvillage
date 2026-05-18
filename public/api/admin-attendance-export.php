@@ -78,6 +78,7 @@ function statusLabel(string $status): string
 
 $from = parseDateFilter((string) ($_GET['from'] ?? ''));
 $to = parseDateFilter((string) ($_GET['to'] ?? ''));
+$pendingOnly = (string) ($_GET['pending_only'] ?? '') === '1';
 
 $items = AttendanceCalls::load();
 if ($from !== null) {
@@ -85,6 +86,12 @@ if ($from !== null) {
 }
 if ($to !== null) {
     $items = array_values(array_filter($items, static fn($row): bool => (string) ($row['attendance_date'] ?? '') <= $to));
+}
+if ($pendingOnly) {
+    $items = array_values(array_filter(
+        $items,
+        static fn($row): bool => (string) ($row['status'] ?? '') === 'em_revisao'
+    ));
 }
 
 $filename = 'relatorio_chamada_' . date('Ymd_His') . '.xls';

@@ -175,12 +175,19 @@ $asaas = new AsaasClient(new HttpClient());
 if ($method === 'GET') {
     $from = parseAttendanceDate((string) ($_GET['from'] ?? ''));
     $to = parseAttendanceDate((string) ($_GET['to'] ?? ''));
+    $pendingOnly = (string) ($_GET['pending_only'] ?? '') === '1';
     $items = AttendanceCalls::load();
     if ($from !== null) {
         $items = array_values(array_filter($items, static fn($row): bool => (string) ($row['attendance_date'] ?? '') >= $from));
     }
     if ($to !== null) {
         $items = array_values(array_filter($items, static fn($row): bool => (string) ($row['attendance_date'] ?? '') <= $to));
+    }
+    if ($pendingOnly) {
+        $items = array_values(array_filter(
+            $items,
+            static fn($row): bool => (string) ($row['status'] ?? '') === AttendanceCalls::STATUS_EM_REVISAO
+        ));
     }
     Helpers::json([
         'ok' => true,
