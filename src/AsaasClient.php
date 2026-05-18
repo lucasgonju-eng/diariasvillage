@@ -38,6 +38,11 @@ class AsaasClient
         return $this->http->request('GET', $this->baseUrl . '/payments/' . $paymentId, $this->headers());
     }
 
+    public function deletePayment(string $paymentId): array
+    {
+        return $this->http->request('DELETE', $this->baseUrl . '/payments/' . urlencode($paymentId), $this->headers());
+    }
+
     public function findPaymentByInvoiceUrl(string $invoiceUrl): array
     {
         $url = $this->baseUrl . '/payments?invoiceUrl=' . urlencode($invoiceUrl);

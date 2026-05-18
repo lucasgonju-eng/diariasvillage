@@ -54,6 +54,14 @@ function attendance_status_label(string $status): string
     return $map[$key] ?? ($key !== '' ? $key : 'Pendente de autorização');
 }
 
+function voucher_label_from_billing_type(string $billingType): string
+{
+    if (preg_match('/VOUCHER_ISABEL_(\d{1,2})_30/', $billingType, $match)) {
+        return 'Voucher ' . (int) $match[1] . '/30';
+    }
+    return '';
+}
+
 function date_key(?string $value): string
 {
     $raw = trim((string) $value);
@@ -397,6 +405,7 @@ foreach ($payments as $payment) {
         continue;
     }
 
+    $voucherLabel = voucher_label_from_billing_type((string) ($payment['billing_type'] ?? ''));
     $student = $studentsById[(string) ($payment['student_id'] ?? '')] ?? [];
     $studentName = trim((string) ($student['name'] ?? 'Aluno'));
     $paymentDate = date_key((string) ($payment['payment_date'] ?? ''));
@@ -416,6 +425,10 @@ foreach ($payments as $payment) {
     }
     $statusLabel = $isReceived ? 'Pago' : 'Pendente';
     $statusRank = $statusRaw === 'paid' ? 2 : 1;
+    if ($voucherLabel !== '') {
+        $statusLabel = $voucherLabel;
+        $statusRank = 2;
+    }
     $createdAtRaw = (string) ($payment['created_at'] ?? '');
     $paymentId = trim((string) ($payment['id'] ?? ''));
     $payProxyUrl = $paymentId !== '' ? '/api/financeiro-pay.php?payment_id=' . rawurlencode($paymentId) : '';
@@ -447,6 +460,9 @@ foreach ($payments as $payment) {
         $effectiveAmount = $baseAmount;
         if ($dayUseDate !== '' && $dayUseDate <= $cutoffDate && $baseAmount <= 97.01) {
             $effectiveAmount = 77.00;
+        }
+        if ($voucherLabel !== '') {
+            $effectiveAmount = 0.0;
         }
         $dayUseKeysWithPayment[day_use_row_key((string) ($payment['student_id'] ?? ''), $studentName, $dayUseDate)] = true;
 
@@ -712,6 +728,8 @@ $economy = max(0, $totalBase - $totalEffective);
                         $statusText = (string) ($row['status'] ?? '');
                         $statusNormalized = strtolower(trim($statusText));
                         if ($statusNormalized === 'pago' || $statusNormalized === 'já paga') {
+                            $statusClass = 'status-paid';
+                        } elseif (strpos($statusNormalized, 'voucher ') === 0) {
                             $statusClass = 'status-paid';
                         } elseif ($statusNormalized === 'pendente') {
                             $statusClass = 'status-pending';

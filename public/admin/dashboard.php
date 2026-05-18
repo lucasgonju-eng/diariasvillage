@@ -93,6 +93,20 @@ function isFebruaryChargeOnly(array $paymentRow): bool
     return true;
 }
 
+function isIsabelVoucherStudent(string $studentName): bool
+{
+    $normalized = MonthlyStudents::normalizeText($studentName);
+    return $normalized !== '' && strpos($normalized, 'ISABELGONCALVESRAUEN') === 0;
+}
+
+function voucherLabelFromBillingType(string $billingType): string
+{
+    if (preg_match('/VOUCHER_ISABEL_(\d{1,2})_30/', $billingType, $match)) {
+        return 'Voucher ' . (int) $match[1] . '/30';
+    }
+    return '';
+}
+
 if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
     header('Location: /admin/');
     exit;
@@ -760,7 +774,10 @@ if (!empty($exclusionsLog)) {
                 <?php foreach ($payments as $payment): ?>
                   <?php
                     $student = $payment['students'] ?? [];
-                    $billing = in_array($payment['billing_type'], ['PIX', 'PIX_MANUAL'], true) ? 'PIX' : 'Debito';
+                    $voucherLabel = voucherLabelFromBillingType((string) ($payment['billing_type'] ?? ''));
+                    $billing = $voucherLabel !== ''
+                        ? $voucherLabel
+                        : (in_array($payment['billing_type'], ['PIX', 'PIX_MANUAL'], true) ? 'PIX' : 'Debito');
                     $dailyRaw = $payment['daily_type'] ?? '';
                     $dailyBase = explode('|', $dailyRaw, 2)[0] ?? $dailyRaw;
                     $dailyLabel = $dailyBase === 'emergencial' ? 'Emergencial' : 'Planejada';
@@ -986,6 +1003,7 @@ if (!empty($exclusionsLog)) {
                     $isMonthlyCheck = is_array($monthlyMeta);
                     $monthlyDays = (int) ($monthlyMeta['weekly_days'] ?? 0);
                     $monthlyWarning = $isMonthlyCheck ? 'Aluno mensalista. Checar' : '';
+                    $canApplyIsabelVoucher = isIsabelVoucherStudent((string) ($student['name'] ?? ''));
                   ?>
                   <tr
                     class="inadimplente-row<?php echo $isMonthlyCheck ? ' monthly-check-row' : ''; ?>"
@@ -1019,6 +1037,16 @@ if (!empty($exclusionsLog)) {
                     </td>
                     <td><?php echo $created; ?></td>
                     <td>
+                      <?php if ($canApplyIsabelVoucher): ?>
+                        <button
+                          class="btn btn-primary btn-sm js-isabel-voucher"
+                          type="button"
+                          data-id="<?php echo htmlspecialchars((string) ($payment['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                          style="margin-bottom:6px;"
+                        >
+                          Liquidar voucher
+                        </button>
+                      <?php endif; ?>
                       <button
                         class="btn btn-danger btn-sm js-delete-payment"
                         type="button"
@@ -1070,6 +1098,7 @@ if (!empty($exclusionsLog)) {
                     if (!$hasAsaasId) {
                         $statusLabel .= ' • Sem ID Asaas';
                     }
+                    $canApplyIsabelVoucher = isIsabelVoucherStudent((string) ($student['name'] ?? ''));
                   ?>
                   <tr
                     class="inadimplente-row<?php echo $isMonthlyCheck ? ' monthly-check-row' : ''; ?>"
@@ -1096,6 +1125,16 @@ if (!empty($exclusionsLog)) {
                     </td>
                     <td><?php echo $created; ?></td>
                     <td>
+                      <?php if ($canApplyIsabelVoucher): ?>
+                        <button
+                          class="btn btn-primary btn-sm js-isabel-voucher"
+                          type="button"
+                          data-id="<?php echo htmlspecialchars((string) ($payment['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                          style="margin-bottom:6px;"
+                        >
+                          Liquidar voucher
+                        </button>
+                      <?php endif; ?>
                       <button
                         class="btn btn-danger btn-sm js-delete-payment"
                         type="button"
@@ -2028,7 +2067,7 @@ if (!empty($exclusionsLog)) {
     window.__monthlyStudents = <?php echo json_encode($monthlyRowsForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
     window.__adminCanApproveAttendance = <?php echo $canAttendanceApprove ? 'true' : 'false'; ?>;
   </script>
-  <script src="/assets/js/admin-dashboard.js?v=71"></script>
+  <script src="/assets/js/admin-dashboard.js?v=72"></script>
   <script>
     (function () {
       function activateTab(name) {

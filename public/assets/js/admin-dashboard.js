@@ -31,6 +31,7 @@ const syncChargesPaymentsInadimplentesButton = document.querySelector('#sync-cha
 const syncChargesPaymentsInadimplentesMessage = document.querySelector('#sync-charges-payments-inadimplentes-message');
 const inadimplentesSummary = document.querySelector('#inadimplentes-summary');
 const pendingDeleteButtons = document.querySelectorAll('.js-delete-payment');
+const isabelVoucherButtons = document.querySelectorAll('.js-isabel-voucher');
 const resendFebChargeButtons = document.querySelectorAll('.js-resend-feb-charge');
 let inadimplentesDuplicatesPopupShown = false;
 let inadimplentesMonthlyPopupShown = false;
@@ -3795,6 +3796,56 @@ pendingDeleteButtons.forEach((button) => {
       showSendPendingMessage('Falha ao excluir cobrança.', true);
     } finally {
       button.removeAttribute('disabled');
+    }
+  });
+});
+
+isabelVoucherButtons.forEach((button) => {
+  button.addEventListener('click', async () => {
+    if (!(button instanceof HTMLElement)) return;
+    const paymentId = button.dataset.id;
+    const row = button.closest('tr');
+    if (!paymentId || !row) return;
+
+    const student = row.getAttribute('data-student') || 'Isabel Gonçalves Rauen';
+    const dayUseDates = row.getAttribute('data-dayuse-date') || '-';
+    const amountRaw = Number(row.getAttribute('data-amount') || 0);
+    const amount = formatCurrency(amountRaw);
+
+    const confirmed = await showAdminConfirm(
+      `Liquidar esta cobrança como voucher sem custo?\n\nAluno: ${student}\nDatas do day-use: ${dayUseDates}\nValor atual: ${amount}\n\nA cobrança será zerada, marcada como paga e identificada como Voucher X/30.`,
+      { title: 'Liquidar voucher', confirmText: 'Liquidar voucher' },
+    );
+    if (!confirmed) return;
+
+    button.setAttribute('disabled', 'disabled');
+    const originalText = button.textContent;
+    button.textContent = 'Liquidando...';
+    showSendPendingMessage('Liquidando voucher...', false);
+
+    try {
+      const res = await fetch('/api/admin-voucher-isabel.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payment_id: paymentId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        showSendPendingMessage(data?.error || 'Falha ao liquidar voucher.', true);
+        return;
+      }
+
+      row.remove();
+      buildInadimplentesStudentAutocomplete();
+      updateInadimplentesSummary();
+      const warning = data?.asaas_warning ? ` Atenção: ${data.asaas_warning}` : '';
+      showSendPendingMessage(`${data?.message || 'Voucher liquidado.'}${warning}`, Boolean(data?.asaas_warning));
+      maybeAlertInadimplentesDuplicates(true);
+    } catch {
+      showSendPendingMessage('Falha ao liquidar voucher.', true);
+    } finally {
+      button.removeAttribute('disabled');
+      button.textContent = originalText;
     }
   });
 });
