@@ -52,6 +52,64 @@ $success = ($_GET['success'] ?? '') === '1';
     </div>
 
     <div class="card" style="margin-top:18px;">
+      <h2>Criar aluno manualmente</h2>
+      <p class="subtitle">Use quando precisar cadastrar um aluno novo sem planilha. O aluno já fica ativo e vinculado ao responsável principal.</p>
+
+      <form id="manual-student-form">
+        <div class="grid-2">
+          <div class="form-group">
+            <label for="manual-student-name">Nome do aluno</label>
+            <input id="manual-student-name" name="student_name" type="text" autocomplete="off" required />
+          </div>
+          <div class="form-group">
+            <label for="manual-student-enrollment">Matrícula</label>
+            <input id="manual-student-enrollment" name="enrollment" type="text" autocomplete="off" required />
+          </div>
+          <div class="form-group">
+            <label for="manual-student-grade">Série</label>
+            <select id="manual-student-grade" name="grade" required>
+              <option value="">Selecione</option>
+              <option value="6">6º ano</option>
+              <option value="7">7º ano</option>
+              <option value="8">8º ano</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="manual-student-class">Turma</label>
+            <input id="manual-student-class" name="class_name" type="text" placeholder="Ex.: 6º A" autocomplete="off" required />
+          </div>
+          <div class="form-group">
+            <label for="manual-student-birth">Nascimento</label>
+            <input id="manual-student-birth" name="birth_date" type="date" />
+          </div>
+        </div>
+
+        <h3 style="margin:8px 0 12px;">Responsável principal</h3>
+        <div class="grid-2">
+          <div class="form-group">
+            <label for="manual-guardian-name">Nome do responsável</label>
+            <input id="manual-guardian-name" name="guardian_name" type="text" autocomplete="off" required />
+          </div>
+          <div class="form-group">
+            <label for="manual-guardian-email">E-mail do responsável</label>
+            <input id="manual-guardian-email" name="guardian_email" type="email" autocomplete="off" required />
+          </div>
+          <div class="form-group">
+            <label for="manual-guardian-phone">WhatsApp</label>
+            <input id="manual-guardian-phone" name="guardian_phone" type="text" inputmode="tel" autocomplete="off" required />
+          </div>
+          <div class="form-group">
+            <label for="manual-guardian-document">CPF</label>
+            <input id="manual-guardian-document" name="guardian_document" type="text" inputmode="numeric" autocomplete="off" required />
+          </div>
+        </div>
+
+        <button id="manual-student-submit" class="button" type="submit">Criar aluno manualmente</button>
+        <div id="manual-student-message" aria-live="polite"></div>
+      </form>
+    </div>
+
+    <div class="card" style="margin-top:18px;">
       <h2>Importar responsáveis</h2>
       <p class="subtitle">Envie PDF ou JSON com colunas: student_name, guardian_name, guardian_email, guardian_phone, guardian_cpf.</p>
 
@@ -69,5 +127,45 @@ $success = ($_GET['success'] ?? '') === '1';
     </div>
     <div class="footer">Desenvolvido por Lucas Gonçalves Junior - 2026</div>
   </div>
+  <script>
+    const manualStudentForm = document.getElementById('manual-student-form');
+    const manualStudentSubmit = document.getElementById('manual-student-submit');
+    const manualStudentMessage = document.getElementById('manual-student-message');
+
+    function setManualStudentMessage(message, isError = false) {
+      manualStudentMessage.textContent = message || '';
+      manualStudentMessage.className = message ? (isError ? 'error' : 'success') : '';
+    }
+
+    manualStudentForm?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      setManualStudentMessage('');
+      manualStudentSubmit.disabled = true;
+      manualStudentSubmit.textContent = 'Criando...';
+
+      const formData = new FormData(manualStudentForm);
+      const payload = Object.fromEntries(formData.entries());
+
+      try {
+        const response = await fetch('/api/admin-create-student.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.ok) {
+          throw new Error(data.error || 'Não foi possível criar o aluno.');
+        }
+
+        manualStudentForm.reset();
+        setManualStudentMessage('Aluno criado com sucesso.');
+      } catch (error) {
+        setManualStudentMessage(error.message || 'Não foi possível criar o aluno.', true);
+      } finally {
+        manualStudentSubmit.disabled = false;
+        manualStudentSubmit.textContent = 'Criar aluno manualmente';
+      }
+    });
+  </script>
 </body>
 </html>
