@@ -14,6 +14,7 @@ date_default_timezone_set('America/Sao_Paulo');
 use App\Helpers;
 use App\HttpClient;
 use App\MonthlyStudents;
+use App\AttendanceCalls;
 use App\AsaasClient;
 use App\SupabaseClient;
 
@@ -24,6 +25,33 @@ function parse_day_type(string $raw): string
         return 'Emergencial';
     }
     return 'Planejada';
+}
+
+function attendance_day_type_label(string $raw): string
+{
+    $type = strtolower(trim($raw));
+    if ($type === 'emergencial') {
+        return 'Emergencial';
+    }
+    if ($type === 'planejada') {
+        return 'Planejada';
+    }
+    return 'Emergencial';
+}
+
+function attendance_status_label(string $status): string
+{
+    $map = [
+        AttendanceCalls::STATUS_EM_REVISAO => 'Pendente de autorização',
+        AttendanceCalls::STATUS_AUTORIZADA_COBRANCA => 'Pendente',
+        AttendanceCalls::STATUS_REJEITADA => 'Rejeitada',
+        AttendanceCalls::STATUS_ALUNO_MENSALISTA => 'Mensalista',
+        AttendanceCalls::STATUS_BLOQUEADA_JA_PAGA => 'Já paga',
+        AttendanceCalls::STATUS_BLOQUEADA_DUPLICIDADE => 'Cobrança existente',
+        AttendanceCalls::STATUS_ERRO_COBRANCA => 'Erro na cobrança',
+    ];
+    $key = trim($status);
+    return $map[$key] ?? ($key !== '' ? $key : 'Pendente de autorização');
 }
 
 function date_key(?string $value): string
@@ -56,6 +84,19 @@ function normalize_text_key(string $value): string
     }
     $value = preg_replace('/[^A-Z0-9]+/', '', $value) ?? '';
     return trim($value);
+}
+
+function day_use_row_key(string $studentId, string $studentName, string $date): string
+{
+    $studentKey = trim($studentId);
+    if ($studentKey === '') {
+        $studentKey = normalize_text_key($studentName);
+    }
+    $dateKey = date_key($date);
+    if ($dateKey === '') {
+        $dateKey = trim($date);
+    }
+    return $studentKey . '|' . $dateKey;
 }
 
 function parse_single_day_use_date(string $raw): string
@@ -313,6 +354,12 @@ foreach ($payments as $payment) {
         $studentIds[$sid] = true;
     }
 }
+$attendanceCalls = AttendanceCalls::load();
+foreach (array_keys($studentIdsScope) as $sid) {
+    if (trim((string) $sid) !== '') {
+        $studentIds[$sid] = true;
+    }
+}
 if (!empty($studentIds)) {
     $quoted = array_map(static fn($id) => '"' . str_replace('"', '', $id) . '"', array_keys($studentIds));
     $studentsResult = $client->select(
@@ -336,6 +383,7 @@ $paymentStatusByAsaasId = [];
 $rows = [];
 $totalBase = 0.0;
 $totalEffective = 0.0;
+$dayUseKeysWithPayment = [];
 foreach ($payments as $payment) {
     $statusRaw = strtolower(trim((string) ($payment['status'] ?? '')));
     $paidAtRaw = trim((string) ($payment['paid_at'] ?? ''));
@@ -400,6 +448,7 @@ foreach ($payments as $payment) {
         if ($dayUseDate !== '' && $dayUseDate <= $cutoffDate && $baseAmount <= 97.01) {
             $effectiveAmount = 77.00;
         }
+        $dayUseKeysWithPayment[day_use_row_key((string) ($payment['student_id'] ?? ''), $studentName, $dayUseDate)] = true;
 
         $totalBase += $baseAmount;
         $totalEffective += $effectiveAmount;
@@ -419,6 +468,63 @@ foreach ($payments as $payment) {
             'pay_proxy_url' => $payProxyUrl,
         ];
     }
+}
+
+$studentScopeForAttendance = array_fill_keys(array_keys($studentIdsScope), true);
+$studentNameScopeForAttendance = [];
+foreach ($studentScopeForAttendance as $sid => $_) {
+    $studentName = trim((string) ($studentsById[$sid]['name'] ?? ''));
+    $studentKey = normalize_text_key($studentName);
+    if ($studentKey !== '') {
+        $studentNameScopeForAttendance[$studentKey] = true;
+    }
+}
+
+foreach ($attendanceCalls as $call) {
+    if (!is_array($call)) {
+        continue;
+    }
+    $studentId = trim((string) ($call['student_id'] ?? ''));
+    $studentName = trim((string) ($call['student_name'] ?? 'Aluno'));
+    $studentNameKey = normalize_text_key($studentName);
+    $inScope = ($studentId !== '' && isset($studentScopeForAttendance[$studentId]))
+        || ($studentId === '' && $studentNameKey !== '' && isset($studentNameScopeForAttendance[$studentNameKey]));
+    if (!$inScope) {
+        continue;
+    }
+    $attendanceDate = date_key((string) ($call['attendance_date'] ?? ''));
+    if ($attendanceDate === '') {
+        continue;
+    }
+    $rowKey = day_use_row_key($studentId, $studentName, $attendanceDate);
+    if (isset($dayUseKeysWithPayment[$rowKey])) {
+        continue;
+    }
+
+    $typeLabel = attendance_day_type_label((string) ($call['day_use_type'] ?? ''));
+    $baseAmount = $typeLabel === 'Emergencial' ? 97.00 : 77.00;
+    $effectiveAmount = $attendanceDate <= $cutoffDate && $baseAmount <= 97.01 ? 77.00 : $baseAmount;
+    $discountAmount = round((float) ($call['discount_amount'] ?? 0), 2);
+    if ($discountAmount > 0 && $discountAmount < $effectiveAmount) {
+        $effectiveAmount = round($effectiveAmount - $discountAmount, 2);
+    }
+
+    $totalBase += $baseAmount;
+    $totalEffective += $effectiveAmount;
+    $rows[] = [
+        'student_id' => $studentId,
+        'student_name' => $studentName,
+        'date' => $attendanceDate,
+        'type' => $typeLabel,
+        'base_amount' => $baseAmount,
+        'effective_amount' => $effectiveAmount,
+        'status' => attendance_status_label((string) ($call['status'] ?? '')),
+        'status_rank' => 0,
+        'created_at' => (string) ($call['created_at'] ?? ''),
+        'payment_id' => '',
+        'pay_url' => '',
+        'pay_proxy_url' => '',
+    ];
 }
 
 usort($rows, static function (array $a, array $b): int {
@@ -490,6 +596,9 @@ $economy = max(0, $totalBase - $totalEffective);
     .status-badge{display:inline-flex;align-items:center;justify-content:center;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;line-height:1.2;border:1px solid transparent}
     .status-paid{background:#e8f1ff;color:#1e4f9c;border-color:#c9dcff}
     .status-pending{background:#fff1f1;color:#a13a3a;border-color:#f3caca}
+    .status-review{background:#fff7db;color:#6b4e00;border-color:#f4d37a}
+    .status-neutral{background:#eef2f7;color:#334155;border-color:#cbd5e1}
+    .status-error{background:#fee2e2;color:#991b1b;border-color:#fecaca}
     .finance-pay-btn{padding:8px 12px;border-radius:12px;font-size:12px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;min-width:72px}
     .finance-pay-muted{font-size:12px;color:#64748b}
   </style>
@@ -601,10 +710,21 @@ $economy = max(0, $totalBase - $totalEffective);
                     <td>
                       <?php
                         $statusText = (string) ($row['status'] ?? '');
-                        $statusClass = strtolower(trim($statusText)) === 'pago' ? 'status-paid' : 'status-pending';
+                        $statusNormalized = strtolower(trim($statusText));
+                        if ($statusNormalized === 'pago' || $statusNormalized === 'já paga') {
+                            $statusClass = 'status-paid';
+                        } elseif ($statusNormalized === 'pendente') {
+                            $statusClass = 'status-pending';
+                        } elseif ($statusNormalized === 'pendente de autorização') {
+                            $statusClass = 'status-review';
+                        } elseif ($statusNormalized === 'erro na cobrança') {
+                            $statusClass = 'status-error';
+                        } else {
+                            $statusClass = 'status-neutral';
+                        }
                         $payUrl = trim((string) ($row['pay_url'] ?? ''));
                         $payProxyUrl = trim((string) ($row['pay_proxy_url'] ?? ''));
-                        $isPending = strtolower(trim($statusText)) === 'pendente';
+                        $isPending = $statusNormalized === 'pendente';
                       ?>
                       <span class="status-badge <?php echo $statusClass; ?>">
                         <?php echo htmlspecialchars($statusText, ENT_QUOTES, 'UTF-8'); ?>
