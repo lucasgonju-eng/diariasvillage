@@ -331,7 +331,7 @@ foreach ($rows as $row) {
         'base_amount' => $baseAmount,
         'status' => $status !== '' ? $status : '-',
         'billing_type' => $billingType !== '' ? $billingType : '-',
-        'can_manual_settle' => strtoupper($billingType) === 'PIX_MANUAL'
+        'can_manual_settle' => in_array(strtoupper($billingType), ['PIX', 'PIX_MANUAL'], true)
             && in_array(strtolower($status), ['pending', 'pending_asaas', 'overdue', 'awaiting_risk_analysis'], true),
         'paid_at' => $paidAt,
         'created_at' => $createdAt,

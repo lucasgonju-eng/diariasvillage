@@ -57,7 +57,7 @@ assert_contains('endpoint exige observação', $endpoint, 'Informe a observaçã
 assert_contains('endpoint limita observação', $endpoint, '$noteLength > 500', $failures);
 assert_contains('endpoint busca payment por id', $endpoint, "'payments'", $failures);
 assert_contains('endpoint bloqueia pago', $endpoint, 'Esta cobrança já está baixada/paga.', $failures);
-assert_contains('endpoint restringe PIX_MANUAL', $endpoint, "\$billingType !== 'PIX_MANUAL'", $failures);
+assert_contains('endpoint restringe a cobranças PIX', $endpoint, "in_array(\$billingType, ['PIX', 'PIX_MANUAL'], true)", $failures);
 assert_contains('endpoint restringe status pendentes', $endpoint, "['pending', 'pending_asaas', 'overdue', 'awaiting_risk_analysis']", $failures);
 assert_contains('endpoint marca paid', $endpoint, "'status' => 'paid'", $failures);
 assert_contains('endpoint registra paid_at', $endpoint, "'paid_at' => \$settledAt", $failures);
@@ -65,10 +65,10 @@ assert_contains('endpoint auditoria log', $endpoint, 'append_payment_settlement_
 assert_contains('endpoint auditoria observação', $endpoint, "'note' => \$note", $failures);
 assert_contains('endpoint auditoria usuário', $endpoint, "'settled_by' =>", $failures);
 assert_order('endpoint ordem auth/post', $endpoint, 'admin_authenticated', 'Helpers::requirePost();', $failures);
-assert_order('endpoint ordem validação/update', $endpoint, "\$billingType !== 'PIX_MANUAL'", "\$client->update('payments'", $failures);
+assert_order('endpoint ordem validação/update', $endpoint, "in_array(\$billingType, ['PIX', 'PIX_MANUAL'], true)", "\$client->update('payments'", $failures);
 
 assert_contains('cashflow habilita ação explicitamente', $cashflow, "'can_manual_settle' =>", $failures);
-assert_contains('cashflow restringe ação ao PIX_MANUAL', $cashflow, "strtoupper(\$billingType) === 'PIX_MANUAL'", $failures);
+assert_contains('cashflow restringe ação a cobranças PIX', $cashflow, "in_array(strtoupper(\$billingType), ['PIX', 'PIX_MANUAL'], true)", $failures);
 assert_contains('cashflow restringe ação a pendentes', $cashflow, "in_array(strtolower(\$status), ['pending', 'pending_asaas', 'overdue', 'awaiting_risk_analysis'], true)", $failures);
 assert_contains('cashflow bloqueia pendencia_de_cadastro', $cashflow, "'can_manual_settle' => false", $failures);
 

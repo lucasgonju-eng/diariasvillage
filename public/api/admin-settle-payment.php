@@ -68,8 +68,8 @@ $billingType = strtoupper(trim((string) ($payment['billing_type'] ?? '')));
 if ($status === 'paid' || !empty($payment['paid_at'])) {
     Helpers::json(['ok' => false, 'error' => 'Esta cobrança já está baixada/paga.'], 422);
 }
-if ($billingType !== 'PIX_MANUAL') {
-    Helpers::json(['ok' => false, 'error' => 'Baixa manual disponível apenas para cobranças PIX_MANUAL.'], 422);
+if (!in_array($billingType, ['PIX', 'PIX_MANUAL'], true)) {
+    Helpers::json(['ok' => false, 'error' => 'Baixa manual disponível apenas para cobranças PIX pendentes.'], 422);
 }
 if (!in_array($status, ['pending', 'pending_asaas', 'overdue', 'awaiting_risk_analysis'], true)) {
     Helpers::json(['ok' => false, 'error' => 'Status não permite baixa manual.'], 422);
