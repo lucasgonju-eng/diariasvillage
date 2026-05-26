@@ -331,6 +331,8 @@ foreach ($rows as $row) {
         'base_amount' => $baseAmount,
         'status' => $status !== '' ? $status : '-',
         'billing_type' => $billingType !== '' ? $billingType : '-',
+        'can_manual_settle' => strtoupper($billingType) === 'PIX_MANUAL'
+            && in_array(strtolower($status), ['pending', 'pending_asaas', 'overdue', 'awaiting_risk_analysis'], true),
         'paid_at' => $paidAt,
         'created_at' => $createdAt,
     ];
@@ -387,6 +389,7 @@ foreach ($pendencias as $p) {
         'amount' => $amount,
         'status' => $status,
         'billing_type' => $billingType,
+        'can_manual_settle' => false,
         'paid_at' => $paidAt,
         'created_at' => $createdAt,
     ];

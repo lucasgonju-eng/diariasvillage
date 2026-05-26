@@ -719,6 +719,77 @@ function showAdminDiscountInput() {
   });
 }
 
+function showManualSettlementInput(details = {}) {
+  const ui = ensureAdminDialog();
+  ui.title.textContent = 'Dar baixa manual';
+  ui.message.textContent =
+    `Aluno: ${details.student || '-'}\n` +
+    `Data: ${details.date || '-'}\n` +
+    `Valor: ${details.amount || '-'}\n\n` +
+    'Escreva a observação/motivo da baixa. Ex.: PIX recebido na conta Inter.';
+  ui.confirm.textContent = 'Confirmar baixa';
+  ui.cancel.textContent = 'Cancelar';
+  ui.cancel.classList.remove('hidden');
+  if (ui.input) {
+    ui.input.classList.remove('hidden');
+    ui.input.placeholder = 'Ex.: PIX recebido na conta Inter em 26/05';
+    ui.input.value = '';
+    ui.input.removeAttribute('inputmode');
+  }
+  ui.overlay.classList.remove('hidden');
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = (result) => {
+      if (settled) return;
+      settled = true;
+      ui.overlay.classList.add('hidden');
+      ui.confirm.removeEventListener('click', onConfirm);
+      ui.cancel.removeEventListener('click', onCancel);
+      ui.overlay.removeEventListener('click', onOverlayClick);
+      document.removeEventListener('keydown', onKeyDown);
+      if (ui.input) {
+        ui.input.classList.add('hidden');
+        ui.input.placeholder = '';
+        ui.input.setAttribute('inputmode', 'numeric');
+      }
+      resolve(result);
+    };
+    const onConfirm = () => {
+      const value = String(ui.input?.value || '').trim();
+      if (!value) {
+        if (ui.input) {
+          ui.input.placeholder = 'Observação obrigatória';
+          ui.input.focus();
+        }
+        return;
+      }
+      settle({ ok: true, value });
+    };
+    const onCancel = () => settle({ ok: false, value: '' });
+    const onOverlayClick = (event) => {
+      if (event.target === ui.overlay) settle({ ok: false, value: '' });
+    };
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        settle({ ok: false, value: '' });
+        return;
+      }
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        onConfirm();
+      }
+    };
+
+    ui.confirm.addEventListener('click', onConfirm);
+    ui.cancel.addEventListener('click', onCancel);
+    ui.overlay.addEventListener('click', onOverlayClick);
+    document.addEventListener('keydown', onKeyDown);
+    if (ui.input) ui.input.focus();
+  });
+}
+
 function getCashflowDefaultFromDate() {
   const now = new Date();
   const year = now.getFullYear();
@@ -911,13 +982,17 @@ function setCashflowMessage(text, isError = false) {
 function renderCashflowRows(items) {
   if (!cashflowTbody) return;
   if (!items.length) {
-    cashflowTbody.innerHTML = '<tr><td colspan="7">Nenhum registro para os filtros selecionados.</td></tr>';
+    cashflowTbody.innerHTML = '<tr><td colspan="8">Nenhum registro para os filtros selecionados.</td></tr>';
     return;
   }
   cashflowTbody.innerHTML = items
-    .map(
-      (item) => `
-      <tr>
+    .map((item) => {
+      const canManualSettle = item?.source === 'payments' && item?.id && item?.can_manual_settle === true;
+      const action = canManualSettle
+        ? `<button class="btn btn-danger btn-sm js-cashflow-settle" type="button" data-id="${escapeHtml(item.id || '')}" data-student="${escapeHtml(item.student_name || '')}" data-date="${escapeHtml(item.date || '')}" data-amount="${escapeHtml(String(item.amount ?? ''))}">Dar baixa</button>`
+        : '-';
+      return `
+      <tr data-payment-id="${escapeHtml(item.id || '')}">
         <td>${escapeHtml(item.student_name || '-')}</td>
         <td>${formatDateBR(item.date)}</td>
         <td>${escapeHtml(item.day_use_type || '-')}</td>
@@ -925,9 +1000,10 @@ function renderCashflowRows(items) {
         <td>${formatCurrency(item.amount)}</td>
         <td>${escapeHtml(item.status || '-')}</td>
         <td>${escapeHtml(item.billing_type || '-')}</td>
+        <td>${action}</td>
       </tr>
-    `,
-    )
+    `;
+    })
     .join('');
 }
 
@@ -4997,6 +5073,47 @@ if (cashflowClearButton) {
     if (cashflowExcludeStudentInput) cashflowExcludeStudentInput.value = '';
     if (cashflowExcludeTermInput) cashflowExcludeTermInput.value = '';
     loadCashflow();
+  });
+}
+
+if (cashflowTbody) {
+  cashflowTbody.addEventListener('click', async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const button = target.closest('.js-cashflow-settle');
+    if (!(button instanceof HTMLElement)) return;
+    const paymentId = button.getAttribute('data-id') || '';
+    if (!paymentId) return;
+
+    const student = button.getAttribute('data-student') || 'Aluno';
+    const dateLabel = formatDateBR(button.getAttribute('data-date') || '');
+    const amount = formatCurrency(Number(button.getAttribute('data-amount') || 0));
+    const noteResult = await showManualSettlementInput({ student, date: dateLabel, amount });
+    if (!noteResult?.ok) return;
+
+    button.setAttribute('disabled', 'disabled');
+    const originalText = button.textContent;
+    button.textContent = 'Baixando...';
+    setCashflowMessage('Registrando baixa manual...');
+    try {
+      const res = await fetch('/api/admin-settle-payment.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payment_id: paymentId, note: noteResult.value }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        setCashflowMessage(data?.error || 'Falha ao registrar baixa manual.', true);
+        return;
+      }
+      setCashflowMessage(data?.message || 'Baixa manual registrada.');
+      await loadCashflow();
+    } catch {
+      setCashflowMessage('Falha ao registrar baixa manual.', true);
+    } finally {
+      button.removeAttribute('disabled');
+      button.textContent = originalText;
+    }
   });
 }
 

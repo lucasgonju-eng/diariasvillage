@@ -1848,11 +1848,12 @@ if (!empty($exclusionsLog)) {
                 <th>Valor pago</th>
                 <th>Status pagamento</th>
                 <th>Forma pagamento</th>
+                <th>Ação</th>
               </tr>
             </thead>
             <tbody id="cashflow-tbody">
               <tr>
-                <td colspan="7">Clique em "Buscar" para carregar.</td>
+                <td colspan="8">Clique em "Buscar" para carregar.</td>
               </tr>
             </tbody>
             <tfoot>
@@ -1861,6 +1862,7 @@ if (!empty($exclusionsLog)) {
                 <td id="cashflow-total-amount">R$ 0,00</td>
                 <td id="cashflow-total-paid">Pago: R$ 0,00</td>
                 <td id="cashflow-total-count">0 registro(s)</td>
+                <td>-</td>
               </tr>
             </tfoot>
           </table>
@@ -2067,7 +2069,7 @@ if (!empty($exclusionsLog)) {
     window.__monthlyStudents = <?php echo json_encode($monthlyRowsForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
     window.__adminCanApproveAttendance = <?php echo $canAttendanceApprove ? 'true' : 'false'; ?>;
   </script>
-  <script src="/assets/js/admin-dashboard.js?v=72"></script>
+  <script src="/assets/js/admin-dashboard.js?v=73"></script>
   <script>
     (function () {
       function activateTab(name) {
