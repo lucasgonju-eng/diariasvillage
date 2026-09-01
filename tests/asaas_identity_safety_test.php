@@ -71,6 +71,7 @@ if (AsaasCustomerIdentity::isValidCpfOrCnpj('111.111.111-11')) {
 
 test_contains('checkout usa resolvedor de identidade', $contents['checkout'], 'new AsaasCustomerIdentity(', $failures);
 test_contains('checkout bloqueia cobrança existente', $contents['checkout'], "'PAYMENT_ALREADY_EXISTS'", $failures);
+test_contains('checkout considera fila como cobrança aberta', $contents['checkout'], 'status=in.(queued,pending,pending_asaas,overdue,awaiting_risk_analysis)', $failures);
 test_contains('checkout cancela órfã se persistência falhar', $contents['checkout'], '$asaas->deletePayment($createdAsaasPaymentId);', $failures);
 test_not_contains('checkout não altera somente CPF', $contents['checkout'], "updateCustomer(\$guardianData['asaas_customer_id']", $failures);
 test_order('checkout checa idempotência antes de cobrar', $contents['checkout'], "'PAYMENT_ALREADY_EXISTS'", '$asaas->createPayment(', $failures);
