@@ -123,6 +123,11 @@ class AsaasClient
         return $this->http->request('GET', $this->baseUrl . '/customers/' . urlencode($customerId), $this->headers());
     }
 
+    public function deleteCustomer(string $customerId): array
+    {
+        return $this->http->request('DELETE', $this->baseUrl . '/customers/' . urlencode($customerId), $this->headers());
+    }
+
     private function headers(): array
     {
         return [
