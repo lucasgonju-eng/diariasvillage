@@ -13,6 +13,7 @@ date_default_timezone_set('America/Sao_Paulo');
 
 use App\Helpers;
 use App\HttpClient;
+use App\AsaasCustomerIdentity;
 use App\MonthlyStudents;
 use App\SupabaseClient;
 
@@ -33,6 +34,29 @@ function parseDayUseDate(string $date): ?string
         return null;
     }
     return sprintf('%04d-%02d-%02d', $year, $month, $day);
+}
+
+function extractPaymentDates(array $payment): array
+{
+    $dates = [];
+    $primary = trim((string) ($payment['payment_date'] ?? ''));
+    if ($primary !== '') {
+        $time = strtotime($primary);
+        if ($time !== false) {
+            $dates[date('Y-m-d', $time)] = true;
+        }
+    }
+
+    $dailyType = (string) ($payment['daily_type'] ?? '');
+    if (preg_match_all('/\b(\d{2}\/\d{2}\/(?:\d{2}|\d{4}))\b/', $dailyType, $matches)) {
+        foreach ($matches[1] as $rawDate) {
+            $iso = parseDayUseDate($rawDate);
+            if ($iso !== null) {
+                $dates[$iso] = true;
+            }
+        }
+    }
+    return array_keys($dates);
 }
 
 function apiErrorMessage(array $response, string $fallback): string
@@ -81,6 +105,7 @@ try {
     foreach ($charges as $charge) {
         $studentName = trim((string) ($charge['student_name'] ?? ''));
         $studentIdInput = trim((string) ($charge['student_id'] ?? ''));
+        $guardianIdInput = trim((string) ($charge['guardian_id'] ?? ''));
         $guardianName = trim((string) ($charge['guardian_name'] ?? ''));
         $guardianEmail = trim((string) ($charge['guardian_email'] ?? ''));
         $guardianWhatsapp = trim((string) ($charge['guardian_whatsapp'] ?? ''));
@@ -91,6 +116,14 @@ try {
         }
         $dayUseDates = array_values(array_filter(array_map('trim', $dayUseDates)));
 
+        if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $studentIdInput)) {
+            $results[] = [
+                'student_name' => $studentName ?: '(sem nome)',
+                'ok' => false,
+                'error' => 'Selecione o aluno pelo cadastro com matrícula.',
+            ];
+            continue;
+        }
         if ($studentName === '' || $guardianName === '' || $guardianEmail === '') {
             $results[] = [
                 'student_name' => $studentName ?: '(sem nome)',
@@ -116,17 +149,10 @@ try {
             continue;
         }
 
-        if ($studentIdInput !== '') {
-            $studentResult = $client->select(
-                'students',
-                'select=id,name&active=eq.true&id=eq.' . urlencode($studentIdInput) . '&limit=1'
-            );
-        } else {
-            $studentResult = $client->select(
-                'students',
-                'select=id,name&active=eq.true&name=eq.' . urlencode($studentName) . '&limit=1'
-            );
-        }
+        $studentResult = $client->select(
+            'students',
+            'select=id,name&active=eq.true&id=eq.' . rawurlencode($studentIdInput) . '&limit=1'
+        );
         if (!($studentResult['ok'] ?? false)) {
             $results[] = [
                 'student_name' => $studentName,
@@ -136,17 +162,6 @@ try {
             continue;
         }
         $studentRow = $studentResult['data'][0] ?? null;
-        if (!$studentRow || empty($studentRow['id'])) {
-            if ($studentIdInput !== '') {
-                $studentResult = $client->select(
-                    'students',
-                    'select=id,name&active=eq.true&name=eq.' . urlencode($studentName) . '&limit=1'
-                );
-                $studentRow = (($studentResult['ok'] ?? false) && !empty($studentResult['data'][0]))
-                    ? $studentResult['data'][0]
-                    : null;
-            }
-        }
         if (!$studentRow || empty($studentRow['id'])) {
             $results[] = [
                 'student_name' => $studentName,
@@ -227,17 +242,112 @@ try {
         }
 
         $documentDigits = preg_replace('/\D+/', '', $guardianDocument) ?? '';
-        $guardianResult = $client->select('guardians', 'select=*&email=eq.' . urlencode($guardianEmail) . '&limit=1');
-        if (!($guardianResult['ok'] ?? false)) {
-            $results[] = [
-                'student_name' => $studentName,
-                'ok' => false,
-                'error' => apiErrorMessage($guardianResult, 'Falha ao buscar responsável.'),
-            ];
-            continue;
-        }
-        $guardianRow = $guardianResult['data'][0] ?? null;
-        if (!$guardianRow) {
+        $guardianRow = null;
+        if ($guardianIdInput !== '') {
+            if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $guardianIdInput)) {
+                $results[] = [
+                    'student_name' => $studentName,
+                    'ok' => false,
+                    'error' => 'Responsável inválido.',
+                ];
+                continue;
+            }
+            $guardianResult = $client->select(
+                'guardians',
+                'select=*&id=eq.' . rawurlencode($guardianIdInput)
+                    . '&student_id=eq.' . rawurlencode((string) $studentRow['id'])
+                    . '&limit=1'
+            );
+            $guardianRow = (($guardianResult['ok'] ?? false) && !empty($guardianResult['data'][0]))
+                ? $guardianResult['data'][0]
+                : null;
+            if (!$guardianRow) {
+                $results[] = [
+                    'student_name' => $studentName,
+                    'ok' => false,
+                    'error' => 'O responsável selecionado não pertence a este aluno.',
+                ];
+                continue;
+            }
+
+            $storedDocument = AsaasCustomerIdentity::normalizeDocument(
+                (string) ($guardianRow['parent_document'] ?? '')
+            );
+            if (
+                strcasecmp(trim((string) ($guardianRow['email'] ?? '')), $guardianEmail) !== 0
+                || ($documentDigits !== '' && $storedDocument !== $documentDigits)
+            ) {
+                $results[] = [
+                    'student_name' => $studentName,
+                    'ok' => false,
+                    'error' => 'Os dados informados não correspondem ao responsável selecionado.',
+                ];
+                continue;
+            }
+        } else {
+            if (!AsaasCustomerIdentity::isValidCpfOrCnpj($documentDigits)) {
+                $results[] = [
+                    'student_name' => $studentName,
+                    'ok' => false,
+                    'error' => 'Informe um CPF ou CNPJ válido para o novo responsável.',
+                ];
+                continue;
+            }
+            $existingGuardian = $client->select(
+                'guardians',
+                'select=id&student_id=eq.' . rawurlencode((string) $studentRow['id'])
+                    . '&email=eq.' . rawurlencode($guardianEmail)
+                    . '&limit=1'
+            );
+            if (($existingGuardian['ok'] ?? false) && !empty($existingGuardian['data'])) {
+                $results[] = [
+                    'student_name' => $studentName,
+                    'ok' => false,
+                    'error' => 'Este responsável já existe para o aluno. Selecione-o na lista.',
+                ];
+                continue;
+            }
+
+            $documentGuardians = $client->select(
+                'guardians',
+                'select=id,parent_name,email,parent_document&limit=10000'
+            );
+            if (!($documentGuardians['ok'] ?? false)) {
+                $results[] = [
+                    'student_name' => $studentName,
+                    'ok' => false,
+                    'error' => apiErrorMessage($documentGuardians, 'Falha ao validar o CPF/CNPJ do responsável.'),
+                ];
+                continue;
+            }
+            $documentConflict = false;
+            foreach (($documentGuardians['data'] ?? []) as $registeredGuardian) {
+                if (
+                    AsaasCustomerIdentity::normalizeDocument(
+                        (string) ($registeredGuardian['parent_document'] ?? '')
+                    ) !== $documentDigits
+                ) {
+                    continue;
+                }
+                if (!AsaasCustomerIdentity::matchesLocalGuardian(
+                    (array) $registeredGuardian,
+                    $guardianName,
+                    $guardianEmail,
+                    $documentDigits
+                )) {
+                    $documentConflict = true;
+                    break;
+                }
+            }
+            if ($documentConflict) {
+                $results[] = [
+                    'student_name' => $studentName,
+                    'ok' => false,
+                    'error' => 'O CPF/CNPJ já está associado a outra identidade. Revise o cadastro.',
+                ];
+                continue;
+            }
+
             $passwordHash = password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT);
             $insertGuardian = $client->insert('guardians', [[
                 'student_id' => $studentRow['id'],
@@ -256,20 +366,6 @@ try {
                 continue;
             }
             $guardianRow = $insertGuardian['data'][0] ?? null;
-        } else {
-            $updateGuardian = $client->update('guardians', 'id=eq.' . urlencode((string) $guardianRow['id']), [
-                'parent_name' => $guardianName,
-                'parent_phone' => $guardianWhatsapp !== '' ? $guardianWhatsapp : null,
-                'parent_document' => $documentDigits !== '' ? $documentDigits : null,
-            ]);
-            if (!($updateGuardian['ok'] ?? false)) {
-                $results[] = [
-                    'student_name' => $studentName,
-                    'ok' => false,
-                    'error' => apiErrorMessage($updateGuardian, 'Falha ao atualizar responsável.'),
-                ];
-                continue;
-            }
         }
 
         if (!$guardianRow || empty($guardianRow['id'])) {
@@ -295,6 +391,44 @@ try {
         $dailyType = $dailyBaseType . '|' . implode(', ', $dayUseDatesForPayment);
         $paymentDateValue = $monthlyOverflowDates[0] ?? $today;
 
+        $openPaymentsResult = $client->select(
+            'payments',
+            'select=id,payment_date,daily_type,status'
+                . '&student_id=eq.' . rawurlencode((string) $studentRow['id'])
+                . '&paid_at=is.null'
+                . '&status=in.(queued,pending,pending_asaas,overdue,awaiting_risk_analysis)'
+                . '&limit=1000'
+        );
+        if (!($openPaymentsResult['ok'] ?? false)) {
+            $results[] = [
+                'student_name' => $studentName,
+                'ok' => false,
+                'error' => apiErrorMessage($openPaymentsResult, 'Falha ao validar cobranças existentes.'),
+            ];
+            continue;
+        }
+        $requestedDateMap = array_fill_keys($monthlyOverflowDates, true);
+        $duplicateDates = [];
+        foreach (($openPaymentsResult['data'] ?? []) as $existingPayment) {
+            foreach (extractPaymentDates((array) $existingPayment) as $existingDate) {
+                if (isset($requestedDateMap[$existingDate])) {
+                    $duplicateDates[$existingDate] = true;
+                }
+            }
+        }
+        if ($duplicateDates) {
+            $results[] = [
+                'student_name' => $studentName,
+                'ok' => false,
+                'error' => 'Já existe cobrança aberta para: ' . implode(', ', array_keys($duplicateDates)) . '.',
+            ];
+            continue;
+        }
+
+        $idempotencyDates = $monthlyOverflowDates;
+        sort($idempotencyDates);
+        $idempotencyKey = 'manual-dayuse:' . (string) $studentRow['id'] . ':' . implode(',', $idempotencyDates);
+
         // Apenas salva localmente em fila para aparecer na aba Inadimplentes.
         $insertPayment = $client->insert('payments', [[
             'guardian_id' => $guardianRow['id'],
@@ -305,6 +439,7 @@ try {
             'status' => 'queued',
             'billing_type' => 'PIX_MANUAL_QUEUE',
             'asaas_payment_id' => null,
+            'idempotency_key' => $idempotencyKey,
         ]]);
         $paymentRow = $insertPayment['data'][0] ?? null;
         if (!($insertPayment['ok'] ?? false) || !$paymentRow) {

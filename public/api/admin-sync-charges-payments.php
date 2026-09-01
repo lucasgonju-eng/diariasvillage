@@ -19,6 +19,7 @@ if (!$bootstrapLoaded) {
 }
 
 use App\AsaasClient;
+use App\AsaasCustomerIdentity;
 use App\Helpers;
 use App\HttpClient;
 use App\SupabaseClient;
@@ -72,6 +73,56 @@ function normalize_email(string $value): string
         return mb_strtolower($value, 'UTF-8');
     }
     return strtolower($value);
+}
+
+function find_exact_customer_ids(
+    AsaasClient $asaas,
+    string $guardianName,
+    string $guardianEmail,
+    string $guardianCpf
+): array {
+    if ($guardianName === '' || $guardianCpf === '') {
+        return [];
+    }
+
+    $cpfResponse = $asaas->findCustomersByCpfCnpj($guardianCpf);
+    $cpfRows = ($cpfResponse['ok'] ?? false) && is_array($cpfResponse['data']['data'] ?? null)
+        ? $cpfResponse['data']['data']
+        : [];
+    $emailIds = null;
+    if ($guardianEmail !== '') {
+        $emailResponse = $asaas->findCustomersByEmail($guardianEmail);
+        $emailRows = ($emailResponse['ok'] ?? false) && is_array($emailResponse['data']['data'] ?? null)
+            ? $emailResponse['data']['data']
+            : [];
+        $emailIds = [];
+        foreach ($emailRows as $customer) {
+            $id = trim((string) ($customer['id'] ?? ''));
+            if ($id !== '') {
+                $emailIds[$id] = true;
+            }
+        }
+    }
+
+    $ids = [];
+    foreach ($cpfRows as $customer) {
+        if (!is_array($customer)) {
+            continue;
+        }
+        $id = trim((string) ($customer['id'] ?? ''));
+        if ($id === '' || ($emailIds !== null && !isset($emailIds[$id]))) {
+            continue;
+        }
+        if (AsaasCustomerIdentity::matchesRemoteCustomer(
+            $customer,
+            $guardianName,
+            $guardianEmail,
+            $guardianCpf
+        )) {
+            $ids[$id] = true;
+        }
+    }
+    return $ids;
 }
 
 function to_iso_date(?string $value): string
@@ -266,7 +317,7 @@ function detect_duplicate_unpaid_payments(SupabaseClient $client): array
 {
     $result = $client->select(
         'payments',
-        'select=id,student_id,payment_date,daily_type,amount,status,created_at,students(name),guardians(parent_name,email)'
+        'select=id,student_id,payment_date,daily_type,amount,status,created_at,asaas_payment_id,students(name),guardians(parent_name,email)'
         . '&status=in.(pending,pending_asaas,queued)&limit=10000'
     );
     $rows = ($result['ok'] ?? false) && is_array($result['data'] ?? null) ? $result['data'] : [];
@@ -298,6 +349,7 @@ function detect_duplicate_unpaid_payments(SupabaseClient $client): array
             'status' => trim((string) ($row['status'] ?? '')),
             'created_at' => trim((string) ($row['created_at'] ?? '')),
             'daily_type' => trim((string) ($row['daily_type'] ?? '')),
+            'asaas_payment_id' => trim((string) ($row['asaas_payment_id'] ?? '')),
         ];
     }
 
@@ -325,6 +377,7 @@ function detect_duplicate_unpaid_payments(SupabaseClient $client): array
                 'remove_created_at' => $extra['created_at'],
                 'remove_amount' => (float) ($extra['amount'] ?? 0),
                 'remove_status' => (string) ($extra['status'] ?? ''),
+                'remove_asaas_payment_id' => (string) ($extra['asaas_payment_id'] ?? ''),
             ];
         }
     }
@@ -421,6 +474,7 @@ try {
         'pendencias_paid_updated' => 0,
         'pendencias_unlinked' => 0,
         'pendencias_removed_no_charge' => 0,
+        'identity_conflicts_blocked' => 0,
         'duplicate_dayuse_detected' => 0,
         'pendencias_removed_duplicate_dayuse' => 0,
         'pendencias_remove_duplicate_failed' => 0,
@@ -483,6 +537,32 @@ try {
             if ($removePaymentId === '') {
                 continue;
             }
+            $removeAsaasPaymentId = trim((string) ($duplicate['remove_asaas_payment_id'] ?? ''));
+            if ($removeAsaasPaymentId !== '') {
+                $remotePayment = $asaas->getPayment($removeAsaasPaymentId);
+                $remoteData = ($remotePayment['ok'] ?? false) && is_array($remotePayment['data'] ?? null)
+                    ? $remotePayment['data']
+                    : null;
+                if (!is_array($remoteData)) {
+                    $summary['duplicate_payments_remove_failed']++;
+                    continue;
+                }
+                $remoteStatus = (string) ($remoteData['status'] ?? '');
+                if (asaas_status_is_paid($remoteStatus)) {
+                    $summary['duplicate_payments_remove_failed']++;
+                    continue;
+                }
+                if (asaas_status_is_open($remoteStatus)) {
+                    $remoteDelete = $asaas->deletePayment($removeAsaasPaymentId);
+                    if (!($remoteDelete['ok'] ?? false)) {
+                        $summary['duplicate_payments_remove_failed']++;
+                        continue;
+                    }
+                } elseif (!asaas_status_is_canceled($remoteStatus)) {
+                    $summary['duplicate_payments_remove_failed']++;
+                    continue;
+                }
+            }
             $delete = $client->delete('payments', 'id=eq.' . urlencode($removePaymentId) . '&status=in.(pending,pending_asaas,queued)');
             if ($delete['ok'] ?? false) {
                 $summary['duplicate_payments_removed']++;
@@ -506,12 +586,14 @@ try {
 
     $paymentsResult = $client->select(
         'payments',
-        'select=id,status,paid_at,asaas_payment_id&asaas_payment_id=not.is.null&limit=5000'
+        'select=id,status,paid_at,asaas_payment_id,guardians(parent_name,email,parent_document)'
+            . '&asaas_payment_id=not.is.null&limit=5000'
     );
     $payments = ($paymentsResult['ok'] ?? false) && is_array($paymentsResult['data'] ?? null)
         ? $paymentsResult['data']
         : [];
 
+    $paymentCustomerCache = [];
     foreach ($payments as $payment) {
         $summary['payments_checked']++;
         $paymentId = trim((string) ($payment['id'] ?? ''));
@@ -526,6 +608,29 @@ try {
             // Não cancelar localmente quando houver falha de consulta.
             // Em instabilidade de rede/Asaas, o status local deve ser preservado.
             $summary['payments_not_found']++;
+            continue;
+        }
+
+        $customerId = trim((string) ($asaasData['customer'] ?? ''));
+        if ($customerId !== '' && !array_key_exists($customerId, $paymentCustomerCache)) {
+            $customerResponse = $asaas->getCustomer($customerId);
+            $paymentCustomerCache[$customerId] = (($customerResponse['ok'] ?? false)
+                && is_array($customerResponse['data'] ?? null))
+                ? $customerResponse['data']
+                : null;
+        }
+        $customer = $customerId !== '' ? ($paymentCustomerCache[$customerId] ?? null) : null;
+        $guardian = is_array($payment['guardians'] ?? null) ? $payment['guardians'] : [];
+        if (
+            !is_array($customer)
+            || !AsaasCustomerIdentity::matchesRemoteCustomer(
+                $customer,
+                (string) ($guardian['parent_name'] ?? ''),
+                (string) ($guardian['email'] ?? ''),
+                (string) ($guardian['parent_document'] ?? '')
+            )
+        ) {
+            $summary['identity_conflicts_blocked']++;
             continue;
         }
 
@@ -584,7 +689,8 @@ try {
         $asaasId = trim((string) ($pendencia['asaas_payment_id'] ?? ''));
         $invoiceUrl = trim((string) ($pendencia['asaas_invoice_url'] ?? ''));
         $guardianCpf = normalize_digits((string) ($pendencia['guardian_cpf'] ?? ''));
-        $guardianEmail = trim((string) ($pendencia['guardian_email'] ?? ''));
+        $guardianEmail = normalize_email((string) ($pendencia['guardian_email'] ?? ''));
+        $guardianName = trim((string) ($pendencia['guardian_name'] ?? ''));
         $paymentDateRaw = trim((string) ($pendencia['payment_date'] ?? ''));
         $paymentDate = $paymentDateRaw !== '' ? date('Y-m-d', strtotime($paymentDateRaw)) : '';
         if ($pendenciaId === '') {
@@ -606,30 +712,15 @@ try {
             $paymentsPool = array_merge($paymentsPool, $list);
         }
 
-        $customerIds = [];
-        if ($guardianCpf !== '') {
-            $customersResponse = $asaas->findCustomersByCpfCnpj($guardianCpf);
-            $customers = ($customersResponse['ok'] ?? false) && is_array($customersResponse['data']['data'] ?? null)
-                ? $customersResponse['data']['data']
-                : [];
-            foreach ($customers as $customer) {
-                $cid = trim((string) ($customer['id'] ?? ''));
-                if ($cid !== '') {
-                    $customerIds[$cid] = true;
-                }
-            }
-        }
-        if ($guardianEmail !== '') {
-            $customersResponse = $asaas->findCustomersByEmail($guardianEmail);
-            $customers = ($customersResponse['ok'] ?? false) && is_array($customersResponse['data']['data'] ?? null)
-                ? $customersResponse['data']['data']
-                : [];
-            foreach ($customers as $customer) {
-                $cid = trim((string) ($customer['id'] ?? ''));
-                if ($cid !== '') {
-                    $customerIds[$cid] = true;
-                }
-            }
+        $customerIds = find_exact_customer_ids(
+            $asaas,
+            $guardianName,
+            $guardianEmail,
+            $guardianCpf
+        );
+        if (count($customerIds) !== 1) {
+            $summary['identity_conflicts_blocked']++;
+            continue;
         }
 
         foreach (array_keys($customerIds) as $customerId) {
@@ -641,6 +732,10 @@ try {
         }
 
         $paymentsPool = unique_payments_by_id($paymentsPool);
+        $paymentsPool = array_values(array_filter(
+            $paymentsPool,
+            static fn(array $payment): bool => isset($customerIds[(string) ($payment['customer'] ?? '')])
+        ));
 
         $openCandidates = [];
         $paidCandidates = [];

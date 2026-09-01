@@ -11,6 +11,7 @@ foreach ($bootstrapCandidates as $bootstrapFile) {
 }
 
 use App\AsaasClient;
+use App\AsaasCustomerIdentity;
 use App\Helpers;
 use App\HttpClient;
 use App\SupabaseClient;
@@ -36,6 +37,51 @@ function pick_non_empty(array $arr, array $keys): string
     return '';
 }
 
+function find_customers_by_exact_identity(
+    AsaasClient $asaas,
+    string $name,
+    string $email,
+    string $cpf
+): array {
+    if ($name === '' || $cpf === '') {
+        return [];
+    }
+
+    $byCpfResponse = $asaas->findCustomersByCpfCnpj($cpf);
+    $byCpfRows = ($byCpfResponse['ok'] ?? false) && is_array($byCpfResponse['data']['data'] ?? null)
+        ? $byCpfResponse['data']['data']
+        : [];
+    $byEmailIds = null;
+    if ($email !== '') {
+        $byEmailResponse = $asaas->findCustomersByEmail($email);
+        $byEmailRows = ($byEmailResponse['ok'] ?? false) && is_array($byEmailResponse['data']['data'] ?? null)
+            ? $byEmailResponse['data']['data']
+            : [];
+        $byEmailIds = [];
+        foreach ($byEmailRows as $customer) {
+            $id = trim((string) ($customer['id'] ?? ''));
+            if ($id !== '') {
+                $byEmailIds[$id] = true;
+            }
+        }
+    }
+
+    $matches = [];
+    foreach ($byCpfRows as $customer) {
+        if (!is_array($customer)) {
+            continue;
+        }
+        $id = trim((string) ($customer['id'] ?? ''));
+        if ($id === '' || ($byEmailIds !== null && !isset($byEmailIds[$id]))) {
+            continue;
+        }
+        if (AsaasCustomerIdentity::matchesRemoteCustomer($customer, $name, $email, $cpf)) {
+            $matches[$id] = $customer;
+        }
+    }
+    return $matches;
+}
+
 if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
     Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
 }
@@ -54,12 +100,14 @@ $summary = [
     'asaas_paid_imported_payments' => 0,
     'asaas_paid_imported_pendencias' => 0,
     'asaas_paid_unmapped' => 0,
+    'asaas_identity_conflicts_blocked' => 0,
 ];
 
 // 1) Promove para pago itens locais já vinculados.
 $paymentsResult = $client->select(
     'payments',
-    'select=id,status,paid_at,asaas_payment_id&status=neq.paid&asaas_payment_id=not.is.null&limit=5000'
+    'select=id,status,paid_at,asaas_payment_id,guardians(parent_name,email,parent_document)'
+        . '&status=neq.paid&asaas_payment_id=not.is.null&limit=5000'
 );
 $payments = ($paymentsResult['ok'] ?? false) && is_array($paymentsResult['data'] ?? null) ? $paymentsResult['data'] : [];
 foreach ($payments as $payment) {
@@ -77,6 +125,27 @@ foreach ($payments as $payment) {
     if (!is_paid_status((string) ($asaasData['status'] ?? ''))) {
         continue;
     }
+    $guardianIdentity = is_array($payment['guardians'] ?? null) ? $payment['guardians'] : [];
+    $remoteCustomerId = trim((string) ($asaasData['customer'] ?? ''));
+    $remoteCustomerResponse = $remoteCustomerId !== ''
+        ? $asaas->getCustomer($remoteCustomerId)
+        : ['ok' => false];
+    $remoteCustomer = ($remoteCustomerResponse['ok'] ?? false)
+        && is_array($remoteCustomerResponse['data'] ?? null)
+        ? $remoteCustomerResponse['data']
+        : null;
+    if (
+        !is_array($remoteCustomer)
+        || !AsaasCustomerIdentity::matchesRemoteCustomer(
+            $remoteCustomer,
+            (string) ($guardianIdentity['parent_name'] ?? ''),
+            (string) ($guardianIdentity['email'] ?? ''),
+            (string) ($guardianIdentity['parent_document'] ?? '')
+        )
+    ) {
+        $summary['asaas_identity_conflicts_blocked']++;
+        continue;
+    }
     $update = $client->update('payments', 'id=eq.' . urlencode($paymentId), [
         'status' => 'paid',
         'paid_at' => date('c'),
@@ -89,7 +158,7 @@ foreach ($payments as $payment) {
 // 2) Promove pendências locais já vinculadas.
 $pendenciasResult = $client->select(
     'pendencia_de_cadastro',
-    'select=id,paid_at,payment_date,guardian_cpf,guardian_email,asaas_payment_id,asaas_invoice_url&paid_at=is.null&limit=5000'
+    'select=id,paid_at,payment_date,guardian_name,guardian_cpf,guardian_email,asaas_payment_id,asaas_invoice_url&paid_at=is.null&limit=5000'
 );
 $pendencias = ($pendenciasResult['ok'] ?? false) && is_array($pendenciasResult['data'] ?? null) ? $pendenciasResult['data'] : [];
 foreach ($pendencias as $pendencia) {
@@ -99,6 +168,9 @@ foreach ($pendencias as $pendencia) {
     $invoiceUrl = trim((string) ($pendencia['asaas_invoice_url'] ?? ''));
     $paymentDateRaw = trim((string) ($pendencia['payment_date'] ?? ''));
     $paymentDate = $paymentDateRaw !== '' ? date('Y-m-d', strtotime($paymentDateRaw)) : '';
+    $guardianName = trim((string) ($pendencia['guardian_name'] ?? ''));
+    $guardianCpf = normalize_digits((string) ($pendencia['guardian_cpf'] ?? ''));
+    $guardianEmail = strtolower(trim((string) ($pendencia['guardian_email'] ?? '')));
     $candidate = null;
 
     if ($asaasPaymentId !== '') {
@@ -111,27 +183,37 @@ foreach ($pendencias as $pendencia) {
         $candidate = $list[0] ?? null;
     }
 
+    if (is_array($candidate)) {
+        $candidateCustomerId = trim((string) ($candidate['customer'] ?? ''));
+        $candidateCustomerResponse = $candidateCustomerId !== ''
+            ? $asaas->getCustomer($candidateCustomerId)
+            : ['ok' => false];
+        $candidateCustomer = ($candidateCustomerResponse['ok'] ?? false)
+            && is_array($candidateCustomerResponse['data'] ?? null)
+            ? $candidateCustomerResponse['data']
+            : null;
+        if (
+            !is_array($candidateCustomer)
+            || !AsaasCustomerIdentity::matchesRemoteCustomer(
+                $candidateCustomer,
+                $guardianName,
+                $guardianEmail,
+                $guardianCpf
+            )
+        ) {
+            $candidate = null;
+            $summary['asaas_identity_conflicts_blocked']++;
+        }
+    }
+
     if (!is_array($candidate)) {
         $paymentsPool = [];
-        $guardianCpf = normalize_digits((string) ($pendencia['guardian_cpf'] ?? ''));
-        $guardianEmail = trim((string) ($pendencia['guardian_email'] ?? ''));
-        $customerIds = [];
-        if ($guardianCpf !== '') {
-            $res = $asaas->findCustomersByCpfCnpj($guardianCpf);
-            $customers = ($res['ok'] ?? false) && is_array($res['data']['data'] ?? null) ? $res['data']['data'] : [];
-            foreach ($customers as $customer) {
-                $cid = trim((string) ($customer['id'] ?? ''));
-                if ($cid !== '') $customerIds[$cid] = true;
-            }
-        }
-        if ($guardianEmail !== '') {
-            $res = $asaas->findCustomersByEmail($guardianEmail);
-            $customers = ($res['ok'] ?? false) && is_array($res['data']['data'] ?? null) ? $res['data']['data'] : [];
-            foreach ($customers as $customer) {
-                $cid = trim((string) ($customer['id'] ?? ''));
-                if ($cid !== '') $customerIds[$cid] = true;
-            }
-        }
+        $customerIds = find_customers_by_exact_identity(
+            $asaas,
+            $guardianName,
+            $guardianEmail,
+            $guardianCpf
+        );
         foreach (array_keys($customerIds) as $customerId) {
             $res = $asaas->listPaymentsByCustomer($customerId, 100, 0);
             $list = ($res['ok'] ?? false) && is_array($res['data']['data'] ?? null) ? $res['data']['data'] : [];
@@ -206,14 +288,46 @@ for ($page = 0; $page < 40; $page++) {
 $summary['asaas_paid_found'] = count($paidPayments);
 
 $customerCache = [];
+$guardianIdentityResult = $client->select(
+    'guardians',
+    'select=id,student_id,parent_name,email,parent_document,asaas_customer_id&limit=10000'
+);
+$guardianIdentityRows = ($guardianIdentityResult['ok'] ?? false)
+    && is_array($guardianIdentityResult['data'] ?? null)
+    ? $guardianIdentityResult['data']
+    : [];
 foreach ($paidPayments as $asaasPaymentId => $payment) {
+    $paymentCustomerId = trim((string) ($payment['customer'] ?? ''));
+    if ($paymentCustomerId !== '' && !array_key_exists($paymentCustomerId, $customerCache)) {
+        $customerResponse = $asaas->getCustomer($paymentCustomerId);
+        $customerCache[$paymentCustomerId] = (($customerResponse['ok'] ?? false)
+            && is_array($customerResponse['data'] ?? null))
+            ? $customerResponse['data']
+            : null;
+    }
+    $paymentCustomer = $paymentCustomerId !== '' ? ($customerCache[$paymentCustomerId] ?? null) : null;
+
     // a) Já existe em payments: só confirma como pago.
     $existingPayment = $client->select(
         'payments',
-        'select=id,status,paid_at&asaas_payment_id=eq.' . urlencode($asaasPaymentId) . '&limit=1'
+        'select=id,status,paid_at,guardians(parent_name,email,parent_document)'
+            . '&asaas_payment_id=eq.' . urlencode($asaasPaymentId) . '&limit=1'
     );
     $existingRow = $existingPayment['data'][0] ?? null;
     if ($existingRow) {
+        $existingGuardian = is_array($existingRow['guardians'] ?? null) ? $existingRow['guardians'] : [];
+        if (
+            !is_array($paymentCustomer)
+            || !AsaasCustomerIdentity::matchesRemoteCustomer(
+                $paymentCustomer,
+                (string) ($existingGuardian['parent_name'] ?? ''),
+                (string) ($existingGuardian['email'] ?? ''),
+                (string) ($existingGuardian['parent_document'] ?? '')
+            )
+        ) {
+            $summary['asaas_identity_conflicts_blocked']++;
+            continue;
+        }
         if (($existingRow['status'] ?? '') !== 'paid' || empty($existingRow['paid_at'])) {
             $paidAtRaw = pick_non_empty($payment, ['clientPaymentDate', 'paymentDate', 'confirmedDate']);
             $paidAt = $paidAtRaw !== '' ? date('c', strtotime($paidAtRaw)) : date('c');
@@ -231,10 +345,23 @@ foreach ($paidPayments as $asaasPaymentId => $payment) {
     // b) Já existe pendência desse asaas id: marca paga.
     $existingPend = $client->select(
         'pendencia_de_cadastro',
-        'select=id,paid_at&asaas_payment_id=eq.' . urlencode($asaasPaymentId) . '&limit=1'
+        'select=id,paid_at,guardian_name,guardian_email,guardian_cpf'
+            . '&asaas_payment_id=eq.' . urlencode($asaasPaymentId) . '&limit=1'
     );
     $pendRow = $existingPend['data'][0] ?? null;
     if ($pendRow) {
+        if (
+            !is_array($paymentCustomer)
+            || !AsaasCustomerIdentity::matchesRemoteCustomer(
+                $paymentCustomer,
+                (string) ($pendRow['guardian_name'] ?? ''),
+                (string) ($pendRow['guardian_email'] ?? ''),
+                (string) ($pendRow['guardian_cpf'] ?? '')
+            )
+        ) {
+            $summary['asaas_identity_conflicts_blocked']++;
+            continue;
+        }
         if (empty($pendRow['paid_at'])) {
             $paidAtRaw = pick_non_empty($payment, ['clientPaymentDate', 'paymentDate', 'confirmedDate']);
             $paidAt = $paidAtRaw !== '' ? date('c', strtotime($paidAtRaw)) : date('c');
@@ -250,18 +377,10 @@ foreach ($paidPayments as $asaasPaymentId => $payment) {
         continue;
     }
 
-    // c) Tenta mapear responsável/aluno.
+    // c) Mapeia responsável/aluno somente por identidade composta exata.
     $customerId = trim((string) ($payment['customer'] ?? ''));
     $guardian = null;
     $customer = null;
-
-    if ($customerId !== '') {
-        $guardianRes = $client->select(
-            'guardians',
-            'select=id,student_id,email,parent_document&asaas_customer_id=eq.' . urlencode($customerId) . '&limit=1'
-        );
-        $guardian = $guardianRes['data'][0] ?? null;
-    }
 
     if ($customerId !== '' && !array_key_exists($customerId, $customerCache)) {
         $customerRes = $asaas->getCustomer($customerId);
@@ -273,34 +392,42 @@ foreach ($paidPayments as $asaasPaymentId => $payment) {
         $customer = $customerCache[$customerId] ?? null;
     }
 
-    if (!$guardian && is_array($customer)) {
-        $cpf = normalize_digits((string) ($customer['cpfCnpj'] ?? ''));
-        $email = trim((string) ($customer['email'] ?? ''));
-        if ($cpf !== '') {
-            $guardianRes = $client->select(
-                'guardians',
-                'select=id,student_id,email,parent_document&parent_document=eq.' . urlencode($cpf) . '&limit=1'
-            );
-            $guardian = $guardianRes['data'][0] ?? null;
-            if (!$guardian) {
-                $guardianRes = $client->select(
-                    'guardians',
-                    'select=id,student_id,email,parent_document&parent_document=ilike.' . urlencode('%' . $cpf . '%') . '&limit=1'
-                );
-                $guardian = $guardianRes['data'][0] ?? null;
+    if (is_array($customer)) {
+        $identityMatches = [];
+        foreach ($guardianIdentityRows as $guardianCandidate) {
+            if (!is_array($guardianCandidate)) {
+                continue;
             }
+            if (!AsaasCustomerIdentity::matchesRemoteCustomer(
+                $customer,
+                (string) ($guardianCandidate['parent_name'] ?? ''),
+                (string) ($guardianCandidate['email'] ?? ''),
+                (string) ($guardianCandidate['parent_document'] ?? '')
+            )) {
+                continue;
+            }
+            $linkedCustomerId = trim((string) ($guardianCandidate['asaas_customer_id'] ?? ''));
+            if ($linkedCustomerId !== '' && $linkedCustomerId !== $customerId) {
+                continue;
+            }
+            $identityMatches[] = $guardianCandidate;
         }
-        if (!$guardian && $email !== '') {
-            $guardianRes = $client->select(
-                'guardians',
-                'select=id,student_id,email,parent_document&email=eq.' . urlencode($email) . '&limit=1'
-            );
-            $guardian = $guardianRes['data'][0] ?? null;
-        }
-        if ($guardian && $customerId !== '') {
-            $client->update('guardians', 'id=eq.' . urlencode((string) $guardian['id']), [
-                'asaas_customer_id' => $customerId,
-            ]);
+
+        if (count($identityMatches) === 1) {
+            $guardian = $identityMatches[0];
+            if (trim((string) ($guardian['asaas_customer_id'] ?? '')) === '') {
+                $linkResult = $client->update(
+                    'guardians',
+                    'id=eq.' . urlencode((string) $guardian['id']) . '&asaas_customer_id=is.null',
+                    ['asaas_customer_id' => $customerId]
+                );
+                if (!($linkResult['ok'] ?? false) || empty($linkResult['data'][0])) {
+                    $guardian = null;
+                    $summary['asaas_identity_conflicts_blocked']++;
+                }
+            }
+        } else {
+            $summary['asaas_identity_conflicts_blocked']++;
         }
     }
 

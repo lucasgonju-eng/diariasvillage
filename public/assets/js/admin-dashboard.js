@@ -1530,8 +1530,11 @@ async function loadAsaasData(force = false) {
   }
 }
 
-async function addChargeItem(studentName) {
-  if (!studentName || selectedStudents.has(studentName)) return;
+async function addChargeItem(studentRecord) {
+  const studentName = String(studentRecord?.name || '').trim();
+  if (!studentName || !studentRecord?.id) return;
+  const studentKey = studentRecord?.id ? String(studentRecord.id) : studentName;
+  if (selectedStudents.has(studentKey)) return;
   const monthlyPlan = getMonthlyPlanForStudent(studentName);
   if (monthlyPlan && Number(monthlyPlan.weekly_days || 0) > 0) {
     await showAdminAlert(
@@ -1539,13 +1542,13 @@ async function addChargeItem(studentName) {
       { title: 'Atenção: aluno mensalista' },
     );
   }
-  selectedStudents.add(studentName);
-  const studentRecord = getStudentByName(studentName);
+  selectedStudents.add(studentKey);
 
   const wrapper = document.createElement('div');
   wrapper.className = 'charge-item';
   wrapper.dataset.student = studentName;
   wrapper.dataset.studentId = studentRecord?.id ? String(studentRecord.id) : '';
+  wrapper.dataset.guardianId = '';
   wrapper.innerHTML = `
     <div class="charge-header">
       <strong>Aluno: ${studentName}</strong>
@@ -1590,7 +1593,7 @@ async function addChargeItem(studentName) {
   `;
 
   wrapper.querySelector('.charge-header button').addEventListener('click', () => {
-    selectedStudents.delete(studentName);
+    selectedStudents.delete(studentKey);
     wrapper.remove();
   });
 
@@ -1653,38 +1656,45 @@ async function addChargeItem(studentName) {
   function bindGuardianSelector(guardians) {
     if (!selector) return;
     const list = Array.isArray(guardians) ? guardians : [];
-    selector.innerHTML = '<option value="">Digite os dados manualmente</option>';
-    list.forEach((guardian, index) => {
+    selector.innerHTML = '<option value="">Selecione ou digite os dados manualmente</option>';
+    list.forEach((guardian) => {
       const option = document.createElement('option');
       const labelName = guardian.parent_name || 'Sem nome';
       const labelEmail = guardian.email || 'sem e-mail';
-      option.value = String(index);
+      option.value = String(guardian.id || '');
       option.textContent = `${labelName} (${labelEmail})`;
       selector.appendChild(option);
     });
 
     selector.addEventListener('change', () => {
-      const selectedIndex = Number(selector.value);
-      if (Number.isNaN(selectedIndex) || selectedIndex < 0 || !list[selectedIndex]) {
+      const selectedId = String(selector.value || '');
+      const selectedGuardian = list.find((guardian) => String(guardian.id || '') === selectedId);
+      wrapper.dataset.guardianId = selectedGuardian?.id ? String(selectedGuardian.id) : '';
+      if (!selectedGuardian) {
         return;
       }
-      fillGuardianFields(list[selectedIndex]);
+      fillGuardianFields(selectedGuardian);
     });
 
-    if (list.length > 0) {
-      selector.value = '0';
-      fillGuardianFields(list[0]);
-    }
+    [nameInput, emailInput, phoneInput, docInput].forEach((input) => {
+      input?.addEventListener('input', () => {
+        if (wrapper.dataset.guardianId) {
+          wrapper.dataset.guardianId = '';
+          selector.value = '';
+        }
+      });
+    });
   }
 
-  if (guardianCache.has(studentName)) {
-    const cached = guardianCache.get(studentName);
+  if (guardianCache.has(studentKey)) {
+    const cached = guardianCache.get(studentKey);
     bindGuardianSelector(cached);
     return;
   }
 
   try {
-    const res = await fetch(`/api/admin-guardians-by-student.php?name=${encodeURIComponent(studentName)}`);
+    const params = new URLSearchParams({ student_id: String(studentRecord?.id || '') });
+    const res = await fetch(`/api/admin-guardians-by-student.php?${params.toString()}`);
     const data = await res.json();
     let guardians = [];
     if (data.ok) {
@@ -1694,10 +1704,10 @@ async function addChargeItem(studentName) {
         guardians = [data.guardian];
       }
     }
-    guardianCache.set(studentName, guardians);
+    guardianCache.set(studentKey, guardians);
     bindGuardianSelector(guardians);
   } catch (err) {
-    guardianCache.set(studentName, []);
+    guardianCache.set(studentKey, []);
   }
 }
 
@@ -1713,7 +1723,7 @@ function applyStudentsToLists(students) {
     const studentName = (student.name || '').trim();
     if (!studentName) return;
     const option = document.createElement('option');
-    option.value = studentName;
+    option.value = formatStudentIdentityLabel(student);
     if (studentList) studentList.appendChild(option);
     if (attendanceStudentsList) {
       const optionAttendance = document.createElement('option');
@@ -2118,8 +2128,9 @@ async function syncMonthlyStudents(action) {
 function tryAddStudentFromInput() {
   if (!studentInput) return;
   const value = studentInput.value.trim();
-  if (!value || !studentNames.has(value)) return;
-  addChargeItem(value);
+  const resolved = resolveStudentIdentityForAdmin(value);
+  if (!resolved.ok || !resolved.student) return;
+  addChargeItem(resolved.student);
   studentInput.value = '';
 }
 
@@ -2128,6 +2139,7 @@ function collectCharges() {
   return items.map((item) => ({
     student_name: item.dataset.student,
     student_id: item.dataset.studentId || '',
+    guardian_id: item.dataset.guardianId || '',
     guardian_name: item.querySelector('[name="guardian_name"]').value.trim(),
     guardian_email: item.querySelector('[name="guardian_email"]').value.trim(),
     guardian_whatsapp: item.querySelector('[name="guardian_whatsapp"]').value.trim(),

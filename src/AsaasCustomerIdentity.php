@@ -161,6 +161,40 @@ final class AsaasCustomerIdentity
         return false;
     }
 
+    public static function matchesRemoteCustomer(
+        array $customer,
+        string $name,
+        string $email,
+        string $document
+    ): bool {
+        $expectedName = self::normalizeName($name);
+        $expectedEmail = strtolower(trim($email));
+        $expectedDocument = self::normalizeDocument($document);
+        if ($expectedName === '' || $expectedDocument === '') {
+            return false;
+        }
+
+        $remoteName = self::normalizeName((string) ($customer['name'] ?? ''));
+        $remoteEmail = strtolower(trim((string) ($customer['email'] ?? '')));
+        $remoteDocument = self::normalizeDocument((string) ($customer['cpfCnpj'] ?? ''));
+
+        return $remoteName === $expectedName
+            && $remoteDocument === $expectedDocument
+            && ($expectedEmail === '' || $remoteEmail === $expectedEmail);
+    }
+
+    public static function matchesLocalGuardian(
+        array $guardian,
+        string $name,
+        string $email,
+        string $document
+    ): bool {
+        return self::normalizeName((string) ($guardian['parent_name'] ?? '')) === self::normalizeName($name)
+            && strtolower(trim((string) ($guardian['email'] ?? ''))) === strtolower(trim($email))
+            && self::normalizeDocument((string) ($guardian['parent_document'] ?? ''))
+                === self::normalizeDocument($document);
+    }
+
     private function findLocalDocumentConflict(string $guardianId, string $name, string $document): array
     {
         $result = $this->database->select(
