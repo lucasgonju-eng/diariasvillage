@@ -12,6 +12,7 @@ foreach ($bootstrapCandidates as $bootstrapFile) {
 date_default_timezone_set('America/Sao_Paulo');
 
 use App\AsaasClient;
+use App\AsaasCustomerIdentity;
 use App\Helpers;
 use App\HttpClient;
 use App\Mailer;
@@ -128,6 +129,29 @@ if ($statusPagamentoDiaria === 'PAGO' || ($diariaRow['grade_travada'] ?? false))
     ], 422);
 }
 
+$existingPayment = $client->select(
+    'payments',
+    'select=id,status,asaas_payment_id'
+    . '&diaria_id=eq.' . rawurlencode($diariaId)
+    . '&paid_at=is.null'
+    . '&status=in.(pending,pending_asaas,overdue,awaiting_risk_analysis)'
+    . '&order=created_at.desc&limit=1'
+);
+if (!($existingPayment['ok'] ?? false)) {
+    Helpers::json([
+        'ok' => false,
+        'code' => 'PAYMENT_IDEMPOTENCY_CHECK_FAILED',
+        'error' => 'Não foi possível confirmar se já existe cobrança para esta diária.',
+    ], 503);
+}
+if (!empty($existingPayment['data'])) {
+    Helpers::json([
+        'ok' => false,
+        'code' => 'PAYMENT_ALREADY_EXISTS',
+        'error' => 'Já existe uma cobrança em aberto para esta diária. Nenhuma nova cobrança foi criada.',
+    ], 409);
+}
+
 $date = (string) ($diariaRow['data_diaria'] ?? '');
 if ($date === '') {
     Helpers::json(['ok' => false, 'error' => 'Data da diária inválida.'], 422);
@@ -174,50 +198,16 @@ $montarPayloadPagamento = static function (string $customerId, string $billingTy
 };
 
 $documentRaw = $documentRaw !== '' ? $documentRaw : (string) ($guardianData['parent_document'] ?? '');
-if ($documentRaw === '') {
+$identity = (new AsaasCustomerIdentity($asaas, $client))->resolve($guardianData, $documentRaw);
+if (!($identity['ok'] ?? false)) {
     Helpers::json([
         'ok' => false,
-        'error' => 'Informe um CPF ou CNPJ válido para gerar o pagamento.',
-    ], 422);
+        'code' => (string) ($identity['code'] ?? 'ASAAS_IDENTITY_VALIDATION_FAILED'),
+        'error' => (string) ($identity['error'] ?? 'Não foi possível validar a identidade do responsável.'),
+    ], (int) ($identity['status'] ?? 422));
 }
-
-$document = preg_replace('/\D+/', '', $documentRaw);
-
-if (empty($guardianData['asaas_customer_id'])) {
-    $customerPayload = [
-        'name' => $guardianData['parent_name'] ?: 'Responsável ' . $guardianData['email'],
-        'email' => $guardianData['email'],
-    ];
-
-    if ($document !== '') {
-        $customerPayload['cpfCnpj'] = $document;
-    }
-
-    $customer = $asaas->createCustomer($customerPayload);
-
-    if (!$customer['ok']) {
-        $logPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'error_log_custom.txt';
-        file_put_contents($logPath, 'Asaas createCustomer error: ' . json_encode($customer) . PHP_EOL, FILE_APPEND);
-        error_log('Asaas createCustomer error: ' . json_encode($customer));
-        Helpers::json([
-            'ok' => false,
-            'error' => $extractAsaasError($customer),
-        ], 500);
-    }
-
-    $guardianData['asaas_customer_id'] = $customer['data']['id'] ?? null;
-    $client->update('guardians', 'id=eq.' . $guardianData['id'], [
-        'asaas_customer_id' => $guardianData['asaas_customer_id'],
-        'parent_document' => $document,
-    ]);
-} else {
-    $asaas->updateCustomer($guardianData['asaas_customer_id'], [
-        'cpfCnpj' => $document,
-    ]);
-    $client->update('guardians', 'id=eq.' . $guardianData['id'], [
-        'parent_document' => $document,
-    ]);
-}
+$guardianData['asaas_customer_id'] = (string) $identity['customer_id'];
+$guardianData['parent_document'] = (string) $identity['document'];
 
 $payment = $asaas->createPayment(
     $montarPayloadPagamento(
@@ -251,58 +241,6 @@ if (!$payment['ok']) {
         $errorMessage = $extractAsaasError($payment);
     }
 
-    if (stripos($errorMessage, 'cliente removido') !== false) {
-        $customerPayload = [
-            'name' => $guardianData['parent_name'] ?: 'Responsável ' . $guardianData['email'],
-            'email' => $guardianData['email'],
-        ];
-        if ($document !== '') {
-            $customerPayload['cpfCnpj'] = $document;
-        }
-
-        $customer = $asaas->createCustomer($customerPayload);
-        if ($customer['ok']) {
-            $guardianData['asaas_customer_id'] = $customer['data']['id'] ?? null;
-            $client->update('guardians', 'id=eq.' . $guardianData['id'], [
-                'asaas_customer_id' => $guardianData['asaas_customer_id'],
-                'parent_document' => $document,
-            ]);
-
-            $payment = $asaas->createPayment(
-                $montarPayloadPagamento(
-                    $guardianData['asaas_customer_id'],
-                    (string) $billingType,
-                    (float) $amount,
-                    (string) $date,
-                    (string) $dailyType,
-                    $habilitarCallbackAsaas
-                )
-            );
-            if ($payment['ok']) {
-                goto payment_success;
-            }
-            $errorMessage = $extractAsaasError($payment);
-            $errorNorm = mb_strtolower($errorMessage, 'UTF-8');
-            $callbackInvalido = str_contains($errorNorm, 'callback') && str_contains($errorNorm, 'inválida');
-            if ($callbackInvalido && $habilitarCallbackAsaas) {
-                $payment = $asaas->createPayment(
-                    $montarPayloadPagamento(
-                        $guardianData['asaas_customer_id'],
-                        (string) $billingType,
-                        (float) $amount,
-                        (string) $date,
-                        (string) $dailyType,
-                        false
-                    )
-                );
-                if ($payment['ok']) {
-                    goto payment_success;
-                }
-                $errorMessage = $extractAsaasError($payment);
-            }
-        }
-    }
-
     $logPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'error_log_custom.txt';
     file_put_contents($logPath, 'Asaas createPayment error: ' . json_encode($payment) . PHP_EOL, FILE_APPEND);
     error_log('Asaas createPayment error: ' . json_encode($payment));
@@ -332,6 +270,18 @@ $paymentInsert = $client->insert('payments', [[
     'billing_type' => $billingType,
     'asaas_payment_id' => $paymentData['id'] ?? null,
 ]]);
+
+if (!($paymentInsert['ok'] ?? false) || empty($paymentInsert['data'][0])) {
+    $createdAsaasPaymentId = trim((string) ($paymentData['id'] ?? ''));
+    if ($createdAsaasPaymentId !== '') {
+        $asaas->deletePayment($createdAsaasPaymentId);
+    }
+    Helpers::json([
+        'ok' => false,
+        'code' => 'PAYMENT_LOCAL_PERSIST_FAILED',
+        'error' => 'A cobrança não pôde ser registrada com segurança e foi cancelada. Tente novamente.',
+    ], 500);
+}
 
 $invoiceUrl = $paymentData['invoiceUrl'] ?? $paymentData['bankSlipUrl'] ?? '#';
 $paymentDate = date('d/m/Y', strtotime($date));

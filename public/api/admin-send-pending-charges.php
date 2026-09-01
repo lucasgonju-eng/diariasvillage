@@ -306,8 +306,6 @@ try {
 
             $guardianName = trim((string) ($guardian['parent_name'] ?? 'Responsável'));
             $guardianEmail = trim((string) ($guardian['email'] ?? ''));
-            $guardianDoc = preg_replace('/\D+/', '', (string) ($guardian['parent_document'] ?? '')) ?? '';
-            $guardianPhone = preg_replace('/\D+/', '', (string) ($guardian['parent_phone'] ?? '')) ?? '';
             if (!isDeliverableGuardianEmailLocal($guardianEmail)) {
                 $results[] = [
                     'id' => $paymentId,
@@ -317,29 +315,17 @@ try {
                 continue;
             }
 
-            $customerId = trim((string) ($guardian['asaas_customer_id'] ?? ''));
-            if ($customerId === '') {
-                $customerPayload = ['name' => $guardianName, 'email' => $guardianEmail];
-                if ($guardianDoc !== '') {
-                    $customerPayload['cpfCnpj'] = $guardianDoc;
-                }
-                if ($guardianPhone !== '') {
-                    $customerPayload['mobilePhone'] = $guardianPhone;
-                }
-                $customer = $asaas->createCustomer($customerPayload);
-                if (!$customer['ok']) {
-                    $results[] = ['id' => $paymentId, 'ok' => false, 'error' => extractAsaasError($customer)];
-                    continue;
-                }
-                $customerId = (string) ($customer['data']['id'] ?? '');
-                if ($customerId === '') {
-                    $results[] = ['id' => $paymentId, 'ok' => false, 'error' => 'Cliente Asaas inválido.'];
-                    continue;
-                }
-                $client->update('guardians', 'id=eq.' . urlencode((string) $guardian['id']), [
-                    'asaas_customer_id' => $customerId,
-                ]);
+            $identity = (new \App\AsaasCustomerIdentity($asaas, $client))->resolve($guardian);
+            if (!($identity['ok'] ?? false)) {
+                $results[] = [
+                    'id' => $paymentId,
+                    'ok' => false,
+                    'error' => (string) ($identity['error'] ?? 'Identidade do responsável não validada.'),
+                    'code' => (string) ($identity['code'] ?? 'ASAAS_IDENTITY_VALIDATION_FAILED'),
+                ];
+                continue;
             }
+            $customerId = (string) $identity['customer_id'];
             $chargeRule = resolveQueuedChargeRule((array) $paymentRow, $today);
 
             $payment = $asaas->createPayment([

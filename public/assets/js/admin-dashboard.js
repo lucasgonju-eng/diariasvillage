@@ -39,11 +39,13 @@ const syncRecebidasButton = document.querySelector('#sync-recebidas-btn');
 const syncRecebidasMessage = document.querySelector('#sync-recebidas-message');
 const viewUserStudentInput = document.querySelector('#admin-view-user-student');
 const viewUserStudentsList = document.querySelector('#admin-students-list');
+const viewUserGuardianSelect = document.querySelector('#admin-view-user-guardian');
 const pendenciaStudentsList = document.querySelector('#pendencia-students-list');
 const viewUserButton = document.querySelector('#admin-view-user-btn');
 const addGuardianButton = document.querySelector('#admin-add-guardian-btn');
 const viewUserForm = document.querySelector('#admin-view-user-form');
 const viewUserStudentNameInput = document.querySelector('#view-user-student-name');
+const viewUserStudentIdInput = document.querySelector('#view-user-student-id');
 const viewUserParentNameInput = document.querySelector('#view-user-parent-name');
 const viewUserParentEmailInput = document.querySelector('#view-user-parent-email');
 const viewUserParentPhoneInput = document.querySelector('#view-user-parent-phone');
@@ -93,6 +95,7 @@ const selectedStudents = new Set();
 const guardianCache = new Map();
 const studentNames = new Set();
 const studentLookupByLabel = new Map();
+const viewUserStudentLookupByLabel = new Map();
 const MIN_ADMIN_AUTOCOMPLETE_CHARS = 1;
 let adminStudents = [];
 let monthlyStudents = Array.isArray(window.__monthlyStudents) ? window.__monthlyStudents : [];
@@ -832,10 +835,19 @@ function normalizeSearchText(value) {
     .trim();
 }
 
+function formatStudentIdentityLabel(student) {
+  const name = String(student?.name || '').trim();
+  const enrollment = String(student?.enrollment || '').trim();
+  const id = String(student?.id || '').trim();
+  if (enrollment) return `${name} • Matrícula ${enrollment}`;
+  return id ? `${name} • ID ${id.slice(0, 8)}` : name;
+}
+
 function updateViewUserAutocompleteOptions(rawQuery) {
   if (!viewUserStudentsList) return;
   const query = normalizeSearchText(rawQuery);
   viewUserStudentsList.innerHTML = '';
+  viewUserStudentLookupByLabel.clear();
   if (query.length < MIN_ADMIN_AUTOCOMPLETE_CHARS) return;
 
   const seen = new Set();
@@ -843,25 +855,73 @@ function updateViewUserAutocompleteOptions(rawQuery) {
   const contains = [];
   adminStudents.forEach((student) => {
     const name = String(student.name || '').trim();
-    if (!name) return;
-    const key = normalizeSearchText(name);
-    if (!key || seen.has(key)) return;
-    if (key.startsWith(query)) {
-      startsWith.push(name);
-      seen.add(key);
+    const enrollment = String(student.enrollment || '').trim();
+    const studentId = String(student.id || '').trim();
+    if (!name || !studentId || seen.has(studentId)) return;
+    const nameKey = normalizeSearchText(name);
+    const enrollmentKey = normalizeSearchText(enrollment);
+    const label = formatStudentIdentityLabel(student);
+    if (nameKey.startsWith(query) || enrollmentKey.startsWith(query)) {
+      startsWith.push({ student, label });
+      seen.add(studentId);
       return;
     }
-    if (key.includes(query)) {
-      contains.push(name);
-      seen.add(key);
+    if (nameKey.includes(query) || enrollmentKey.includes(query)) {
+      contains.push({ student, label });
+      seen.add(studentId);
     }
   });
 
-  [...startsWith, ...contains].slice(0, 40).forEach((name) => {
+  [...startsWith, ...contains].slice(0, 40).forEach(({ student, label }) => {
     const option = document.createElement('option');
-    option.value = name;
+    option.value = label;
     viewUserStudentsList.appendChild(option);
+    viewUserStudentLookupByLabel.set(label, student);
   });
+}
+
+function resolveStudentIdentityForAdmin(rawInput) {
+  const input = String(rawInput || '').trim();
+  if (!input) {
+    return { ok: false, error: 'Digite o nome ou a matrícula do aluno.' };
+  }
+
+  const exactLabel = adminStudents.find(
+    (student) => formatStudentIdentityLabel(student) === input,
+  );
+  if (exactLabel?.id) {
+    return {
+      ok: true,
+      student: exactLabel,
+      id: String(exactLabel.id),
+      name: String(exactLabel.name || ''),
+      label: formatStudentIdentityLabel(exactLabel),
+    };
+  }
+
+  const normalizedInput = normalizeSearchText(input);
+  const candidates = adminStudents.filter((student) => {
+    const name = normalizeSearchText(student?.name);
+    const enrollment = normalizeSearchText(student?.enrollment);
+    return name === normalizedInput || enrollment === normalizedInput;
+  });
+  if (candidates.length !== 1 || !candidates[0]?.id) {
+    return {
+      ok: false,
+      error: candidates.length > 1
+        ? 'Mais de um aluno corresponde ao texto. Selecione a opção com matrícula.'
+        : 'Selecione o aluno na lista com a matrícula correspondente.',
+    };
+  }
+
+  const student = candidates[0];
+  return {
+    ok: true,
+    student,
+    id: String(student.id),
+    name: String(student.name || ''),
+    label: formatStudentIdentityLabel(student),
+  };
 }
 
 function resolveStudentNameForAdmin(rawInput) {
@@ -5131,11 +5191,20 @@ if (asaasDataExportButton) {
 
 if (viewUserButton && viewUserStudentInput) {
   let viewUserSaveMode = 'open_user';
-  const showViewUserForm = (studentName, mode = 'open_user') => {
+  const resetViewUserGuardianSelection = () => {
+    if (!viewUserGuardianSelect) return;
+    viewUserGuardianSelect.innerHTML = '<option value="">Selecione o responsável</option>';
+    viewUserGuardianSelect.value = '';
+    viewUserGuardianSelect.classList.add('hidden');
+  };
+  const showViewUserForm = (student, mode = 'open_user') => {
+    const studentName = String(student?.name || '').trim();
+    const studentId = String(student?.id || '').trim();
     viewUserSaveMode = mode;
     if (!viewUserForm) return;
     viewUserForm.classList.remove('hidden');
     if (viewUserStudentNameInput) viewUserStudentNameInput.value = studentName || '';
+    if (viewUserStudentIdInput) viewUserStudentIdInput.value = studentId || '';
     if (viewUserParentNameInput) viewUserParentNameInput.value = '';
     if (viewUserParentEmailInput) viewUserParentEmailInput.value = '';
     if (viewUserParentPhoneInput) viewUserParentPhoneInput.value = '';
@@ -5155,9 +5224,11 @@ if (viewUserButton && viewUserStudentInput) {
       viewUserFormMessage.textContent = '';
       viewUserFormMessage.className = 'charge-message';
     }
+    if (viewUserStudentIdInput) viewUserStudentIdInput.value = '';
   };
 
   viewUserStudentInput.addEventListener('input', () => {
+    resetViewUserGuardianSelection();
     updateViewUserAutocompleteOptions(viewUserStudentInput.value);
   });
   viewUserStudentInput.addEventListener('focus', () => {
@@ -5165,13 +5236,14 @@ if (viewUserButton && viewUserStudentInput) {
   });
 
   viewUserButton.addEventListener('click', async () => {
-    const resolved = resolveStudentNameForAdmin(viewUserStudentInput.value);
+    const resolved = resolveStudentIdentityForAdmin(viewUserStudentInput.value);
     if (!resolved.ok) {
       await showAdminAlert(resolved.error || 'Aluno não encontrado na lista.');
       return;
     }
     const studentName = resolved.name;
-    viewUserStudentInput.value = studentName;
+    viewUserStudentInput.value = resolved.label;
+    const selectedGuardianId = String(viewUserGuardianSelect?.value || '').trim();
 
     viewUserButton.setAttribute('disabled', 'disabled');
     const originalText = viewUserButton.textContent;
@@ -5180,12 +5252,45 @@ if (viewUserButton && viewUserStudentInput) {
       const res = await fetch('/api/admin-view-as-user.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ student_name: studentName }),
+        body: JSON.stringify({
+          student_id: resolved.id,
+          guardian_id: selectedGuardianId || null,
+        }),
       });
       const data = await res.json();
       if (!data.ok) {
+        if (
+          data.code === 'GUARDIAN_SELECTION_REQUIRED'
+          && viewUserGuardianSelect
+          && Array.isArray(data.guardians)
+        ) {
+          resetViewUserGuardianSelection();
+          data.guardians.forEach((guardian) => {
+            const option = document.createElement('option');
+            option.value = String(guardian?.id || '');
+            option.textContent = [
+              String(guardian?.name || 'Responsável'),
+              String(guardian?.email_masked || ''),
+              String(guardian?.document_masked || ''),
+            ].filter(Boolean).join(' • ');
+            viewUserGuardianSelect.appendChild(option);
+          });
+          viewUserGuardianSelect.classList.remove('hidden');
+          viewUserGuardianSelect.focus();
+          await showAdminAlert(
+            'Este aluno possui mais de um responsável. Selecione explicitamente o responsável e clique novamente em “Ver como usuário”.',
+            { title: 'Escolha o responsável' },
+          );
+          return;
+        }
         if (data.code === 'GUARDIAN_NOT_FOUND') {
-            showViewUserForm(data.student?.name || studentName, 'open_user');
+          showViewUserForm(
+            {
+              id: data.student?.id || resolved.id,
+              name: data.student?.name || studentName,
+            },
+            'open_user',
+          );
           return;
         }
         await showAdminAlert(data.error || 'Falha ao abrir visão de usuário.');
@@ -5212,14 +5317,13 @@ if (viewUserButton && viewUserStudentInput) {
 
   if (addGuardianButton) {
     addGuardianButton.addEventListener('click', async () => {
-      const resolved = resolveStudentNameForAdmin(viewUserStudentInput.value);
+      const resolved = resolveStudentIdentityForAdmin(viewUserStudentInput.value);
       if (!resolved.ok) {
         await showAdminAlert(resolved.error || 'Aluno não encontrado na lista.');
         return;
       }
-      const studentName = resolved.name;
-      viewUserStudentInput.value = studentName;
-      showViewUserForm(studentName, 'create_more');
+      viewUserStudentInput.value = resolved.label;
+      showViewUserForm(resolved.student, 'create_more');
     });
   }
 
@@ -5227,15 +5331,15 @@ if (viewUserButton && viewUserStudentInput) {
     viewUserSaveGuardianButton.addEventListener('click', async () => {
       const studentName =
         (viewUserStudentNameInput && viewUserStudentNameInput.value.trim()) ||
-        (viewUserStudentInput && viewUserStudentInput.value.trim()) ||
         '';
+      const studentId = (viewUserStudentIdInput && viewUserStudentIdInput.value.trim()) || '';
       const parentName = (viewUserParentNameInput && viewUserParentNameInput.value.trim()) || '';
       const email = (viewUserParentEmailInput && viewUserParentEmailInput.value.trim()) || '';
       const parentPhone = (viewUserParentPhoneInput && viewUserParentPhoneInput.value.trim()) || '';
       const parentDocument =
         (viewUserParentDocumentInput && viewUserParentDocumentInput.value.trim()) || '';
 
-      if (!studentName || !parentName) {
+      if (!studentId || !studentName || !parentName) {
         if (viewUserFormMessage) {
           viewUserFormMessage.textContent = 'Informe aluno e nome do responsável.';
           viewUserFormMessage.className = 'charge-message error';
@@ -5255,7 +5359,7 @@ if (viewUserButton && viewUserStudentInput) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            student_name: studentName,
+            student_id: studentId,
             parent_name: parentName,
             email,
             parent_phone: parentPhone,
@@ -5278,7 +5382,14 @@ if (viewUserButton && viewUserStudentInput) {
             : 'Responsável salvo com sucesso. Você pode cadastrar outro.';
           viewUserFormMessage.className = 'charge-message success';
         }
-        if (viewUserStudentInput) viewUserStudentInput.value = studentName;
+        const selectedStudent = adminStudents.find(
+          (student) => String(student?.id || '') === studentId,
+        );
+        if (viewUserStudentInput) {
+          viewUserStudentInput.value = selectedStudent
+            ? formatStudentIdentityLabel(selectedStudent)
+            : studentName;
+        }
         if (viewUserSaveMode === 'open_user') {
           hideViewUserForm();
           viewUserButton.click();

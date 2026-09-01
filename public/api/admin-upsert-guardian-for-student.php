@@ -24,14 +24,15 @@ if (($_SESSION['admin_user'] ?? '') !== 'admin') {
 Helpers::requirePost();
 $payload = json_decode(file_get_contents('php://input'), true);
 
-$studentName = trim((string) ($payload['student_name'] ?? ''));
+$studentId = trim((string) ($payload['student_id'] ?? ''));
+$guardianId = trim((string) ($payload['guardian_id'] ?? ''));
 $parentName = trim((string) ($payload['parent_name'] ?? ''));
 $email = trim((string) ($payload['email'] ?? ''));
 $phone = trim((string) ($payload['parent_phone'] ?? ''));
 $document = preg_replace('/\D+/', '', (string) ($payload['parent_document'] ?? '')) ?? '';
 $forceCreate = (bool) ($payload['force_create'] ?? false);
 
-if ($studentName === '' || $parentName === '') {
+if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $studentId) || $parentName === '') {
     Helpers::json(['ok' => false, 'error' => 'Informe aluno e nome do responsável.'], 422);
 }
 if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -39,15 +40,13 @@ if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
 }
 
 $client = new SupabaseClient(new HttpClient());
-$studentResult = $client->select('students', 'select=id,name&name=eq.' . urlencode($studentName) . '&limit=1');
+$studentResult = $client->select(
+    'students',
+    'select=id,name&id=eq.' . rawurlencode($studentId) . '&limit=1'
+);
 $student = $studentResult['data'][0] ?? null;
 if (!$student) {
     Helpers::json(['ok' => false, 'error' => 'Aluno não encontrado.'], 404);
-}
-
-$studentId = (string) ($student['id'] ?? '');
-if ($studentId === '') {
-    Helpers::json(['ok' => false, 'error' => 'Aluno inválido.'], 422);
 }
 
 if ($email === '') {
@@ -69,11 +68,33 @@ if ($forceCreate && $emailGuardian) {
     ], 409);
 }
 
-$guardianResult = $client->select(
+$existingGuardianResult = $client->select(
     'guardians',
-    'select=id&student_id=eq.' . urlencode($studentId) . '&order=created_at.desc&limit=1'
+    'select=id&student_id=eq.' . rawurlencode($studentId) . '&limit=1'
 );
-$guardian = $guardianResult['data'][0] ?? null;
+if (
+    $guardianId === ''
+    && !$forceCreate
+    && ($existingGuardianResult['ok'] ?? false)
+    && !empty($existingGuardianResult['data'])
+) {
+    Helpers::json([
+        'ok' => false,
+        'error' => 'Este aluno já possui responsável. Selecione-o ou marque a criação de um novo responsável.',
+    ], 409);
+}
+
+$guardian = null;
+if ($guardianId !== '') {
+    $guardianResult = $client->select(
+        'guardians',
+        'select=id,student_id&id=eq.' . rawurlencode($guardianId) . '&student_id=eq.' . rawurlencode($studentId) . '&limit=1'
+    );
+    $guardian = $guardianResult['data'][0] ?? null;
+    if (!$guardian) {
+        Helpers::json(['ok' => false, 'error' => 'Responsável inválido para o aluno selecionado.'], 422);
+    }
+}
 
 $payloadDb = [
     'parent_name' => $parentName,

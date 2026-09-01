@@ -981,8 +981,6 @@ if (!is_array($guardian) || empty($guardian['id'])) {
 
 $guardianName = trim((string) ($guardian['parent_name'] ?? 'Responsável'));
 $guardianEmail = trim((string) ($guardian['email'] ?? ''));
-$guardianDoc = preg_replace('/\D+/', '', (string) ($guardian['parent_document'] ?? '')) ?? '';
-$guardianPhone = preg_replace('/\D+/', '', (string) ($guardian['parent_phone'] ?? '')) ?? '';
 $customerId = trim((string) ($guardian['asaas_customer_id'] ?? ''));
 $chargeRule = Helpers::resolveDayUseCharge($attendanceDate);
 $storedDayUseType = normalizeDayUseType((string) ($target['day_use_type'] ?? ''));
@@ -1069,32 +1067,12 @@ if ($guardianEmail !== '' && !isDeliverableGuardianEmail($guardianEmail)) {
     ], 422);
 }
 
-if ($customerId === '') {
-    $customerPayload = [
-        'name' => $guardianName !== '' ? $guardianName : 'Responsável',
-    ];
-    if (isDeliverableGuardianEmail($guardianEmail)) {
-        $customerPayload['email'] = $guardianEmail;
-    }
-    if ($guardianDoc !== '') {
-        $customerPayload['cpfCnpj'] = $guardianDoc;
-    }
-    if ($guardianPhone !== '') {
-        $customerPayload['mobilePhone'] = $guardianPhone;
-    }
-    $customer = $asaas->createCustomer($customerPayload);
-    if ($customer['ok'] ?? false) {
-        $customerId = trim((string) ($customer['data']['id'] ?? ''));
-        if ($customerId !== '') {
-            $client->update('guardians', 'id=eq.' . urlencode((string) ($guardian['id'] ?? '')), [
-                'asaas_customer_id' => $customerId,
-            ]);
-        } else {
-            $asaasError = 'Cliente Asaas inválido.';
-        }
-    } else {
-        $asaasError = extractAsaasError($customer);
-    }
+$identity = (new \App\AsaasCustomerIdentity($asaas, $client))->resolve($guardian);
+if ($identity['ok'] ?? false) {
+    $customerId = (string) $identity['customer_id'];
+} else {
+    $customerId = '';
+    $asaasError = (string) ($identity['error'] ?? 'Identidade do responsável não validada.');
 }
 
 $insertPayload = [

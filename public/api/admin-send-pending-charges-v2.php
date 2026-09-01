@@ -345,30 +345,18 @@ try {
                 );
                 continue;
             }
-            $guardianDoc = preg_replace('/\D+/', '', (string) ($guardian['parent_document'] ?? ''));
-            $guardianPhone = preg_replace('/\D+/', '', (string) ($guardian['parent_phone'] ?? ''));
 
-            $customerId = trim((string) ($guardian['asaas_customer_id'] ?? ''));
-            if ($customerId === '') {
-                $customerPayload = array('name' => $guardianName, 'email' => $guardianEmail);
-                if ($guardianDoc !== '') {
-                    $customerPayload['cpfCnpj'] = $guardianDoc;
-                }
-                if ($guardianPhone !== '') {
-                    $customerPayload['mobilePhone'] = $guardianPhone;
-                }
-                $customer = $asaas->createCustomer($customerPayload);
-                if (!($customer['ok'] ?? false)) {
-                    $results[] = array('id' => $paymentId, 'ok' => false, 'error' => asaasErrorMessage($customer));
-                    continue;
-                }
-                $customerId = (string) (($customer['data']['id'] ?? ''));
-                if ($customerId === '') {
-                    $results[] = array('id' => $paymentId, 'ok' => false, 'error' => 'Cliente Asaas inválido.');
-                    continue;
-                }
-                $client->update('guardians', 'id=eq.' . urlencode((string) $guardian['id']), array('asaas_customer_id' => $customerId));
+            $identity = (new \App\AsaasCustomerIdentity($asaas, $client))->resolve($guardian);
+            if (!($identity['ok'] ?? false)) {
+                $results[] = array(
+                    'id' => $paymentId,
+                    'ok' => false,
+                    'error' => (string) ($identity['error'] ?? 'Identidade do responsável não validada.'),
+                    'code' => (string) ($identity['code'] ?? 'ASAAS_IDENTITY_VALIDATION_FAILED'),
+                );
+                continue;
             }
+            $customerId = (string) $identity['customer_id'];
 
             $baseAmount = (float) ($chargeRule['amount'] ?? 77.00);
             if ($discountAmount >= $baseAmount) {

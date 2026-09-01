@@ -180,31 +180,15 @@ try {
         \App\Helpers::json(array('ok' => false, 'error' => 'Aluno não encontrado.'), 404);
     }
 
-    $customerId = trim((string) ($guardian['asaas_customer_id'] ?? ''));
-    if ($customerId === '') {
-        $guardianName = trim((string) ($guardian['parent_name'] ?? 'Responsável'));
-        $guardianDoc = preg_replace('/\D+/', '', (string) ($guardian['parent_document'] ?? ''));
-        $guardianPhone = preg_replace('/\D+/', '', (string) ($guardian['parent_phone'] ?? ''));
-        $customerPayload = array(
-            'name' => $guardianName,
-            'email' => $guardianEmail,
-        );
-        if ($guardianDoc !== '') {
-            $customerPayload['cpfCnpj'] = $guardianDoc;
-        }
-        if ($guardianPhone !== '') {
-            $customerPayload['mobilePhone'] = $guardianPhone;
-        }
-        $customerResponse = $asaas->createCustomer($customerPayload);
-        if (!($customerResponse['ok'] ?? false)) {
-            \App\Helpers::json(array('ok' => false, 'error' => asaasErrorMessage($customerResponse)), 422);
-        }
-        $customerId = trim((string) ($customerResponse['data']['id'] ?? ''));
-        if ($customerId === '') {
-            \App\Helpers::json(array('ok' => false, 'error' => 'Cliente Asaas inválido.'), 422);
-        }
-        $client->update('guardians', 'id=eq.' . urlencode((string) $guardian['id']), array('asaas_customer_id' => $customerId));
+    $identity = (new \App\AsaasCustomerIdentity($asaas, $client))->resolve($guardian);
+    if (!($identity['ok'] ?? false)) {
+        \App\Helpers::json(array(
+            'ok' => false,
+            'error' => (string) ($identity['error'] ?? 'Identidade do responsável não validada.'),
+            'code' => (string) ($identity['code'] ?? 'ASAAS_IDENTITY_VALIDATION_FAILED'),
+        ), (int) ($identity['status'] ?? 422));
     }
+    $customerId = (string) $identity['customer_id'];
 
     $existingAsaasPaymentId = trim((string) ($paymentRow['asaas_payment_id'] ?? ''));
     $mustCreateNewCharge = $existingAsaasPaymentId === '';

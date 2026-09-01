@@ -170,35 +170,11 @@ if (!$guardian) {
     $redirectWithError('Responsável não encontrado para esta cobrança.');
 }
 
-$guardianEmail = trim((string) ($guardian['email'] ?? ''));
-$guardianName = trim((string) ($guardian['parent_name'] ?? 'Responsável'));
-$guardianDoc = preg_replace('/\D+/', '', (string) ($guardian['parent_document'] ?? '')) ?? '';
-$guardianPhone = preg_replace('/\D+/', '', (string) ($guardian['parent_phone'] ?? '')) ?? '';
-$customerId = trim((string) ($guardian['asaas_customer_id'] ?? ''));
-
-if ($customerId === '') {
-    $customerPayload = ['name' => $guardianName];
-    if ($guardianEmail !== '') {
-        $customerPayload['email'] = $guardianEmail;
-    }
-    if ($guardianDoc !== '') {
-        $customerPayload['cpfCnpj'] = $guardianDoc;
-    }
-    if ($guardianPhone !== '') {
-        $customerPayload['mobilePhone'] = $guardianPhone;
-    }
-    $customerResponse = $asaas->createCustomer($customerPayload);
-    if (!($customerResponse['ok'] ?? false)) {
-        $redirectWithError('Falha ao sincronizar responsável no Asaas. Tente novamente.');
-    }
-    $customerId = trim((string) ($customerResponse['data']['id'] ?? ''));
-    if ($customerId === '') {
-        $redirectWithError('Cliente Asaas inválido para esta cobrança.');
-    }
-    $client->update('guardians', 'id=eq.' . urlencode((string) $guardian['id']), [
-        'asaas_customer_id' => $customerId,
-    ]);
+$identity = (new \App\AsaasCustomerIdentity($asaas, $client))->resolve($guardian);
+if (!($identity['ok'] ?? false)) {
+    $redirectWithError((string) ($identity['error'] ?? 'Falha ao validar o responsável no Asaas.'));
 }
+$customerId = (string) $identity['customer_id'];
 
 $existingAsaasPaymentId = trim((string) ($payment['asaas_payment_id'] ?? ''));
 $invoiceUrl = '';

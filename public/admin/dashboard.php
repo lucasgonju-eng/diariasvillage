@@ -662,8 +662,11 @@ if (!empty($exclusionsLog)) {
       <div class="cta">
         <?php if ($canViewAsUser): ?>
           <div class="admin-view-user">
-            <input id="admin-view-user-student" list="admin-students-list" placeholder="Digite o nome do aluno" autocomplete="off" />
+            <input id="admin-view-user-student" list="admin-students-list" placeholder="Aluno ou matrícula" autocomplete="off" />
             <datalist id="admin-students-list"></datalist>
+            <select id="admin-view-user-guardian" class="hidden" aria-label="Responsável selecionado">
+              <option value="">Selecione o responsável</option>
+            </select>
             <button id="admin-view-user-btn" class="btn btn-ghost btn-sm" type="button">Ver como usuário</button>
             <button id="admin-add-guardian-btn" class="btn btn-ghost btn-sm" type="button">Criar mais um responsável</button>
           </div>
@@ -682,6 +685,7 @@ if (!empty($exclusionsLog)) {
           <div class="form-group">
             <label>Aluno</label>
             <input id="view-user-student-name" type="text" readonly />
+            <input id="view-user-student-id" type="hidden" />
           </div>
           <div class="form-group">
             <label>Nome do responsável</label>
@@ -2069,7 +2073,7 @@ if (!empty($exclusionsLog)) {
     window.__monthlyStudents = <?php echo json_encode($monthlyRowsForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
     window.__adminCanApproveAttendance = <?php echo $canAttendanceApprove ? 'true' : 'false'; ?>;
   </script>
-  <script src="/assets/js/admin-dashboard.js?v=73"></script>
+  <script src="/assets/js/admin-dashboard.js?v=74"></script>
   <script>
     (function () {
       function activateTab(name) {
