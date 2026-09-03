@@ -21,100 +21,220 @@ if (!$bootstrapLoaded) {
 use App\Helpers;
 use App\HttpClient;
 use App\Mailer;
+use App\AsaasClient;
+use App\AsaasCustomerIdentity;
+use App\Services\AsaasWebhookInbox;
 use App\Services\OficinaModularGradeService;
 use App\SupabaseClient;
 
-$logPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'error_log_custom.txt';
+Helpers::requirePost();
 
-$token = $_SERVER['HTTP_ASAAS_ACCESS_TOKEN']
-    ?? $_SERVER['HTTP_ACCESS_TOKEN']
-    ?? $_SERVER['HTTP_X_WEBHOOK_TOKEN']
-    ?? $_SERVER['HTTP_AUTHORIZATION']
-    ?? '';
+$expected = trim(App\Env::get('ASAAS_WEBHOOK_TOKEN', ''));
+if ($expected === '') {
+    error_log('[asaas-webhook] ASAAS_WEBHOOK_TOKEN não configurado.');
+    Helpers::json(['ok' => false, 'error' => 'Webhook indisponível.'], 503);
+}
 
+$token = trim((string) ($_SERVER['HTTP_ASAAS_ACCESS_TOKEN'] ?? ''));
 if ($token === '' && function_exists('getallheaders')) {
     $headers = getallheaders();
     foreach ($headers as $key => $value) {
-        if (strcasecmp($key, 'asaas-access-token') === 0 || strcasecmp($key, 'access_token') === 0) {
-            $token = $value;
+        if (strcasecmp($key, 'asaas-access-token') === 0) {
+            $token = trim((string) $value);
             break;
         }
     }
 }
-$expected = App\Env::get('ASAAS_WEBHOOK_TOKEN', '');
-
-$token = trim($token);
-$expected = trim($expected);
-if (stripos($token, 'bearer ') === 0) {
-    $token = trim(substr($token, 7));
-}
-
-if ($expected && $token !== $expected) {
-    $logPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'error_log_custom.txt';
-    $safeExpected = $expected !== '' ? ('***' . substr($expected, -4)) : '(vazio)';
-    $safeToken = $token !== '' ? ('***' . substr($token, -4)) : '(vazio)';
-    file_put_contents(
-        $logPath,
-        'Webhook token mismatch. Esperado ' . $safeExpected . ' recebido ' . $safeToken . PHP_EOL,
-        FILE_APPEND
-    );
+if ($token === '' || !hash_equals($expected, $token)) {
+    error_log('[asaas-webhook] Token ausente ou inválido.');
     Helpers::json(['ok' => false, 'error' => 'Token inválido.'], 401);
 }
 
-$payload = json_decode(file_get_contents('php://input'), true);
-$event = $payload['event'] ?? '';
-$payment = $payload['payment'] ?? [];
+$contentType = strtolower(trim((string) ($_SERVER['CONTENT_TYPE'] ?? '')));
+if ($contentType !== '' && !str_starts_with($contentType, 'application/json')) {
+    Helpers::json(['ok' => false, 'error' => 'Content-Type inválido.'], 415);
+}
 
-if (!$event || empty($payment['id'])) {
+$contentLength = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
+if ($contentLength > 262144) {
+    Helpers::json(['ok' => false, 'error' => 'Payload excede o limite permitido.'], 413);
+}
+
+$rawPayload = file_get_contents('php://input');
+if (!is_string($rawPayload) || $rawPayload === '' || strlen($rawPayload) > 262144) {
     Helpers::json(['ok' => false, 'error' => 'Payload inválido.'], 400);
 }
 
-if (!in_array($event, ['PAYMENT_CONFIRMED', 'PAYMENT_RECEIVED'], true)) {
-    Helpers::json(['ok' => true]);
+try {
+    $payload = json_decode($rawPayload, true, 64, JSON_THROW_ON_ERROR);
+} catch (\JsonException $e) {
+    Helpers::json(['ok' => false, 'error' => 'JSON inválido.'], 400);
 }
 
-file_put_contents(
-    $logPath,
-    '[' . date('c') . '] Webhook Asaas recebido: event=' . $event . ' payment_id=' . ((string) ($payment['id'] ?? '-')) . PHP_EOL,
-    FILE_APPEND
-);
+if (!is_array($payload)) {
+    Helpers::json(['ok' => false, 'error' => 'Payload inválido.'], 400);
+}
 
-$client = new SupabaseClient(new HttpClient());
+$eventId = trim((string) ($payload['id'] ?? ''));
+$event = trim((string) ($payload['event'] ?? ''));
+$paymentId = trim((string) ($payload['payment']['id'] ?? ''));
+if (
+    !preg_match('/^evt_[A-Za-z0-9]+$/', $eventId)
+    || !preg_match('/^[A-Z][A-Z0-9_]{1,79}$/', $event)
+    || !preg_match('/^pay_[A-Za-z0-9]+$/', $paymentId)
+) {
+    Helpers::json(['ok' => false, 'error' => 'Identificadores do evento inválidos.'], 400);
+}
+
+$inboxClient = new SupabaseClient(new HttpClient());
+$inbox = new AsaasWebhookInbox($inboxClient);
+$claim = $inbox->claim($eventId, $event, $paymentId, $payload, $rawPayload);
+if (!($claim['ok'] ?? false)) {
+    error_log('[asaas-webhook] Falha ao registrar evento ' . $eventId . ': ' . ($claim['code'] ?? 'UNKNOWN'));
+    if (($claim['code'] ?? '') === 'EVENT_PAYLOAD_CONFLICT') {
+        Helpers::json(['ok' => true, 'blocked' => true]);
+    }
+    Helpers::json(['ok' => false, 'error' => 'Não foi possível registrar o evento.'], 503);
+}
+if (($claim['claimed'] ?? false) !== true) {
+    if (($claim['status'] ?? '') === 'PROCESSING') {
+        Helpers::json(['ok' => false, 'error' => 'Evento ainda em processamento.'], 409);
+    }
+    Helpers::json(['ok' => true, 'idempotent' => true]);
+}
+
+$finalized = false;
+$completeWebhook = static function (string $status = 'PROCESSED', array $response = ['ok' => true]) use (
+    $inbox,
+    $eventId,
+    &$finalized
+): void {
+    if (!$inbox->complete($eventId, $status)) {
+        $inbox->fail($eventId, 'Falha ao finalizar evento na caixa de entrada.');
+        $finalized = true;
+        Helpers::json(['ok' => false, 'error' => 'Falha ao finalizar evento.'], 503);
+    }
+    $finalized = true;
+    Helpers::json($response);
+};
+$failWebhook = static function (string $message, int $status = 500) use (
+    $inbox,
+    $eventId,
+    &$finalized
+): void {
+    $inbox->fail($eventId, $message);
+    $finalized = true;
+    Helpers::json(['ok' => false, 'error' => 'Falha ao processar evento.'], $status);
+};
+$blockWebhook = static function (string $message) use (
+    $inbox,
+    $eventId,
+    &$finalized
+): void {
+    error_log('[asaas-webhook] Evento bloqueado ' . $eventId . ': ' . $message);
+    if (!$inbox->complete($eventId, 'BLOCKED')) {
+        $inbox->fail($eventId, 'Falha ao registrar bloqueio: ' . $message);
+        $finalized = true;
+        Helpers::json(['ok' => false, 'error' => 'Falha ao bloquear evento.'], 503);
+    }
+    $finalized = true;
+    Helpers::json(['ok' => true, 'blocked' => true]);
+};
+register_shutdown_function(static function () use ($inbox, $eventId, &$finalized): void {
+    if (!$finalized) {
+        $error = error_get_last();
+        $message = is_array($error)
+            ? 'Encerramento inesperado: ' . (string) ($error['message'] ?? 'erro fatal')
+            : 'Processamento encerrado antes da finalização.';
+        $inbox->fail($eventId, $message);
+    }
+});
+
+if (!in_array($event, ['PAYMENT_CONFIRMED', 'PAYMENT_RECEIVED'], true)) {
+    $completeWebhook('IGNORED', ['ok' => true, 'ignored' => true]);
+}
+
+$asaasClient = new AsaasClient(new HttpClient());
+$asaasResult = $asaasClient->getPayment($paymentId);
+$payment = is_array($asaasResult['data'] ?? null) ? $asaasResult['data'] : [];
+if (
+    !($asaasResult['ok'] ?? false)
+    || (string) ($payment['id'] ?? '') !== $paymentId
+    || !in_array((string) ($payment['status'] ?? ''), ['CONFIRMED', 'RECEIVED'], true)
+) {
+    error_log('[asaas-webhook] Estado remoto não confirmou pagamento ' . $paymentId . '.');
+    $failWebhook('Pagamento não confirmado pela API do Asaas.', 503);
+}
+
+$client = $inboxClient;
 $paymentResult = $client->select('payments', 'select=*&asaas_payment_id=eq.' . urlencode($payment['id']));
 
-if (!$paymentResult['ok'] || empty($paymentResult['data'])) {
+if (!($paymentResult['ok'] ?? false)) {
+    $failWebhook('Falha ao consultar pagamento local.', 503);
+}
+
+if (empty($paymentResult['data'])) {
     $invoiceUrl = $payment['invoiceUrl'] ?? $payment['bankSlipUrl'] ?? '';
     $pendenciaResult = $client->select(
         'pendencia_de_cadastro',
-        'select=id,paid_at,student_name,guardian_name,guardian_cpf,guardian_email,payment_date&asaas_payment_id=eq.' . urlencode($payment['id'])
+        'select=id,paid_at,student_id,enrollment,student_name,guardian_name,guardian_cpf,guardian_email,payment_date'
+            . '&asaas_payment_id=eq.' . urlencode($payment['id'])
     );
-    if ((!$pendenciaResult['ok'] || empty($pendenciaResult['data'])) && $invoiceUrl !== '') {
-        $pendenciaResult = $client->select(
-            'pendencia_de_cadastro',
-            'select=id,paid_at,student_name,guardian_name,guardian_cpf,guardian_email,payment_date&asaas_invoice_url=eq.' . urlencode($invoiceUrl)
-        );
+    if (!($pendenciaResult['ok'] ?? false)) {
+        $failWebhook('Falha ao consultar pendência local.', 503);
     }
-    if ($pendenciaResult['ok'] && !empty($pendenciaResult['data'])) {
+    if (!empty($pendenciaResult['data'])) {
         $pendenciaRow = $pendenciaResult['data'][0];
         if (empty($pendenciaRow['paid_at'])) {
+            $studentId = trim((string) ($pendenciaRow['student_id'] ?? ''));
+            $enrollment = $pendenciaRow['enrollment'] ?? null;
+            if (
+                !preg_match('/^[0-9a-f-]{36}$/i', $studentId)
+                || trim((string) ($pendenciaRow['guardian_name'] ?? '')) === ''
+                || trim((string) ($pendenciaRow['guardian_email'] ?? '')) === ''
+                || trim((string) ($pendenciaRow['guardian_cpf'] ?? '')) === ''
+            ) {
+                $blockWebhook('Pendência sem identidade ou aluno explícito.');
+            }
+
+            $remoteCustomerId = trim((string) ($payment['customer'] ?? ''));
+            if ($remoteCustomerId === '') {
+                $blockWebhook('Pagamento da pendência sem cliente remoto.');
+            }
+            $remoteCustomerResult = $asaasClient->getCustomer($remoteCustomerId);
+            if (!($remoteCustomerResult['ok'] ?? false)) {
+                $failWebhook('Falha ao consultar cliente remoto da pendência.', 503);
+            }
+            $remoteCustomer = is_array($remoteCustomerResult['data'] ?? null)
+                ? $remoteCustomerResult['data']
+                : [];
+            if (
+                !AsaasCustomerIdentity::matchesRemoteCustomer(
+                    $remoteCustomer,
+                    (string) $pendenciaRow['guardian_name'],
+                    (string) $pendenciaRow['guardian_email'],
+                    (string) $pendenciaRow['guardian_cpf']
+                )
+            ) {
+                $blockWebhook('Identidade remota diverge da pendência.');
+            }
+
             $accessCode = Helpers::randomNumericCode(6);
             $paymentDateFromAsaas = $payment['dueDate'] ?? null;
             $dayUseDate = $pendenciaRow['payment_date'] ?? $paymentDateFromAsaas;
 
-            $guardianByCpf = $client->select(
-                'guardians',
-                'select=student_id&parent_document=eq.' . urlencode($pendenciaRow['guardian_cpf'] ?? '') . '&limit=1'
-            );
-            $enrollment = null;
-            $studentId = null;
-            if ($guardianByCpf['ok'] && !empty($guardianByCpf['data'])) {
-                $studentId = $guardianByCpf['data'][0]['student_id'] ?? null;
-                if ($studentId) {
-                    $studentRes = $client->select('students', 'select=enrollment&id=eq.' . urlencode($studentId));
-                    if ($studentRes['ok'] && !empty($studentRes['data'])) {
-                        $enrollment = $studentRes['data'][0]['enrollment'] ?? null;
-                    }
+            if ($enrollment === null || $enrollment === '') {
+                $studentRes = $client->select(
+                    'students',
+                    'select=enrollment&id=eq.' . rawurlencode($studentId) . '&limit=1'
+                );
+                if (!($studentRes['ok'] ?? false)) {
+                    $failWebhook('Falha ao consultar aluno da pendência.', 503);
                 }
+                if (empty($studentRes['data'][0])) {
+                    $blockWebhook('Aluno da pendência não encontrado.');
+                }
+                $enrollment = $studentRes['data'][0]['enrollment'] ?? null;
             }
 
             $updatePayload = [
@@ -126,22 +246,15 @@ if (!$paymentResult['ok'] || empty($paymentResult['data'])) {
             if ($dayUseDate) {
                 $updatePayload['payment_date'] = $dayUseDate;
             }
-            if ($studentId) {
-                $updatePayload['student_id'] = $studentId;
-            }
+            $updatePayload['student_id'] = $studentId;
             if ($enrollment !== null) {
                 $updatePayload['enrollment'] = $enrollment;
             }
 
             $update = $client->update('pendencia_de_cadastro', 'id=eq.' . $pendenciaRow['id'], $updatePayload);
             if (!$update['ok']) {
-                $logPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'error_log_custom.txt';
-                file_put_contents(
-                    $logPath,
-                    'Falha ao atualizar pendencia paga. ID ' . ($pendenciaRow['id'] ?? '-') . PHP_EOL,
-                    FILE_APPEND
-                );
-                Helpers::json(['ok' => false, 'error' => 'Falha ao atualizar pendência.'], 500);
+                error_log('[asaas-webhook] Falha ao atualizar pendência ' . ($pendenciaRow['id'] ?? '-') . '.');
+                $failWebhook('Falha ao atualizar pendência.', 503);
             }
 
             $guardianEmail = $pendenciaRow['guardian_email'] ?? '';
@@ -257,31 +370,74 @@ HTML;
                 }
             }
         }
-        Helpers::json(['ok' => true]);
+        $completeWebhook();
     }
-    $logPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'error_log_custom.txt';
-    file_put_contents(
-        $logPath,
-        'Webhook: pagamento não encontrado. ID ' . ($payment['id'] ?? '-') . PHP_EOL,
-        FILE_APPEND
-    );
-    Helpers::json(['ok' => true, 'skipped' => true]);
+    error_log('[asaas-webhook] Pagamento local não encontrado: ' . $paymentId . '.');
+    $completeWebhook('IGNORED', ['ok' => true, 'skipped' => true]);
 }
 
 $paymentRow = $paymentResult['data'][0];
 $wasAlreadyPaid = (($paymentRow['status'] ?? '') === 'paid' && !empty($paymentRow['paid_at']));
 
+$remoteAmount = (float) ($payment['value'] ?? 0);
+$localAmount = (float) ($paymentRow['amount'] ?? 0);
+if ($remoteAmount <= 0 || abs($remoteAmount - $localAmount) > 0.009) {
+    $blockWebhook('Valor remoto diverge do pagamento local.');
+}
+
+$guardianResult = $client->select(
+    'guardians',
+    'select=id,email,parent_name,parent_document,asaas_customer_id'
+        . '&id=eq.' . rawurlencode((string) ($paymentRow['guardian_id'] ?? ''))
+        . '&student_id=eq.' . rawurlencode((string) ($paymentRow['student_id'] ?? ''))
+        . '&limit=1'
+);
+if (!($guardianResult['ok'] ?? false)) {
+    $failWebhook('Falha ao consultar responsável local.', 503);
+}
+$guardian = is_array($guardianResult['data'][0] ?? null)
+    ? $guardianResult['data'][0]
+    : null;
+$remoteCustomerId = trim((string) ($payment['customer'] ?? ''));
+if (
+    !is_array($guardian)
+    || $remoteCustomerId === ''
+    || $remoteCustomerId !== trim((string) ($guardian['asaas_customer_id'] ?? ''))
+) {
+    $blockWebhook('Cliente remoto não corresponde ao responsável local.');
+}
+$remoteCustomerResult = $asaasClient->getCustomer($remoteCustomerId);
+if (!($remoteCustomerResult['ok'] ?? false)) {
+    $failWebhook('Falha ao consultar cliente remoto.', 503);
+}
+$remoteCustomer = is_array($remoteCustomerResult['data'] ?? null) ? $remoteCustomerResult['data'] : [];
+if (
+    !AsaasCustomerIdentity::matchesRemoteCustomer(
+        $remoteCustomer,
+        (string) ($guardian['parent_name'] ?? ''),
+        (string) ($guardian['email'] ?? ''),
+        (string) ($guardian['parent_document'] ?? '')
+    )
+) {
+    $blockWebhook('Identidade remota diverge do responsável local.');
+}
+
 $accessCode = $paymentRow['access_code'] ?: Helpers::randomNumericCode(6);
 if (!$wasAlreadyPaid) {
-    $client->update('payments', 'id=eq.' . $paymentRow['id'], [
+    $paymentUpdate = $client->update('payments', 'id=eq.' . $paymentRow['id'], [
         'status' => 'paid',
         'paid_at' => date('c'),
         'access_code' => $accessCode,
     ]);
-    file_put_contents(
-        $logPath,
-        '[' . date('c') . '] Webhook Asaas confirmou pagamento: payment_row=' . ((string) ($paymentRow['id'] ?? '-')) . ' asaas_payment_id=' . ((string) ($payment['id'] ?? '-')) . PHP_EOL,
-        FILE_APPEND
+    if (!($paymentUpdate['ok'] ?? false)) {
+        $failWebhook('Falha ao promover pagamento local.', 503);
+    }
+    error_log(
+        '[asaas-webhook] Pagamento confirmado: payment_row='
+        . ((string) ($paymentRow['id'] ?? '-'))
+        . ' asaas_payment_id='
+        . $paymentId
+        . '.'
     );
 }
 
@@ -290,28 +446,30 @@ if ($diariaId !== '') {
     $gradeService = new OficinaModularGradeService($client);
     $confirmacaoGrade = $gradeService->confirmarGradeNoPagamento($diariaId);
     if (!($confirmacaoGrade['ok'] ?? false)) {
-        $logPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'error_log_custom.txt';
-        file_put_contents(
-            $logPath,
-            'Falha ao confirmar grade no pagamento. diaria_id=' . $diariaId . ' payment_id=' . ($paymentRow['id'] ?? '-') . PHP_EOL,
-            FILE_APPEND
+        error_log(
+            '[asaas-webhook] Falha ao confirmar grade: diaria_id='
+            . $diariaId
+            . ' payment_id='
+            . ($paymentRow['id'] ?? '-')
+            . '.'
         );
+        $failWebhook('Falha ao confirmar grade vinculada ao pagamento.', 503);
     } elseif (!empty($confirmacaoGrade['user_alert'])) {
-        $client->update('payments', 'id=eq.' . $paymentRow['id'], [
+        $alertUpdate = $client->update('payments', 'id=eq.' . $paymentRow['id'], [
             'grade_alerta' => (string) $confirmacaoGrade['user_alert'],
         ]);
+        if (!($alertUpdate['ok'] ?? false)) {
+            $failWebhook('Falha ao registrar alerta da grade.', 503);
+        }
     }
 }
 
 if ($wasAlreadyPaid) {
-    Helpers::json(['ok' => true, 'idempotent' => true]);
+    $completeWebhook('PROCESSED', ['ok' => true, 'idempotent' => true]);
 }
 
 $studentResult = $client->select('students', 'select=name,enrollment&' . 'id=eq.' . $paymentRow['student_id']);
 $student = $studentResult['data'][0] ?? null;
-
-$guardianResult = $client->select('guardians', 'select=*&id=eq.' . $paymentRow['guardian_id']);
-$guardian = $guardianResult['data'][0] ?? null;
 
 if ($guardian) {
     $studentName = $student['name'] ?? 'Aluno';
@@ -653,4 +811,4 @@ HTML;
     }
 }
 
-Helpers::json(['ok' => true]);
+$completeWebhook();
