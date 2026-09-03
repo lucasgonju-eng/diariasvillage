@@ -26,19 +26,33 @@ class Helpers
         }
     }
 
-    public static function requireAuth(): array
+    public static function requireAuth(bool $allowPendingStudentSelection = false): array
     {
         if (!isset($_SESSION['user'])) {
             self::json(['ok' => false, 'error' => 'Não autenticado.'], 401);
+        }
+        $selectionConfirmed = ($_SESSION['family_student_selection_confirmed'] ?? false) === true;
+        if (!$allowPendingStudentSelection && !$selectionConfirmed) {
+            self::json([
+                'ok' => false,
+                'code' => 'STUDENT_SELECTION_REQUIRED',
+                'error' => 'Escolha o filho antes de continuar.',
+                'redirect' => '/selecionar-aluno.php',
+            ], 409);
         }
 
         return $_SESSION['user'];
     }
 
-    public static function requireAuthWeb(): array
+    public static function requireAuthWeb(bool $allowPendingStudentSelection = false): array
     {
         if (!isset($_SESSION['user'])) {
             header('Location: /login.php');
+            exit;
+        }
+        $selectionConfirmed = ($_SESSION['family_student_selection_confirmed'] ?? false) === true;
+        if (!$allowPendingStudentSelection && !$selectionConfirmed) {
+            header('Location: /selecionar-aluno.php');
             exit;
         }
 

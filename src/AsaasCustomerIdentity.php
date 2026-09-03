@@ -195,9 +195,9 @@ final class AsaasCustomerIdentity
     private function resolveLocalIdentity(array $guardian, string $document): array
     {
         $guardianId = trim((string) ($guardian['id'] ?? ''));
-        $result = $this->database->select(
+        $result = $this->database->selectAll(
             'guardians',
-            'select=id,parent_name,email,parent_phone,parent_document,asaas_customer_id,auth_user_id,password_hash,verified_at&limit=10000'
+            'select=id,parent_name,email,parent_phone,parent_document,asaas_customer_id,auth_user_id,password_hash,verified_at&order=id.asc'
         );
         if (!($result['ok'] ?? false) || !is_array($result['data'] ?? null)) {
             return self::failure(
@@ -237,6 +237,11 @@ final class AsaasCustomerIdentity
         $email = strtolower(trim((string) ($current['email'] ?? '')));
         $phone = self::normalizeDocument((string) ($current['parent_phone'] ?? ''));
         $customerId = trim((string) ($current['asaas_customer_id'] ?? ''));
+        $authUserId = trim((string) ($current['auth_user_id'] ?? ''));
+        $familyCustomerIds = [];
+        if ($customerId !== '') {
+            $familyCustomerIds[$customerId] = true;
+        }
 
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return self::failure(
@@ -264,6 +269,30 @@ final class AsaasCustomerIdentity
                     409
                 );
             }
+            $otherAuthUserId = trim((string) ($otherGuardian['auth_user_id'] ?? ''));
+            if ($authUserId !== '' && $otherAuthUserId !== '' && $otherAuthUserId !== $authUserId) {
+                return self::failure(
+                    'GUARDIAN_ACCOUNT_CONFLICT',
+                    'A mesma identidade está vinculada a outra conta. A cobrança foi bloqueada para revisão.',
+                    409
+                );
+            }
+            if ($authUserId !== '' && $otherAuthUserId === $authUserId) {
+                $otherCustomerId = trim((string) ($otherGuardian['asaas_customer_id'] ?? ''));
+                if ($otherCustomerId !== '') {
+                    $familyCustomerIds[$otherCustomerId] = true;
+                }
+            }
+        }
+        if (count($familyCustomerIds) > 1) {
+            return self::failure(
+                'GUARDIAN_ASAAS_LINK_CONFLICT',
+                'A conta familiar possui mais de um cliente Asaas. A cobrança foi bloqueada para revisão.',
+                409
+            );
+        }
+        if ($familyCustomerIds !== []) {
+            $customerId = (string) array_key_first($familyCustomerIds);
         }
 
         return [

@@ -116,6 +116,6 @@ foreach ($bootstrapCandidates as $bootstrapFile) {
       <a class="tinyLink" href="/admin/" aria-label="Acesso administrativo">Admin</a>
     </div>
   </footer>
-  <script src="/assets/js/login.js?v=2"></script>
+  <script src="/assets/js/login.js?v=3"></script>
 </body>
 </html>

@@ -108,6 +108,11 @@ function voucherLabelFromBillingType(string $billingType): string
 }
 
 $adminSession = Helpers::requireAdminWeb();
+$adminCsrfToken = trim((string) ($_SESSION['admin_csrf_token'] ?? ''));
+if ($adminCsrfToken === '') {
+    $adminCsrfToken = bin2hex(random_bytes(32));
+    $_SESSION['admin_csrf_token'] = $adminCsrfToken;
+}
 $isAdminPrincipal = (($adminSession['role'] ?? '') === 'admin_principal');
 $canViewAsUser = $isAdminPrincipal;
 $canMergeDuplicates = $isAdminPrincipal;
@@ -115,8 +120,8 @@ $canAttendanceApprove = $isAdminPrincipal;
 $canManageModularOffices = $isAdminPrincipal;
 
 $allowedTabs = $isAdminPrincipal
-    ? ['charges', 'chamada', 'inadimplentes', 'recebidas', 'sem-whatsapp', 'pendencias', 'mensalistas', 'exclusoes', 'reset-senha', 'fluxo-caixa', 'dados-asaas', 'email-massa', 'entries']
-    : ['chamada', 'sem-whatsapp', 'mensalistas', 'entries'];
+    ? ['charges', 'chamada', 'familias', 'inadimplentes', 'recebidas', 'sem-whatsapp', 'pendencias', 'mensalistas', 'exclusoes', 'reset-senha', 'fluxo-caixa', 'dados-asaas', 'email-massa', 'entries']
+    : ['chamada', 'familias', 'sem-whatsapp', 'mensalistas', 'entries'];
 if ($canMergeDuplicates) {
     $allowedTabs[] = 'duplicados';
 }
@@ -322,6 +327,17 @@ $sortByStudentName($pendencias, static fn($row) => (string) ($row['student_name'
 
 $studentsResult = $client->select('students', 'select=id,name,enrollment,created_at,active&limit=10000');
 $students = $studentsResult['data'] ?? [];
+$studentsById = [];
+$studentsByEnrollment = [];
+foreach ($students as $student) {
+    if (is_array($student) && !empty($student['id'])) {
+        $studentsById[(string) $student['id']] = $student;
+        $enrollmentKey = mb_strtoupper(trim((string) ($student['enrollment'] ?? '')), 'UTF-8');
+        if ($enrollmentKey !== '') {
+            $studentsByEnrollment[$enrollmentKey][] = $student;
+        }
+    }
+}
 $studentsForJs = array_map(static function ($row): array {
     if (!is_array($row)) {
         return [
@@ -391,9 +407,16 @@ if ($students) {
 
 $guardiansResult = $client->select(
     'guardians',
-    'select=student_id,parent_document,students(id,name,enrollment)&parent_document=not.is.null&order=created_at.desc&limit=10000'
+    'select=id,student_id,parent_name,email,parent_document,auth_user_id,students(id,name,enrollment)'
+        . '&parent_document=not.is.null&order=created_at.desc&limit=10000'
 );
 $guardians = $guardiansResult['data'] ?? [];
+$guardiansById = [];
+foreach ($guardians as $guardian) {
+    if (is_array($guardian) && !empty($guardian['id'])) {
+        $guardiansById[(string) $guardian['id']] = $guardian;
+    }
+}
 if ($guardians) {
     $cpfGroups = [];
     foreach ($guardians as $guardian) {
@@ -410,6 +433,16 @@ if ($guardians) {
         }
     }
 }
+
+$familyLinkRequestsResult = $client->selectAll(
+    'family_link_requests',
+    'select=id,requester_guardian_id,source_student_id,requested_enrollment,target_student_id,status,requested_at'
+        . '&status=eq.PENDING&order=requested_at.asc'
+);
+$familyLinkRequests = (($familyLinkRequestsResult['ok'] ?? false)
+    && is_array($familyLinkRequestsResult['data'] ?? null))
+    ? array_values(array_filter($familyLinkRequestsResult['data'], 'is_array'))
+    : [];
 
 $exclusionsLog = [];
 $exclusionsLogPath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'exclusions_log.jsonl';
@@ -480,6 +513,7 @@ if (!empty($exclusionsLog)) {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="admin-csrf-token" content="<?php echo htmlspecialchars($adminCsrfToken, ENT_QUOTES, 'UTF-8'); ?>" />
   <title>Admin - Entradas</title>
   <link rel="stylesheet" href="/assets/style.css?v=5" />
   <style>
@@ -749,6 +783,7 @@ if (!empty($exclusionsLog)) {
           <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=charges" data-tab="charges">Cobrança manual</a>
         <?php endif; ?>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=chamada" data-tab="chamada">Chamada</a>
+        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=familias" data-tab="familias">Famílias</a>
         <?php if ($isAdminPrincipal): ?>
           <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=inadimplentes" data-tab="inadimplentes">Cobranças em aberto</a>
           <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=recebidas" data-tab="recebidas">Cobranças recebidas</a>
@@ -775,6 +810,94 @@ if (!empty($exclusionsLog)) {
         <?php endif; ?>
         <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=entries" data-tab="entries">Entradas confirmadas</a>
       </div>
+
+      <section id="tab-familias" class="<?php echo $activeTab === 'familias' ? '' : 'hidden'; ?>">
+        <h2>Vínculos familiares</h2>
+        <p class="muted">
+          O responsável informou a matrícula de outro filho. Confirme no cadastro oficial antes de aprovar.
+          A solicitação, sozinha, nunca libera acesso.
+        </p>
+        <div class="info-note" style="margin-bottom:14px;">
+          Ao aprovar, o aluno passa a aparecer no menu obrigatório daquela conta. Nome ou semelhança não bastam:
+          confira que a pessoa é realmente responsável pelos dois alunos.
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Responsável</th>
+                <th>Aluno já vinculado</th>
+                <th>Aluno solicitado</th>
+                <th>Solicitado em</th>
+                <th>Ação humana</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php if ($familyLinkRequests === []): ?>
+                <tr>
+                  <td colspan="5">Nenhuma solicitação familiar pendente.</td>
+                </tr>
+              <?php else: ?>
+                <?php foreach ($familyLinkRequests as $request): ?>
+                  <?php
+                    $requester = $guardiansById[(string) ($request['requester_guardian_id'] ?? '')] ?? [];
+                    $sourceStudent = $studentsById[(string) ($request['source_student_id'] ?? '')] ?? [];
+                    $requestedEnrollment = mb_strtoupper(trim((string) ($request['requested_enrollment'] ?? '')), 'UTF-8');
+                    $targetCandidates = $studentsByEnrollment[$requestedEnrollment] ?? [];
+                    $targetStudent = count($targetCandidates) === 1 ? $targetCandidates[0] : [];
+                    $document = preg_replace('/\D+/', '', (string) ($requester['parent_document'] ?? '')) ?? '';
+                    $documentLast = strlen($document) >= 4 ? substr($document, -4) : '----';
+                    $requestedAt = !empty($request['requested_at'])
+                        ? date('d/m/Y H:i', strtotime((string) $request['requested_at']))
+                        : '-';
+                  ?>
+                  <tr data-family-link-request="<?php echo htmlspecialchars((string) ($request['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">
+                    <td>
+                      <strong><?php echo htmlspecialchars((string) ($requester['parent_name'] ?? 'Responsável'), ENT_QUOTES, 'UTF-8'); ?></strong><br>
+                      <span class="muted">CPF final <?php echo htmlspecialchars($documentLast, ENT_QUOTES, 'UTF-8'); ?></span>
+                    </td>
+                    <td>
+                      <?php echo htmlspecialchars(
+                        (string) ($sourceStudent['name'] ?? 'Aluno')
+                          . (!empty($sourceStudent['enrollment']) ? ' • ' . (string) $sourceStudent['enrollment'] : ''),
+                        ENT_QUOTES,
+                        'UTF-8'
+                      ); ?>
+                    </td>
+                    <td>
+                      <strong><?php echo htmlspecialchars(
+                        $targetStudent !== []
+                          ? (string) ($targetStudent['name'] ?? 'Aluno') . ' • ' . $requestedEnrollment
+                          : 'Matrícula não localizada ou duplicada • ' . $requestedEnrollment,
+                        ENT_QUOTES,
+                        'UTF-8'
+                      ); ?></strong>
+                    </td>
+                    <td><?php echo htmlspecialchars($requestedAt, ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td>
+                      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <button
+                          class="btn btn-primary btn-sm js-family-link-review"
+                          type="button"
+                          data-decision="APPROVE"
+                          data-request-id="<?php echo htmlspecialchars((string) ($request['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                        >Aprovar vínculo</button>
+                        <button
+                          class="btn btn-danger btn-sm js-family-link-review"
+                          type="button"
+                          data-decision="REJECT"
+                          data-request-id="<?php echo htmlspecialchars((string) ($request['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                        >Rejeitar</button>
+                      </div>
+                    </td>
+                  </tr>
+                <?php endforeach; ?>
+              <?php endif; ?>
+            </tbody>
+          </table>
+        </div>
+        <div id="family-link-review-message" class="charge-message"></div>
+      </section>
 
       <section id="tab-entries" class="<?php echo $activeTab === 'entries' ? '' : 'hidden'; ?>">
         <h2>Entradas confirmadas</h2>
@@ -2190,7 +2313,7 @@ if (!empty($exclusionsLog)) {
     window.__monthlyStudents = <?php echo json_encode($monthlyRowsForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
     window.__adminCanApproveAttendance = <?php echo $canAttendanceApprove ? 'true' : 'false'; ?>;
   </script>
-  <script src="/assets/js/admin-dashboard.js?v=78"></script>
+  <script src="/assets/js/admin-dashboard.js?v=79"></script>
   <script>
     (function () {
       function activateTab(name) {

@@ -10,6 +10,8 @@ foreach ($bootstrapCandidates as $bootstrapFile) {
     }
 }
 
+use App\AsaasCustomerIdentity;
+use App\GuardianAccountIdentity;
 use App\Helpers;
 use App\HttpClient;
 use App\SupabaseAuth;
@@ -22,20 +24,27 @@ try {
     if (!is_array($payload)) {
         Helpers::json(['ok' => false, 'error' => 'Payload inválido.'], 422);
     }
+    $csrfToken = trim((string) ($payload['csrf_token'] ?? ''));
+    $expectedCsrfToken = trim((string) ($_SESSION['profile_csrf_token'] ?? ''));
+    if (
+        $csrfToken === ''
+        || $expectedCsrfToken === ''
+        || !hash_equals($expectedCsrfToken, $csrfToken)
+    ) {
+        Helpers::json(['ok' => false, 'error' => 'Sessão expirada. Recarregue o perfil.'], 403);
+    }
 
     $guardianId = trim((string) ($user['id'] ?? ''));
     if ($guardianId === '') {
         Helpers::json(['ok' => false, 'error' => 'Sessão inválida. Faça login novamente.'], 401);
     }
 
-    $documentRaw = trim((string) ($payload['parent_document'] ?? ''));
-    $document = $documentRaw !== '' ? preg_replace('/\D+/', '', $documentRaw) : '';
-
-    $update = [
-        'parent_name' => trim((string) ($payload['parent_name'] ?? '')),
-        'parent_phone' => trim((string) ($payload['parent_phone'] ?? '')),
-        'parent_document' => $document,
-    ];
+    $requestedName = trim((string) ($payload['parent_name'] ?? ''));
+    $requestedPhone = trim((string) ($payload['parent_phone'] ?? ''));
+    $document = AsaasCustomerIdentity::normalizeDocument((string) ($payload['parent_document'] ?? ''));
+    if ($requestedName === '' || !AsaasCustomerIdentity::isValidCpfOrCnpj($document)) {
+        Helpers::json(['ok' => false, 'error' => 'Nome ou CPF/CNPJ inválido.'], 422);
+    }
 
     $password = (string) ($payload['password'] ?? '');
     $passwordConfirm = (string) ($payload['password_confirm'] ?? '');
@@ -47,55 +56,100 @@ try {
         if (strlen($password) < 6) {
             Helpers::json(['ok' => false, 'error' => 'A nova senha deve ter pelo menos 6 caracteres.'], 422);
         }
-        $update['password_hash'] = password_hash($password, PASSWORD_DEFAULT);
     }
 
     $client = new SupabaseClient(new HttpClient());
-    $result = $client->update('guardians', 'id=eq.' . urlencode($guardianId), $update);
-
-    if (!$result['ok'] || empty($result['data'][0])) {
-        $data = $result['data'] ?? [];
-        $error = is_array($data)
-            ? ($data['message'] ?? $data['details'] ?? $data['error_description'] ?? null)
-            : null;
-        Helpers::json(['ok' => false, 'error' => $error ?: 'Erro ao atualizar perfil.'], 500);
+    $currentResult = $client->select(
+        'guardians',
+        'select=*&id=eq.' . rawurlencode($guardianId) . '&limit=1'
+    );
+    $current = (($currentResult['ok'] ?? false) && is_array($currentResult['data'][0] ?? null))
+        ? $currentResult['data'][0]
+        : null;
+    if (!is_array($current)) {
+        Helpers::json(['ok' => false, 'error' => 'Responsável da sessão não encontrado.'], 409);
     }
 
-    $updatedUser = $result['data'][0];
+    $normalizeName = static function (string $name): string {
+        $normalized = mb_strtoupper(trim($name), 'UTF-8');
+        $ascii = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $normalized);
+        if ($ascii !== false) {
+            $normalized = $ascii;
+        }
+        return preg_replace('/[^A-Z0-9]+/', '', $normalized) ?? '';
+    };
+    if (
+        $normalizeName($requestedName) !== $normalizeName((string) ($current['parent_name'] ?? ''))
+        || $document !== AsaasCustomerIdentity::normalizeDocument((string) ($current['parent_document'] ?? ''))
+    ) {
+        Helpers::json([
+            'ok' => false,
+            'error' => 'Nome e CPF/CNPJ identificam a conta e só podem ser alterados pela secretaria.',
+        ], 409);
+    }
 
+    $authUserId = trim((string) ($current['auth_user_id'] ?? ''));
+    $targetRows = [$current];
+    $updateFilter = 'id=eq.' . rawurlencode($guardianId) . '&auth_user_id=is.null';
+    if ($authUserId !== '') {
+        $accountResult = $client->selectAll(
+            'guardians',
+            'select=*&auth_user_id=eq.' . rawurlencode($authUserId) . '&order=id.asc'
+        );
+        $targetRows = (($accountResult['ok'] ?? false) && is_array($accountResult['data'] ?? null))
+            ? array_values(array_filter($accountResult['data'], 'is_array'))
+            : [];
+        $identity = GuardianAccountIdentity::analyze($targetRows, $guardianId);
+        if (
+            !($identity['ok'] ?? false)
+            || ($identity['mode'] ?? '') !== 'supabase_auth'
+            || !hash_equals($authUserId, (string) ($identity['auth_user_id'] ?? ''))
+        ) {
+            Helpers::json(['ok' => false, 'error' => 'A conta familiar possui vínculos conflitantes.'], 409);
+        }
+        $updateFilter = 'auth_user_id=eq.' . rawurlencode($authUserId);
+    }
+
+    $update = [
+        'parent_name' => (string) ($current['parent_name'] ?? $requestedName),
+        'parent_phone' => $requestedPhone,
+        'parent_document' => $document,
+    ];
     if ($password !== '') {
-        $email = trim((string) ($updatedUser['email'] ?? $user['email'] ?? ''));
-        $canUseAuth = $email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) && !str_contains(strtolower($email), '@placeholder.');
-        if ($canUseAuth) {
-            $auth = new SupabaseAuth(new HttpClient());
-            $listResult = $auth->listUsers(1, 1000);
-            $authUserId = null;
+        $update['password_hash'] = $authUserId !== ''
+            ? password_hash(bin2hex(random_bytes(32)), PASSWORD_DEFAULT)
+            : password_hash($password, PASSWORD_DEFAULT);
+    }
 
-            if ($listResult['ok'] && !empty($listResult['data']['users'])) {
-                foreach ($listResult['data']['users'] as $authUser) {
-                    if (strtolower(trim((string) ($authUser['email'] ?? ''))) === strtolower($email)) {
-                        $authUserId = $authUser['id'] ?? null;
-                        break;
-                    }
-                }
-            }
+    $result = $client->update('guardians', $updateFilter, $update);
+    if (!($result['ok'] ?? false) || count($result['data'] ?? []) !== count($targetRows)) {
+        Helpers::json(['ok' => false, 'error' => 'Os vínculos mudaram durante a atualização. Tente novamente.'], 409);
+    }
 
-            if ($authUserId) {
-                $authUpdate = $auth->updateUser((string) $authUserId, [
-                    'password' => $password,
-                    'email_confirm' => true,
-                ]);
-                if (!$authUpdate['ok']) {
-                    $authData = $authUpdate['data'] ?? [];
-                    $authError = is_array($authData)
-                        ? ($authData['msg'] ?? $authData['message'] ?? $authData['error_description'] ?? null)
-                        : null;
-                    error_log('profile.php auth password sync failed for ' . $email . ': ' . ($authError ?: ($authUpdate['error'] ?? 'erro desconhecido')));
-                }
-            }
+    if ($password !== '' && $authUserId !== '') {
+        $auth = new SupabaseAuth(new HttpClient());
+        $authUpdate = $auth->updateUser($authUserId, [
+            'password' => $password,
+            'email_confirm' => true,
+        ]);
+        if (!($authUpdate['ok'] ?? false)) {
+            Helpers::json([
+                'ok' => false,
+                'error' => 'Os dados foram salvos, mas a senha Auth não pôde ser alterada. A senha anterior continua válida.',
+            ], 502);
         }
     }
 
+    $updatedUser = null;
+    foreach (($result['data'] ?? []) as $updatedRow) {
+        if (is_array($updatedRow) && (string) ($updatedRow['id'] ?? '') === $guardianId) {
+            $updatedUser = $updatedRow;
+            break;
+        }
+    }
+    if (!is_array($updatedUser)) {
+        Helpers::json(['ok' => false, 'error' => 'Perfil salvo, mas a sessão precisa ser refeita.'], 409);
+    }
     $_SESSION['user'] = $updatedUser;
     Helpers::json(['ok' => true]);
 } catch (Throwable $e) {

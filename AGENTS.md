@@ -184,8 +184,12 @@ CPF e aluno e usa as RPCs `begin_first_access_claim`,
   fornecidos pelo solicitante sem validar o vínculo existente.
 - Nunca redefina um usuário existente do Supabase Auth no primeiro acesso.
 - Uma criação Auth sem conclusão local deve ser compensada com exclusão imediata.
-- O e-mail novo é salvo apenas no vínculo principal porque `guardians.email` é
-  único. Os demais filhos da mesma identidade recebem o mesmo `auth_user_id`.
+- Vínculos do mesmo responsável podem repetir o e-mail somente quando nome,
+  documento e `auth_user_id` representam a mesma conta. O trigger
+  `trg_guardians_email_identity` bloqueia reutilização entre identidades.
+- O primeiro acesso ativa somente o vínculo aluno-responsável confirmado pela
+  matrícula e CPF. Outros filhos entram pela solicitação aprovada; nunca agrupe
+  automaticamente linhas apenas por CPF e nome.
 - A troca de filho no dashboard usa `auth_user_id` e valida o vínculo-aluno;
   CPF, nome ou e-mail isolados não autorizam ampliar a sessão.
 - Claims concorrentes ou já concluídos devem bloquear o cadastro.
@@ -200,6 +204,20 @@ CPF e aluno e usa as RPCs `begin_first_access_claim`,
   dessa conta são revalidadas e a ação entra em `admin_audit_log`.
 - Login, reset e expansão familiar não podem usar busca parcial de CPF nem
   escolher silenciosamente a primeira linha ou o primeiro e-mail.
+- Quando uma conta possui mais de um `student_id`, todo login cria o estado
+  bloqueante `family_student_selection_required`. Nenhuma página ou API
+  operacional fica disponível antes da escolha explícita em
+  `selecionar-aluno.php`.
+- O seletor mostra cartões grandes com nome, matrícula e tipo de fluxo
+  (mensalista ou day-use). O dashboard destaca permanentemente o aluno ativo e
+  oferece `Trocar filho`; nunca restaure seleção automática do primeiro aluno.
+- Um pai pode solicitar outro filho somente pela matrícula. A solicitação entra
+  em `family_link_requests` e não concede acesso. Secretaria ou admin precisam
+  aprovar nominalmente na aba Famílias; a RPC `review_family_link_request`
+  revalida conta, aluno, identidade composta e cliente Asaas em transação.
+- Não infira irmãos por sobrenome, telefone, e-mail ou semelhança. Em 03/09/2026
+  as 27 contas Auth existentes tinham um aluno cada; vínculos anteriores só
+  podem ser ampliados por solicitação e aprovação humana.
 
 Na auditoria de 03/09/2026, 153 dos 156 grupos de CPF eram determinísticos
 (25 contas Auth compartilhadas e 128 vínculos legados únicos). Três grupos têm
@@ -376,6 +394,7 @@ php tests/oficina_modular_authorization_test.php
 php tests/payment_lifecycle_behavior_test.php
 php tests/authentication_security_test.php
 php tests/guardian_account_identity_test.php
+php tests/family_student_selection_test.php
 php tests/monthly_workshop_security_test.php
 php tests/monthly_legacy_charge_audit_test.php
 php -l public/api/admin-charge.php

@@ -40,6 +40,13 @@ if ($r !== null) {
         header('Location: /mobile/?r=login');
         exit;
     }
+    if (
+        $authRequired
+        && (($_SESSION['family_student_selection_confirmed'] ?? false) !== true)
+    ) {
+        header('Location: /selecionar-aluno.php');
+        exit;
+    }
     $appFile = __DIR__ . '/app/' . $safeRoute . '.php';
     if (!file_exists($appFile)) {
         header('Location: /mobile/?r=login');
@@ -72,6 +79,18 @@ if ($r !== null) {
     $page = $_GET['page'] ?? 'tela_inicial';
     if (!in_array($page, $allowed, true)) {
         $page = 'tela_inicial';
+    }
+    $legacyAuthRequired = in_array($page, ['grade_oficinas', 'resumo_pedido'], true);
+    if ($legacyAuthRequired && !$isLoggedIn) {
+        header('Location: /mobile/?r=login');
+        exit;
+    }
+    if (
+        $legacyAuthRequired
+        && (($_SESSION['family_student_selection_confirmed'] ?? false) !== true)
+    ) {
+        header('Location: /selecionar-aluno.php');
+        exit;
     }
 
     // Simulador iPhone 16 – servido inline (não depende de arquivo extra no deploy)

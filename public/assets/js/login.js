@@ -40,6 +40,6 @@ if (loginForm) {
       return;
     }
 
-    window.location.href = '/dashboard.php';
+    window.location.href = data.redirect || '/dashboard.php';
   });
 }

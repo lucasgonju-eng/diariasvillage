@@ -3,6 +3,7 @@ const profileMessage = document.querySelector('#profile-message');
 const addGuardianForm = document.querySelector('#add-guardian-form');
 const addGuardianMessage = document.querySelector('#add-guardian-message');
 const guardiansList = document.querySelector('#guardians-list');
+const profileCsrfToken = document.querySelector('meta[name="profile-csrf-token"]')?.content || '';
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -68,6 +69,7 @@ if (profileForm) {
       parent_document: document.querySelector('#parent-document').value.trim(),
       password: document.querySelector('#new-password').value,
       password_confirm: document.querySelector('#new-password-confirm').value,
+      csrf_token: profileCsrfToken,
     };
 
     let data = null;
@@ -109,6 +111,7 @@ if (addGuardianForm) {
       email: document.querySelector('#extra-parent-email').value.trim(),
       parent_phone: document.querySelector('#extra-parent-phone').value.trim(),
       parent_document: document.querySelector('#extra-parent-document').value.trim(),
+      csrf_token: profileCsrfToken,
     };
 
     let data = null;

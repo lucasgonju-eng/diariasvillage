@@ -165,6 +165,76 @@ check_identity_behavior(
     'duplicidade local incompleta deve bloquear antes de consultar o Asaas'
 );
 
+$familyCurrent = guardian_fixture();
+$familyCurrent['auth_user_id'] = '20000000-0000-4000-8000-000000000001';
+$familyCurrent['asaas_customer_id'] = '';
+$familySibling = guardian_fixture();
+$familySibling['id'] = '10000000-0000-4000-8000-000000000004';
+$familySibling['auth_user_id'] = $familyCurrent['auth_user_id'];
+[$familyResult, $familyAsaas, $familyDatabase] = resolve_with_remote(
+    [
+        'id' => 'cus_family',
+        'name' => 'Maria da Silva',
+        'email' => 'maria@example.com',
+        'cpfCnpj' => '52998224725',
+        'deleted' => false,
+    ],
+    $familyCurrent,
+    [$familyCurrent, $familySibling]
+);
+check_identity_behavior(
+    ($familyResult['ok'] ?? false) === true,
+    'irmão da mesma conta deve reutilizar cliente somente após validação remota'
+);
+check_identity_behavior(
+    array_column($familyAsaas->calls, 'method') === ['getCustomer', 'updateCustomer'],
+    'cliente familiar canônico deve ser validado antes do reuso'
+);
+check_identity_behavior(
+    ($familyDatabase->updates[0]['payload']['asaas_customer_id'] ?? '') === 'cus_family',
+    'cliente familiar validado deve ser persistido no vínculo selecionado'
+);
+
+$otherAccount = $familySibling;
+$otherAccount['auth_user_id'] = '20000000-0000-4000-8000-000000000002';
+[$accountConflict, $accountConflictAsaas] = resolve_with_remote(
+    [
+        'id' => 'cus_family',
+        'name' => 'Maria da Silva',
+        'email' => 'maria@example.com',
+        'cpfCnpj' => '52998224725',
+        'deleted' => false,
+    ],
+    $familyCurrent,
+    [$familyCurrent, $otherAccount]
+);
+check_identity_behavior(
+    ($accountConflict['code'] ?? '') === 'GUARDIAN_ACCOUNT_CONFLICT',
+    'mesma identidade em contas Auth diferentes deve bloquear'
+);
+check_identity_behavior($accountConflictAsaas->calls === [], 'conflito Auth deve bloquear antes do Asaas');
+
+$secondCustomer = $familySibling;
+$secondCustomer['asaas_customer_id'] = 'cus_other';
+$firstCustomer = $familyCurrent;
+$firstCustomer['asaas_customer_id'] = 'cus_family';
+[$customerLinkConflict, $customerLinkConflictAsaas] = resolve_with_remote(
+    [
+        'id' => 'cus_family',
+        'name' => 'Maria da Silva',
+        'email' => 'maria@example.com',
+        'cpfCnpj' => '52998224725',
+        'deleted' => false,
+    ],
+    $firstCustomer,
+    [$firstCustomer, $secondCustomer]
+);
+check_identity_behavior(
+    ($customerLinkConflict['code'] ?? '') === 'GUARDIAN_ASAAS_LINK_CONFLICT',
+    'conta familiar com dois clientes Asaas deve bloquear'
+);
+check_identity_behavior($customerLinkConflictAsaas->calls === [], 'conflito de clientes deve bloquear antes do Asaas');
+
 [$emailConflict, $emailAsaas, $emailDatabase] = resolve_with_remote([
     'id' => 'cus_family',
     'name' => 'Maria da Silva',

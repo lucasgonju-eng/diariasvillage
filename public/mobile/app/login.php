@@ -83,7 +83,7 @@
         btn.disabled=false;btn.textContent='Entrar';
         return;
       }
-      window.location.href='/mobile/?r=grade';
+      window.location.href=data.redirect||'/dashboard.php';
     }catch(err){
       msg.textContent='Erro de conexão. Tente novamente.';
       msg.className='m-msg error';

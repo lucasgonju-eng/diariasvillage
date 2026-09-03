@@ -44,9 +44,9 @@ if ($userId !== '') {
 }
 
 if ($authUserId !== '') {
-    $guardiansByAccount = $client->select(
+    $guardiansByAccount = $client->selectAll(
         'guardians',
-        'select=student_id&auth_user_id=eq.' . urlencode($authUserId) . '&limit=200'
+        'select=id,student_id&auth_user_id=eq.' . urlencode($authUserId) . '&order=id.asc'
     );
     if (($guardiansByAccount['ok'] ?? false) && !empty($guardiansByAccount['data'])) {
         foreach ($guardiansByAccount['data'] as $row) {
@@ -68,14 +68,20 @@ if (!empty($studentIds)) {
         );
     } else {
         $quotedStudentIds = array_map(static fn($id) => '"' . str_replace('"', '', $id) . '"', $studentIds);
-        $studentResult = $client->select(
+        $studentResult = $client->selectAll(
             'students',
-            'select=id,name,enrollment,grade,class_name&id=in.(' . implode(',', $quotedStudentIds) . ')&order=name.asc&limit=20'
+            'select=id,name,enrollment,grade,class_name&id=in.(' . implode(',', $quotedStudentIds) . ')&order=name.asc'
         );
     }
     if (($studentResult['ok'] ?? false) && !empty($studentResult['data']) && is_array($studentResult['data'])) {
         $studentRows = $studentResult['data'];
     }
+}
+
+if (count($studentRows) > 1 && empty($_SESSION['family_student_selected_at'])) {
+    $_SESSION['family_student_selection_required'] = true;
+    header('Location: /selecionar-aluno.php');
+    exit;
 }
 
 $studentRow = [];
@@ -88,7 +94,12 @@ if (!empty($studentRows)) {
             }
         }
     }
-    if (empty($studentRow)) {
+    if (empty($studentRow) && count($studentRows) > 1) {
+        $_SESSION['family_student_selection_required'] = true;
+        header('Location: /selecionar-aluno.php');
+        exit;
+    }
+    if (empty($studentRow) && count($studentRows) === 1) {
         $studentRow = $studentRows[0];
     }
 }
@@ -150,24 +161,21 @@ unset($_SESSION['dashboard_error']);
           <p class="lead" style="margin-top:-6px;font-weight:700;color:#FFE7A6;">
             Pode entrar, <?php echo htmlspecialchars($studentName, ENT_QUOTES, 'UTF-8'); ?>, a casa é sua!
           </p>
-          <?php if (count($studentRows) > 1): ?>
-            <form method="post" action="/api/select-student.php" style="max-width:360px;margin:10px 0;">
-              <label for="family-student" style="display:block;font-weight:700;margin-bottom:4px;">Aluno desta conta</label>
-              <select id="family-student" name="student_id" onchange="this.form.submit()" style="width:100%;">
-                <?php foreach ($studentRows as $familyStudent): ?>
-                  <?php $familyStudentId = trim((string) ($familyStudent['id'] ?? '')); ?>
-                  <option value="<?php echo htmlspecialchars($familyStudentId, ENT_QUOTES, 'UTF-8'); ?>" <?php echo $familyStudentId === $dashboardStudentId ? 'selected' : ''; ?>>
-                    <?php echo htmlspecialchars(
-                        trim((string) ($familyStudent['name'] ?? 'Aluno(a)'))
-                            . (!empty($familyStudent['enrollment']) ? ' • ' . (string) $familyStudent['enrollment'] : ''),
-                        ENT_QUOTES,
-                        'UTF-8'
-                    ); ?>
-                  </option>
-                <?php endforeach; ?>
-              </select>
-            </form>
-          <?php endif; ?>
+          <div style="max-width:560px;margin:16px 0;padding:16px 18px;border:3px solid #FFD35A;border-radius:16px;background:#FFFFFF;color:#0B1739;box-shadow:0 12px 26px rgba(0,0,0,.22);">
+            <div style="font-size:.75rem;font-weight:900;letter-spacing:.09em;color:#8A5B00;">VOCÊ ESTÁ ORGANIZANDO PARA</div>
+            <div style="margin-top:4px;font-size:1.45rem;font-weight:900;line-height:1.15;">
+              <?php echo htmlspecialchars(
+                $studentName
+                  . (!empty($studentRow['enrollment']) ? ' • Matrícula ' . (string) $studentRow['enrollment'] : ''),
+                ENT_QUOTES,
+                'UTF-8'
+              ); ?>
+            </div>
+            <?php if (count($studentRows) > 1): ?>
+              <a class="btn btn-primary btn-sm" href="/selecionar-aluno.php?trocar=1" style="margin-top:12px;">Trocar filho</a>
+            <?php endif; ?>
+            <a class="btn btn-ghost btn-sm" href="/vincular-filho.php" style="margin-top:12px;">Adicionar outro filho</a>
+          </div>
           <p class="lead">Escolha a diária do dia com praticidade.</p>
 
           <div class="microchips" role="list">

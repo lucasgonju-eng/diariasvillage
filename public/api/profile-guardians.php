@@ -34,17 +34,6 @@ if ($studentId === '') {
     }
 }
 if ($studentId === '') {
-    $userEmail = strtolower(trim((string) ($user['email'] ?? '')));
-    if ($userEmail !== '') {
-        $currentByEmail = $client->select(
-            'guardians',
-            'select=student_id&email=eq.' . urlencode($userEmail) . '&limit=1'
-        );
-        $current = $currentByEmail['data'][0] ?? null;
-        $studentId = trim((string) ($current['student_id'] ?? ''));
-    }
-}
-if ($studentId === '') {
     Helpers::json(['ok' => false, 'error' => 'Aluno vinculado não encontrado para esta conta.'], 422);
 }
 

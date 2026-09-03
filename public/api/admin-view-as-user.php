@@ -106,6 +106,10 @@ if ($guardianId !== '') {
 }
 
 $_SESSION['user'] = $guardian;
+$_SESSION['family_student_selection_required'] = false;
+$_SESSION['family_student_selection_confirmed'] = true;
+$_SESSION['family_student_count'] = 1;
+$_SESSION['family_student_selected_at'] = time();
 $_SESSION['admin_impersonating_student'] = (string) ($student['name'] ?? '');
 $_SESSION['admin_impersonating_student_id'] = (string) ($student['id'] ?? '');
 $_SESSION['admin_impersonating_guardian_id'] = (string) ($guardian['id'] ?? '');

@@ -6,19 +6,24 @@ use App\HttpClient;
 use App\SupabaseClient;
 
 $user = Helpers::requireAuthWeb();
+$profileCsrfToken = trim((string) ($_SESSION['profile_csrf_token'] ?? ''));
+if ($profileCsrfToken === '') {
+    $profileCsrfToken = bin2hex(random_bytes(32));
+    $_SESSION['profile_csrf_token'] = $profileCsrfToken;
+}
 $client = new SupabaseClient(new HttpClient());
 $studentIdsScope = [];
 $sessionStudentId = trim((string) ($user['student_id'] ?? ''));
 if ($sessionStudentId !== '') {
     $studentIdsScope[$sessionStudentId] = true;
 }
-$documentDigits = preg_replace('/\D+/', '', (string) ($user['parent_document'] ?? '')) ?? '';
+$authUserId = trim((string) ($user['auth_user_id'] ?? ''));
 
 $userId = trim((string) ($user['id'] ?? ''));
 if ($userId !== '') {
     $guardianCurrent = $client->select(
         'guardians',
-        'select=student_id,parent_document&id=eq.' . urlencode($userId) . '&limit=1'
+        'select=student_id,auth_user_id&id=eq.' . urlencode($userId) . '&limit=1'
     );
     if (($guardianCurrent['ok'] ?? false) && !empty($guardianCurrent['data'][0])) {
         $current = $guardianCurrent['data'][0];
@@ -26,49 +31,19 @@ if ($userId !== '') {
         if ($sid !== '') {
             $studentIdsScope[$sid] = true;
         }
-        if ($documentDigits === '') {
-            $documentDigits = preg_replace('/\D+/', '', (string) ($current['parent_document'] ?? '')) ?? '';
+        if ($authUserId === '') {
+            $authUserId = trim((string) ($current['auth_user_id'] ?? ''));
         }
     }
 }
 
-$userEmail = trim((string) ($user['email'] ?? ''));
-if ($userEmail !== '') {
-    $guardiansByEmail = $client->select(
+if ($authUserId !== '') {
+    $guardiansByAccount = $client->selectAll(
         'guardians',
-        'select=student_id&email=eq.' . urlencode($userEmail) . '&limit=200'
+        'select=id,student_id&auth_user_id=eq.' . rawurlencode($authUserId) . '&order=id.asc'
     );
-    if (($guardiansByEmail['ok'] ?? false) && !empty($guardiansByEmail['data'])) {
-        foreach ($guardiansByEmail['data'] as $row) {
-            $sid = trim((string) ($row['student_id'] ?? ''));
-            if ($sid !== '') {
-                $studentIdsScope[$sid] = true;
-            }
-        }
-    }
-}
-
-if ($documentDigits !== '') {
-    $maskCpf = static function (string $digits): string {
-        if (strlen($digits) !== 11) {
-            return $digits;
-        }
-        return substr($digits, 0, 3) . '.'
-            . substr($digits, 3, 3) . '.'
-            . substr($digits, 6, 3) . '-'
-            . substr($digits, 9, 2);
-    };
-    $cpfAttempts = [
-        'parent_document=eq.' . urlencode($documentDigits) . '&select=student_id&limit=500',
-        'parent_document=eq.' . urlencode($maskCpf($documentDigits)) . '&select=student_id&limit=500',
-        'parent_document=ilike.' . urlencode('*' . $documentDigits . '*') . '&select=student_id&limit=500',
-    ];
-    foreach ($cpfAttempts as $query) {
-        $guardiansByCpf = $client->select('guardians', $query);
-        if (!($guardiansByCpf['ok'] ?? false) || empty($guardiansByCpf['data'])) {
-            continue;
-        }
-        foreach ($guardiansByCpf['data'] as $row) {
+    if (($guardiansByAccount['ok'] ?? false) && is_array($guardiansByAccount['data'] ?? null)) {
+        foreach ($guardiansByAccount['data'] as $row) {
             $sid = trim((string) ($row['student_id'] ?? ''));
             if ($sid !== '') {
                 $studentIdsScope[$sid] = true;
@@ -87,9 +62,9 @@ if (!empty($studentIds)) {
         );
     } else {
         $quotedStudentIds = array_map(static fn($id) => '"' . str_replace('"', '', $id) . '"', $studentIds);
-        $studentResult = $client->select(
+        $studentResult = $client->selectAll(
             'students',
-            'select=id,name,enrollment,grade,class_name&id=in.(' . implode(',', $quotedStudentIds) . ')&order=name.asc&limit=20'
+            'select=id,name,enrollment,grade,class_name&id=in.(' . implode(',', $quotedStudentIds) . ')&order=name.asc'
         );
     }
     if (($studentResult['ok'] ?? false) && !empty($studentResult['data']) && is_array($studentResult['data'])) {
@@ -107,7 +82,13 @@ if (!empty($studentRows)) {
             }
         }
     }
-    if (empty($studentRow)) {
+    if (empty($studentRow) && count($studentRows) > 1) {
+        $_SESSION['family_student_selection_required'] = true;
+        $_SESSION['family_student_selection_confirmed'] = false;
+        header('Location: /selecionar-aluno.php');
+        exit;
+    }
+    if (empty($studentRow) && count($studentRows) === 1) {
         $studentRow = $studentRows[0];
     }
 }
@@ -121,6 +102,7 @@ $studentClass = trim((string) (($studentRow['class_name'] ?? '') ?: ($studentRow
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="profile-csrf-token" content="<?php echo htmlspecialchars($profileCsrfToken, ENT_QUOTES, 'UTF-8'); ?>" />
   <title>Perfil - Diárias Village</title>
   <meta name="description" content="Atualize os dados do responsável e mantenha o cadastro em dia." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -179,7 +161,7 @@ $studentClass = trim((string) (($studentRow['class_name'] ?? '') ?: ($studentRow
           <form id="profile-form">
             <div class="form-group">
               <label>Nome do responsável</label>
-              <input id="parent-name" value="<?php echo htmlspecialchars($user['parent_name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>" />
+              <input id="parent-name" value="<?php echo htmlspecialchars($user['parent_name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>" readonly />
             </div>
             <div class="form-group">
               <label>Telefone</label>
@@ -187,7 +169,8 @@ $studentClass = trim((string) (($studentRow['class_name'] ?? '') ?: ($studentRow
             </div>
             <div class="form-group">
               <label>CPF/CNPJ</label>
-              <input id="parent-document" value="<?php echo htmlspecialchars($user['parent_document'] ?? '', ENT_QUOTES, 'UTF-8'); ?>" />
+              <input id="parent-document" value="<?php echo htmlspecialchars($user['parent_document'] ?? '', ENT_QUOTES, 'UTF-8'); ?>" readonly />
+              <small class="muted">Para corrigir nome ou documento, procure a secretaria.</small>
             </div>
 
             <div class="grid-2">
@@ -248,6 +231,6 @@ $studentClass = trim((string) (($studentRow['class_name'] ?? '') ?: ($studentRow
     </div>
   </footer>
 
-  <script src="/assets/js/profile.js?v=3"></script>
+  <script src="/assets/js/profile.js?v=4"></script>
 </body>
 </html>

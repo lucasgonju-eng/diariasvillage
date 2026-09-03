@@ -1,4 +1,5 @@
 const tabs = document.querySelectorAll('[data-tab]');
+const adminCsrfToken = document.querySelector('meta[name="admin-csrf-token"]')?.content || '';
 window.__adminDashboardBooted = true;
 console.info('[admin-dashboard] bootstrap ok', { tabs: tabs.length });
 const tabEntries = document.querySelector('#tab-entries');
@@ -9,6 +10,7 @@ const tabRecebidas = document.querySelector('#tab-recebidas');
 const tabSemWhatsapp = document.querySelector('#tab-sem-whatsapp');
 const tabDuplicados = document.querySelector('#tab-duplicados');
 const tabPendencias = document.querySelector('#tab-pendencias');
+const tabFamilias = document.querySelector('#tab-familias');
 const tabMensalistas = document.querySelector('#tab-mensalistas');
 const tabOficinasModulares = document.querySelector('#tab-oficinas-modulares');
 const tabExclusoes = document.querySelector('#tab-exclusoes');
@@ -130,6 +132,7 @@ function setActiveTab(name) {
   tabSemWhatsapp.classList.toggle('hidden', name !== 'sem-whatsapp');
   if (tabDuplicados) tabDuplicados.classList.toggle('hidden', name !== 'duplicados');
   tabPendencias.classList.toggle('hidden', name !== 'pendencias');
+  if (tabFamilias) tabFamilias.classList.toggle('hidden', name !== 'familias');
   tabMensalistas.classList.toggle('hidden', name !== 'mensalistas');
   if (tabOficinasModulares) tabOficinasModulares.classList.toggle('hidden', name !== 'oficinas-modulares');
   if (tabExclusoes) tabExclusoes.classList.toggle('hidden', name !== 'exclusoes');
@@ -5274,6 +5277,65 @@ if (
     }
   });
 }
+
+document.querySelectorAll('.js-family-link-review').forEach((button) => {
+  button.addEventListener('click', async () => {
+    const requestId = String(button.dataset.requestId || '');
+    const decision = String(button.dataset.decision || '').toUpperCase();
+    const row = button.closest('tr');
+    const targetStudent = row?.children?.[2]?.textContent?.trim() || 'o aluno solicitado';
+    const confirmationWord = decision === 'APPROVE' ? 'APROVAR' : 'REJEITAR';
+    const typed = window.prompt(
+      `${decision === 'APPROVE' ? 'Confirme que o responsável possui vínculo oficial com' : 'Rejeitar o vínculo com'} ${targetStudent}.\n\nDigite ${confirmationWord} para continuar.`
+    );
+    if (String(typed || '').trim().toUpperCase() !== confirmationWord) {
+      return;
+    }
+
+    const note = window.prompt('Observação da análise (opcional):') || '';
+    const message = document.querySelector('#family-link-review-message');
+    document.querySelectorAll('.js-family-link-review').forEach((item) => {
+      item.setAttribute('disabled', 'disabled');
+    });
+    if (message) {
+      message.textContent = decision === 'APPROVE'
+        ? 'Validando identidade e criando o vínculo...'
+        : 'Registrando rejeição...';
+      message.className = 'charge-message';
+    }
+
+    try {
+      const response = await fetch('/api/admin-review-family-link.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          request_id: requestId,
+          decision,
+          note,
+          csrf_token: adminCsrfToken,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) {
+        throw new Error(data.error || 'Não foi possível revisar o vínculo.');
+      }
+      row?.remove();
+      if (message) {
+        message.textContent = data.message;
+        message.className = 'charge-message success';
+      }
+    } catch (error) {
+      if (message) {
+        message.textContent = error?.message || 'Não foi possível revisar o vínculo.';
+        message.className = 'charge-message error';
+      }
+    } finally {
+      document.querySelectorAll('.js-family-link-review').forEach((item) => {
+        item.removeAttribute('disabled');
+      });
+    }
+  });
+});
 
 if (cashflowFromInput && cashflowToInput) {
   const todayIso = new Date().toISOString().slice(0, 10);

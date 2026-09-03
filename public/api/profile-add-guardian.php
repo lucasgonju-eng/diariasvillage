@@ -10,6 +10,7 @@ foreach ($bootstrapCandidates as $bootstrapFile) {
     }
 }
 
+use App\AsaasCustomerIdentity;
 use App\Helpers;
 use App\HttpClient;
 use App\SupabaseClient;
@@ -19,6 +20,15 @@ $user = Helpers::requireAuth();
 $payload = json_decode(file_get_contents('php://input'), true);
 if (!is_array($payload)) {
     $payload = [];
+}
+$csrfToken = trim((string) ($payload['csrf_token'] ?? ''));
+$expectedCsrfToken = trim((string) ($_SESSION['profile_csrf_token'] ?? ''));
+if (
+    $csrfToken === ''
+    || $expectedCsrfToken === ''
+    || !hash_equals($expectedCsrfToken, $csrfToken)
+) {
+    Helpers::json(['ok' => false, 'error' => 'Sessão expirada. Recarregue o perfil.'], 403);
 }
 
 $parentName = trim((string) ($payload['parent_name'] ?? ''));
@@ -32,6 +42,9 @@ if ($parentName === '' || $email === '') {
 if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     Helpers::json(['ok' => false, 'error' => 'E-mail inválido.'], 422);
 }
+if ($parentDocument !== '' && !AsaasCustomerIdentity::isValidCpfOrCnpj($parentDocument)) {
+    Helpers::json(['ok' => false, 'error' => 'CPF/CNPJ inválido.'], 422);
+}
 
 $client = new SupabaseClient(new HttpClient());
 $studentId = trim((string) ($user['student_id'] ?? ''));
@@ -43,17 +56,6 @@ if ($studentId === '') {
             'select=student_id&id=eq.' . urlencode($userId) . '&limit=1'
         );
         $current = $currentResult['data'][0] ?? null;
-        $studentId = trim((string) ($current['student_id'] ?? ''));
-    }
-}
-if ($studentId === '') {
-    $userEmail = strtolower(trim((string) ($user['email'] ?? '')));
-    if ($userEmail !== '') {
-        $currentByEmail = $client->select(
-            'guardians',
-            'select=student_id&email=eq.' . urlencode($userEmail) . '&limit=1'
-        );
-        $current = $currentByEmail['data'][0] ?? null;
         $studentId = trim((string) ($current['student_id'] ?? ''));
     }
 }
@@ -71,11 +73,23 @@ if ($emailGuardian) {
     Helpers::json(['ok' => false, 'error' => 'Este e-mail já está cadastrado para este aluno.'], 409);
 }
 if ($parentDocument !== '') {
-    $docResult = $client->select(
+    $docResult = $client->selectAll(
         'guardians',
-        'select=id,student_id&parent_document=eq.' . urlencode($parentDocument) . '&limit=1'
+        'select=id,student_id,parent_document&order=id.asc'
     );
-    $docGuardian = $docResult['data'][0] ?? null;
+    if (!($docResult['ok'] ?? false) || !is_array($docResult['data'] ?? null)) {
+        Helpers::json(['ok' => false, 'error' => 'Não foi possível validar o CPF/CNPJ.'], 503);
+    }
+    $docGuardian = null;
+    foreach ($docResult['data'] as $candidate) {
+        if (
+            is_array($candidate)
+            && AsaasCustomerIdentity::normalizeDocument((string) ($candidate['parent_document'] ?? '')) === $parentDocument
+        ) {
+            $docGuardian = $candidate;
+            break;
+        }
+    }
     if ($docGuardian) {
         $docStudentId = trim((string) ($docGuardian['student_id'] ?? ''));
         if ($docStudentId !== $studentId) {
