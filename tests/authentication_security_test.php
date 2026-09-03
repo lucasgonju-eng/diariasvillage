@@ -167,8 +167,8 @@ $selectStudent = $read($root . '/public/api/select-student.php');
 $userDashboard = $read($root . '/public/dashboard.php');
 $attendance = $read($root . '/public/api/admin-attendance.php');
 $secretariaAccess = $read($root . '/public/api/admin-secretaria-access.php');
-$adminDashboard = $read($root . '/public/admin/dashboard.php');
-$adminDashboardJs = $read($root . '/public/assets/js/admin-dashboard.js');
+$adminDashboard = $read($root . '/src/Admin/Dashboard/View/partials/acesso-secretaria.php');
+$adminDashboardJs = $read($root . '/frontend/admin/domains/accounts.ts');
 $secretariaMigration = $read(
     $root . '/supabase/migrations/20260903143844_secure_secretaria_credential_setup.sql'
 );
@@ -347,7 +347,11 @@ $assertContains(
 );
 $assertNotContains('endpoint não registra senha', $secretariaAccess, 'error_log(');
 $assertContains('painel mostra acesso da secretaria', $adminDashboard, 'tab-acesso-secretaria');
-$assertContains('painel limita acesso ao admin principal', $adminDashboard, '<?php if ($isAdminPrincipal): ?>');
+$assertContains(
+    'painel limita acesso pela matriz de abas',
+    $adminDashboard,
+    "if (!in_array('acesso-secretaria', \$context['allowedTabs'], true))"
+);
 $assertContains(
     'JavaScript envia senha somente por POST',
     $adminDashboardJs,

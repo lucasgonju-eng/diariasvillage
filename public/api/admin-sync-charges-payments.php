@@ -149,12 +149,7 @@ function make_key(string $value, string $date): string
 
 function append_exclusion_log(array $entry): void
 {
-    $path = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'exclusions_log.jsonl';
-    $line = json_encode($entry, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    if (!is_string($line) || $line === '') {
-        return;
-    }
-    @file_put_contents($path, $line . PHP_EOL, FILE_APPEND);
+    \App\ExclusionLog::append($entry);
 }
 
 function add_paid_reference(array &$index, string $key, array $reference): void

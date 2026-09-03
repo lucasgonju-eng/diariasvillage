@@ -43,8 +43,10 @@ $adminView = $read($root . '/public/api/admin-view-as-user.php');
 $requestPage = $read($root . '/public/vincular-filho.php');
 $requestApi = $read($root . '/public/api/family-link-request.php');
 $reviewApi = $read($root . '/public/api/admin-review-family-link.php');
-$adminDashboard = $read($root . '/public/admin/dashboard.php');
-$adminDashboardJs = $read($root . '/public/assets/js/admin-dashboard.js');
+$adminDashboard = $read($root . '/src/Admin/Dashboard/View/layout.php')
+    . $read($root . '/src/Admin/Dashboard/View/partials/familias.php');
+$adminDashboardJs = $read($root . '/frontend/admin/domains/family-links.ts');
+$adminDashboardDefinition = $read($root . '/src/Admin/Dashboard/Data/DashboardDefinition.php');
 $profilePage = $read($root . '/public/profile.php');
 $profileApi = $read($root . '/public/api/profile.php');
 $profileAddGuardianApi = $read($root . '/public/api/profile-add-guardian.php');
@@ -166,12 +168,12 @@ $contains('admin deve poder revisar vínculo', $reviewApi, 'AdminAuth::ROLE_ADMI
 $contains('revisão administrativa deve validar CSRF', $reviewApi, 'hash_equals($expectedCsrfToken, $csrfToken)');
 $contains('revisão deve ocorrer em RPC transacional', $reviewApi, "rpc('review_family_link_request'");
 $notContains('endpoint de revisão não cria guardian fora da RPC', $reviewApi, "insert('guardians'");
-$contains('dashboard admin deve ter aba Famílias', $adminDashboard, 'data-tab="familias"');
+$contains('dashboard admin deve ter aba Famílias', $adminDashboardDefinition, "'familias' =>");
 $contains('dashboard deve mostrar aluno de origem', $adminDashboard, 'Aluno já vinculado');
 $contains('dashboard deve mostrar aluno solicitado', $adminDashboard, 'Aluno solicitado');
 $contains('aprovação deve exigir digitação explícita', $adminDashboardJs, 'Digite ${confirmationWord}');
-$contains('revisão deve enviar CSRF', $adminDashboardJs, 'csrf_token: adminCsrfToken');
-$contains('cache administrativo deve avançar', $adminDashboard, 'admin-dashboard.js?v=82');
+$contains('revisão deve enviar CSRF', $adminDashboardJs, 'csrf_token: runtime.adminCsrfToken');
+$contains('asset administrativo deve usar manifest', $adminDashboard, '$assets[\'script\']');
 
 $contains('migration deve remover unicidade de e-mail por linha', $migration, 'drop constraint if exists guardians_email_key');
 $contains('migration deve proteger identidade de e-mail', $migration, 'trg_guardians_email_identity');

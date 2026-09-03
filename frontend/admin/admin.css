@@ -1,0 +1,193 @@
+.admin-wrap{max-width:1120px;margin:0 auto;padding:28px 20px}
+.admin-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
+.admin-title{font-weight:800;letter-spacing:.08em;font-size:12px;color:#1a2133}
+.admin-header .btn.btn-ghost{
+  color:#111827;
+  border-color:#CBD5E1;
+  background:#F8FAFC;
+  font-weight:700;
+}
+.admin-header .btn.btn-ghost:hover{filter:brightness(.98)}
+.admin-card{background:#fff;border-radius:16px;padding:18px;border:1px solid var(--line);box-shadow:var(--shadow-soft)}
+.admin-tabs{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.admin-tab{background:#EFF3FA;border-color:#D5DCE8;color:#1a2133}
+.admin-card{background:#FDFDFE;border-radius:16px;padding:18px;border:1px solid #E6EAF2;box-shadow:var(--shadow-soft)}
+.admin-table{width:100%;border-collapse:collapse}
+.admin-table th,.admin-table td{padding:10px 8px}
+.admin-table tr{border-top:1px solid #f1f5f9}
+.charge-list{display:grid;gap:12px;margin-top:12px}
+.charge-item{background:#F6F8FC;border:1px solid #E6E9F2;border-radius:14px;padding:14px}
+.charge-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.charge-header .btn.btn-ghost{
+  color:#111827;
+  border-color:#CBD5E1;
+  background:#F8FAFC;
+  font-weight:700;
+}
+.charge-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.date-list{display:grid;gap:8px}
+.date-row{display:flex;gap:8px;align-items:center}
+.date-row input{flex:1}
+.date-row .btn{
+  color:#0A1B4D;
+  border-color:#BFD0EE;
+  background:#E8F0FF;
+  font-weight:800;
+}
+.btn-danger{
+  color:#B91C1C;
+  border-color:#FCA5A5;
+  background:#FEE2E2;
+  font-weight:800;
+}
+.btn-danger:hover{filter:brightness(.97)}
+.input-sm{
+  width:140px;
+  padding:6px 8px;
+  border-radius:10px;
+  border:1px solid #E6E9F2;
+  font-size:12px;
+  margin-right:8px;
+}
+.date-actions{display:flex;gap:6px}
+.charge-message{margin-top:12px;font-size:13px}
+.cashflow-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:10px 0 14px}
+.cashflow-summary{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 14px}
+.cashflow-pill{background:#F3F6FB;border:1px solid #E2E8F5;border-radius:999px;padding:7px 12px;font-size:12px;color:#1a2133}
+.asaas-kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:10px 0 14px}
+.asaas-kpi-card{background:linear-gradient(180deg,#ffffff,#f8fbff);border:1px solid #dbe7ff;border-radius:14px;padding:12px}
+.asaas-kpi-label{font-size:12px;color:#475569;text-transform:uppercase;letter-spacing:.04em}
+.asaas-kpi-value{font-size:22px;font-weight:800;color:#0f172a;margin-top:6px}
+.asaas-kpi-card.danger{border-color:#fecaca;background:linear-gradient(180deg,#fff,#fff5f5)}
+.asaas-kpi-card.danger .asaas-kpi-value{color:#b91c1c}
+.asaas-analytics-grid{display:grid;grid-template-columns:2fr 1fr;gap:12px;margin:10px 0 16px}
+.asaas-chart-card{background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;padding:12px}
+.asaas-chart-title{font-weight:700;color:#0f172a;margin-bottom:8px}
+.asaas-bars{display:grid;gap:8px}
+.asaas-bar-row{display:grid;grid-template-columns:120px 1fr auto;align-items:center;gap:8px;font-size:12px}
+.asaas-bar-track{height:10px;border-radius:999px;background:#eef2ff;overflow:hidden}
+.asaas-bar-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#2563eb,#38bdf8)}
+.asaas-bar-fill.red{background:linear-gradient(90deg,#ef4444,#f97316)}
+.asaas-ranking-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:8px 0 14px}
+.asaas-ranking-card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:12px}
+.asaas-ranking-list{display:grid;gap:6px}
+.asaas-ranking-item{display:grid;grid-template-columns:26px 1fr auto;gap:8px;align-items:center;padding:6px 8px;border-radius:10px;background:#f8fafc;font-size:13px}
+.asaas-ranking-item .idx{font-weight:800;color:#1d4ed8}
+.asaas-ranking-item.bad .idx{color:#b91c1c}
+.asaas-ranking-item .name{color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.asaas-ranking-item .value{font-weight:700;color:#0f172a}
+.asaas-row-debit{background:#fff5f5;color:#991b1b}
+.asaas-row-debit td{color:#991b1b}
+@media (max-width: 980px){
+  .asaas-analytics-grid,.asaas-ranking-grid{grid-template-columns:1fr}
+}
+.admin-view-user{display:flex;gap:8px;align-items:center}
+.admin-view-user input{width:220px}
+.view-user-form{margin:12px 0;padding:12px;border-radius:12px;background:#FFF7ED;border:1px solid #FED7AA}
+.pendencia-student-link{font-size:12px;line-height:1.4;color:#0F172A}
+.pendencia-student-link .pending{color:#B45309;font-weight:700}
+.pendencia-student-actions{display:grid;gap:8px;min-width:240px}
+.pendencia-student-actions input{min-width:220px}
+.pendencia-student-actions .btn{justify-content:center}
+.monthly-check-row{background:#E0F2FE}
+.monthly-check-badge{display:inline-block;margin-left:8px;padding:2px 8px;border-radius:999px;background:#0EA5E9;color:#fff;font-size:11px;font-weight:700}
+.monthly-days-wrap{display:flex;gap:12px;flex-wrap:wrap}
+.monthly-days-wrap label{display:flex;gap:6px;align-items:center;padding:6px 10px;border:1px solid #CBD5E1;border-radius:10px;background:#F8FAFC}
+.office-days-wrap{display:grid;gap:8px}
+.office-day-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid #CBD5E1;border-radius:10px;background:#F8FAFC}
+.office-day-label{font-weight:700;color:#0F172A}
+.office-day-slots{display:flex;gap:8px;flex-wrap:wrap}
+.office-day-slots label{display:flex;gap:6px;align-items:center;padding:4px 8px;border:1px solid #CBD5E1;border-radius:8px;background:#fff;font-size:12px}
+.office-preview-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.office-preview-card{background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:12px}
+.office-preview-card h4{margin:0 0 8px 0;color:#0F172A}
+.office-preview-list{display:grid;gap:8px}
+.office-preview-item{background:#fff;border:1px solid #E2E8F0;border-radius:10px;padding:8px}
+.office-preview-item strong{display:block;color:#0F172A}
+.office-preview-item .meta{font-size:12px;color:#475569}
+.open-charges-summary{
+  margin-top:10px;
+  padding:10px 12px;
+  border-radius:12px;
+  border:1px solid #E2E8F0;
+  background:#F8FAFC;
+  font-size:13px;
+  color:#0F172A;
+  font-weight:700;
+}
+.btn-sync-reconcile{
+  color:#0A1B4D;
+  border-color:#BFD0EE;
+  background:#E8F0FF;
+  font-weight:800;
+}
+.btn-sync-reconcile:hover{filter:brightness(.97)}
+.btn-warning-yellow{
+  color:#3f2f00;
+  border-color:#e7b600;
+  background:#ffd43b;
+  font-weight:800;
+}
+.btn-warning-yellow:hover{
+  background:#ffc107;
+  border-color:#d8a900;
+  color:#2f2300;
+  filter:none;
+}
+.attendance-pending-filter{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:10px 12px;
+  border:1px solid #BFD0EE;
+  border-radius:12px;
+  background:#E8F0FF;
+  color:#0A1B4D;
+  font-weight:800;
+  min-height:42px;
+}
+.attendance-pending-filter input{
+  width:16px;
+  height:16px;
+  accent-color:#1f5fff;
+  flex:0 0 auto;
+}
+.attendance-pending-filter span{
+  color:#0A1B4D;
+  line-height:1.25;
+}
+.hidden{display:none}
+.bulk-mail-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0}
+.bulk-mail-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin:10px 0}
+.bulk-mail-compose{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.bulk-mail-editor{min-height:340px;resize:vertical}
+.bulk-mail-visual{
+  width:100%;
+  min-height:340px;
+  border:1px solid #CBD5E1;
+  border-radius:10px;
+  background:#fff;
+  color:#0F172A;
+}
+.bulk-mail-template-row{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin:10px 0}
+.bulk-mail-meta{font-size:12px;color:#475569}
+.bulk-mail-table-wrap{max-height:360px;overflow:auto;border:1px solid #E2E8F0;border-radius:12px}
+.bulk-mail-edit-emails{
+  color:#0A1B4D;
+  border-color:#BFD0EE;
+  background:#E8F0FF;
+  font-weight:800;
+}
+.bulk-mail-edit-emails:hover{filter:brightness(.97)}
+#bulk-mail-template-load,
+#bulk-mail-send-test{
+  color:#0A1B4D;
+  border-color:#BFD0EE;
+  background:#E8F0FF;
+  font-weight:800;
+}
+#bulk-mail-template-load:hover,
+#bulk-mail-send-test:hover{filter:brightness(.97)}
+@media (max-width: 980px){
+  .bulk-mail-filters,.bulk-mail-compose{grid-template-columns:1fr}
+}

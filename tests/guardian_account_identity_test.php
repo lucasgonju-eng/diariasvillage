@@ -234,8 +234,9 @@ account_check(($invalidCpfLogin['ok'] ?? true) === false, 'CPF sem dígitos veri
 account_check($invalidCpfAuth->calls === [], 'CPF inválido deve bloquear antes do Auth');
 
 $reset = file_get_contents(dirname(__DIR__) . '/public/api/admin-reset-password.php') ?: '';
-$dashboard = file_get_contents(dirname(__DIR__) . '/public/admin/dashboard.php') ?: '';
-$javascript = file_get_contents(dirname(__DIR__) . '/public/assets/js/admin-dashboard.js') ?: '';
+$dashboard = (file_get_contents(dirname(__DIR__) . '/src/Admin/Dashboard/View/layout.php') ?: '')
+    . (file_get_contents(dirname(__DIR__) . '/src/Admin/Dashboard/View/partials/reset-senha.php') ?: '');
+$javascript = file_get_contents(dirname(__DIR__) . '/frontend/admin/domains/accounts.ts') ?: '';
 $loginEndpoint = file_get_contents(dirname(__DIR__) . '/public/api/login.php') ?: '';
 $supabaseClient = file_get_contents(dirname(__DIR__) . '/src/SupabaseClient.php') ?: '';
 
@@ -259,7 +260,7 @@ account_check(
     'auditoria STARTED deve anteceder a alteração remota'
 );
 account_check(str_contains($dashboard, 'id="reset-guardian"'), 'dashboard deve mostrar seleção explícita');
-account_check(str_contains($dashboard, 'admin-dashboard.js?v=82'), 'dashboard deve invalidar cache do JavaScript');
+account_check(str_contains($dashboard, '$assets[\'script\']'), 'dashboard deve usar bundle versionado por hash');
 account_check(
     str_contains($javascript, "action: 'lookup'") && str_contains($javascript, 'guardian_id: guardianId'),
     'frontend deve consultar identidade e enviar o guardian_id escolhido'

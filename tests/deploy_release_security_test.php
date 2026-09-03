@@ -49,9 +49,31 @@ $contains('workflow', $workflow, 'test ! -e "$RELEASE/storage"');
 $contains('workflow', $workflow, 'test ! -e "$RELEASE/.env"');
 $contains('workflow', $workflow, 'Verificar produção pela Internet');
 $contains('workflow', $workflow, 'php tests/deploy_release_security_test.php');
+$contains('workflow', $workflow, 'uses: actions/setup-node@v4');
+$contains('workflow', $workflow, 'npm ci');
+$contains('workflow', $workflow, 'npm audit --audit-level=high');
+$contains('workflow', $workflow, 'npm run check');
+$contains('workflow', $workflow, 'php tests/admin_dashboard_contract_test.php');
+$contains('workflow', $workflow, 'php tests/admin_dashboard_data_loader_test.php');
+$contains('workflow', $workflow, 'php tests/admin_dashboard_view_rbac_test.php');
+$contains('workflow', $workflow, 'php tests/vite_assets_test.php');
+$contains('workflow', $workflow, 'php tests/vite_assets_flattened_release_test.php');
+$contains('workflow', $workflow, 'php tests/exclusion_log_storage_test.php');
+$contains('workflow', $workflow, "find deploy -type f -name '*.php' -print0");
+$contains('workflow', $workflow, 'test -f deploy/assets/admin-dist/manifest.json');
+$contains('workflow', $workflow, '\App\ViteAssets::adminDashboard()');
+$contains('workflow', $workflow, 'test -f "$RELEASE/assets/admin-dist/manifest.json"');
+$contains('workflow', $workflow, 'MANIFEST_URL="https://diarias.village.einsteinhub.co/assets/admin-dist/manifest.json"');
+$contains('workflow', $workflow, 'https://diarias.village.einsteinhub.co/admin/dashboard.php');
 $contains('workflow', $workflow, 'mv -f "$TARGET/.htaccess.rollback" "$TARGET/.htaccess"');
 $contains('workflow', $workflow, "-name '*.bak.*'");
 $notContains('workflow', $workflow, 'cp .env.example deploy/');
+$order(
+    'frontend deve ser compilado antes de montar a release',
+    $workflow,
+    'npm run check',
+    'Montar release imutável'
+);
 $order(
     'release deve ser validada antes da troca do symlink',
     $workflow,

@@ -227,30 +227,24 @@ if ($action === 'close_day') {
         }
         $studentIdInput = trim((string) ($entry['student_id'] ?? ''));
         $studentNameInput = trim((string) ($entry['student_name'] ?? ''));
-        if ($studentIdInput === '' && $studentNameInput === '') {
-            $skippedCount++;
+        if ($studentIdInput === '') {
+            $blockedItems[] = [
+                'student_name' => $studentNameInput !== '' ? $studentNameInput : '-',
+                'error' => 'Selecione o aluno pela opção com matrícula.',
+            ];
             continue;
         }
-        $entryKey = $studentIdInput !== ''
-            ? 'id:' . $studentIdInput
-            : 'name:' . normalizeAttendanceKey($studentNameInput);
+        $entryKey = 'id:' . $studentIdInput;
         if ($entryKey === '' || isset($seen[$entryKey])) {
             $skippedCount++;
             continue;
         }
         $seen[$entryKey] = true;
 
-        if ($studentIdInput !== '') {
-            $studentResult = $client->select(
-                'students',
-                'select=id,name,enrollment&id=eq.' . urlencode($studentIdInput) . '&limit=1'
-            );
-        } else {
-            $studentResult = $client->select(
-                'students',
-                'select=id,name,enrollment&name=eq.' . urlencode($studentNameInput) . '&limit=1'
-            );
-        }
+        $studentResult = $client->select(
+            'students',
+            'select=id,name,enrollment&id=eq.' . urlencode($studentIdInput) . '&limit=1'
+        );
         if (!($studentResult['ok'] ?? false) || empty($studentResult['data'][0])) {
             $blockedItems[] = [
                 'student_name' => $studentNameInput !== '' ? $studentNameInput : '-',
@@ -534,28 +528,20 @@ if ($action === 'create') {
     }
 
     $studentId = trim((string) ($payload['student_id'] ?? ''));
-    $studentNameInput = trim((string) ($payload['student_name'] ?? ''));
-    if ($studentId === '' && $studentNameInput === '') {
-        Helpers::json(['ok' => false, 'error' => 'Selecione um aluno para lançar chamada.'], 422);
+    if ($studentId === '') {
+        Helpers::json(['ok' => false, 'error' => 'Selecione o aluno pela opção com matrícula.'], 422);
     }
 
-    if ($studentId !== '') {
-        $studentResult = $client->select(
-            'students',
-            'select=id,name,enrollment&id=eq.' . urlencode($studentId) . '&limit=1'
-        );
-    } else {
-        $studentResult = $client->select(
-            'students',
-            'select=id,name,enrollment&name=eq.' . urlencode($studentNameInput) . '&limit=1'
-        );
-    }
+    $studentResult = $client->select(
+        'students',
+        'select=id,name,enrollment&id=eq.' . urlencode($studentId) . '&limit=1'
+    );
     if (!($studentResult['ok'] ?? false) || empty($studentResult['data'][0])) {
         Helpers::json(['ok' => false, 'error' => 'Aluno não encontrado no banco.'], 404);
     }
     $student = $studentResult['data'][0];
     $studentId = trim((string) ($student['id'] ?? ''));
-    $studentName = trim((string) ($student['name'] ?? $studentNameInput));
+    $studentName = trim((string) ($student['name'] ?? ''));
     if ($studentId === '' || $studentName === '') {
         Helpers::json(['ok' => false, 'error' => 'Aluno inválido para chamada.'], 422);
     }
@@ -754,26 +740,11 @@ if ($attendanceDate === null) {
 
 $studentId = trim((string) ($target['student_id'] ?? ''));
 $studentName = trim((string) ($target['student_name'] ?? ''));
-if ($studentId === '' && $studentName !== '') {
-    $studentResult = $client->select(
-        'students',
-        'select=id,name,enrollment&name=eq.' . urlencode($studentName) . '&limit=50'
-    );
-    $studentRows = (($studentResult['ok'] ?? false) && is_array($studentResult['data'] ?? null))
-        ? $studentResult['data']
-        : [];
-    if (count($studentRows) === 1) {
-        $studentId = trim((string) ($studentRows[0]['id'] ?? ''));
-        $studentName = trim((string) ($studentRows[0]['name'] ?? $studentName));
-    } elseif (count($studentRows) > 1) {
-        Helpers::json([
-            'ok' => false,
-            'error' => 'Mais de um aluno com esse nome. Ajuste o vínculo da chamada antes de autorizar.',
-        ], 422);
-    }
-}
 if ($studentId === '') {
-    Helpers::json(['ok' => false, 'error' => 'Aluno da chamada sem vínculo válido.'], 422);
+    Helpers::json([
+        'ok' => false,
+        'error' => 'Aluno da chamada sem UUID. Rejeite o lançamento e refaça a chamada selecionando a matrícula.',
+    ], 422);
 }
 
 $paymentsResult = $client->select(

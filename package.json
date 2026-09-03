@@ -1,0 +1,30 @@
+{
+  "name": "diariasvillage",
+  "version": "1.0.0",
+  "description": "SaaS em PHP para compra de diárias do Einstein Village (6º ao 8º ano).",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm test && npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lucasgonju-eng/diariasvillage.git"
+  },
+  "license": "UNLICENSED",
+  "bugs": {
+    "url": "https://github.com/lucasgonju-eng/diariasvillage/issues"
+  },
+  "homepage": "https://github.com/lucasgonju-eng/diariasvillage#readme",
+  "devDependencies": {
+    "@types/node": "^26.4.1",
+    "esbuild": "^0.28.2",
+    "jsdom": "^29.1.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2",
+    "vitest": "^5.0.0"
+  }
+}

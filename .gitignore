@@ -7,3 +7,5 @@ Village Diarias Site.txt
 /error_log_custom.txt
 /mobile.zip
 /supabase/.temp/
+/node_modules/
+/public/assets/admin-dist/

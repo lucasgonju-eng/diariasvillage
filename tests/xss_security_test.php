@@ -28,8 +28,15 @@ function xss_not_contains(string $label, string $content, string $needle, array 
     }
 }
 
-$adminJs = xss_read($root . '/public/assets/js/admin-dashboard.js', $failures);
-$adminDashboard = xss_read($root . '/public/admin/dashboard.php', $failures);
+$adminSecurity = xss_read($root . '/frontend/admin/core/security.ts', $failures);
+$adminJs = '';
+foreach (glob($root . '/frontend/admin/{core,domains}/*.ts', GLOB_BRACE) ?: [] as $modulePath) {
+    if (!str_ends_with($modulePath, '.test.ts')) {
+        $adminJs .= "\n" . xss_read($modulePath, $failures);
+    }
+}
+$adminDashboard = xss_read($root . '/src/Admin/Dashboard/View/layout.php', $failures);
+$adminEmailView = xss_read($root . '/src/Admin/Dashboard/View/partials/email-massa.php', $failures);
 $firstAccessJs = xss_read($root . '/public/assets/js/app.js', $failures);
 $firstAccessPage = xss_read($root . '/public/primeiro-acesso.php', $failures);
 $bulkMail = xss_read($root . '/public/api/admin-bulk-email.php', $failures);
@@ -44,21 +51,21 @@ xss_contains('cache do primeiro acesso avançou', $firstAccessPage, '/assets/js/
 foreach (['JSON_HEX_TAG', 'JSON_HEX_AMP', 'JSON_HEX_APOS', 'JSON_HEX_QUOT'] as $flag) {
     xss_contains('bootstrap JSON administrativo seguro', $adminDashboard, $flag, $failures);
 }
-xss_contains('cache administrativo avançou', $adminDashboard, '/assets/js/admin-dashboard.js?v=82', $failures);
+xss_contains('bundle administrativo usa hash do manifest', $adminDashboard, '$assets[\'script\']', $failures);
 
-xss_contains('painel sanitiza HTML de e-mail', $adminJs, 'function sanitizeBulkMailHtml(value)', $failures);
+xss_contains('painel sanitiza HTML de e-mail', $adminSecurity, 'function sanitizeBulkMailHtml(value: unknown)', $failures);
 xss_contains('painel remove manipuladores inline', $adminJs, "name.startsWith('on')", $failures);
 xss_contains('painel remove elementos executáveis', $adminJs, "'script',", $failures);
-xss_contains('prévia usa iframe isolado', $adminDashboard, 'sandbox="allow-same-origin"', $failures);
+xss_contains('prévia usa iframe isolado', $adminEmailView, 'sandbox="allow-same-origin"', $failures);
 xss_contains('prévia aplica CSP sem scripts', $adminJs, '"default-src \'none\'; img-src https: data:', $failures);
-xss_contains('painel sanitiza antes da prévia', $adminJs, 'bulkMailVisualInput.srcdoc = buildBulkMailPreviewHtml', $failures);
+xss_contains('painel sanitiza antes da prévia', $adminJs, 'bulkMailVisualInput.srcdoc = runtime.buildBulkMailPreviewHtml', $failures);
 xss_contains('painel bloqueia colagem HTML', $adminJs, "event.clipboardData?.getData('text/plain')", $failures);
 xss_not_contains('prévia não recebe HTML cru', $adminJs, 'bulkMailVisualInput.innerHTML = bulkMailHtmlInput.value', $failures);
-xss_contains('nome do aluno é escapado', $adminJs, '<strong>Aluno: ${escapeHtml(studentName)}</strong>', $failures);
-xss_contains('cliente Asaas é escapado', $adminJs, '<td>${escapeHtml(customer)}</td>', $failures);
-xss_contains('URL Asaas exige HTTPS e domínio', $adminJs, 'function safeAsaasHttpsUrl(value)', $failures);
-xss_contains('visão como usuário exige mesma origem', $adminJs, 'function safeSameOriginUrl(value, fallback = \'/dashboard.php\')', $failures);
-xss_contains('redirecionamento administrativo é validado', $adminJs, "safeSameOriginUrl(data.url || '/dashboard.php')", $failures);
+xss_contains('nome do aluno é escapado', $adminJs, '<strong>Aluno: ${runtime.escapeHtml(studentName)}</strong>', $failures);
+xss_contains('cliente Asaas é escapado', $adminJs, '<td>${runtime.escapeHtml(customer)}</td>', $failures);
+xss_contains('URL Asaas exige HTTPS e domínio', $adminSecurity, 'function safeAsaasHttpsUrl(value: unknown)', $failures);
+xss_contains('visão como usuário exige mesma origem', $adminSecurity, 'function safeSameOriginUrl(', $failures);
+xss_contains('redirecionamento administrativo é validado', $adminJs, "runtime.safeSameOriginUrl(data.url || '/dashboard.php')", $failures);
 
 xss_contains('placeholders aceitam contexto HTML explícito', $bulkMail, 'bool $htmlContext = false', $failures);
 xss_contains('placeholders HTML são escapados', $bulkMail, "htmlspecialchars(\$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')", $failures);

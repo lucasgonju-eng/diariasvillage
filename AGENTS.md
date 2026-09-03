@@ -46,9 +46,9 @@ Todos os fluxos que criam ou enviam cobranças devem usar essa classe:
 
 O dashboard mostra aluno com matrícula e mantém o UUID internamente.
 
-- `public/admin/dashboard.php` contém o seletor explícito de responsável.
-- `public/assets/js/admin-dashboard.js` usa UUID como chave de aluno e
-  responsável e envia ambos aos endpoints.
+- `src/Admin/Dashboard/View/layout.php` contém o seletor explícito de responsável.
+- `frontend/admin` usa UUID como chave de aluno e responsável e envia ambos aos
+  endpoints; Chamada e Mensalistas também exigem o rótulo `Nome • Matrícula`.
 - `public/api/admin-view-as-user.php` exige `student_id`, aceita `guardian_id` e
   retorna `GUARDIAN_SELECTION_REQUIRED` quando a escolha é necessária.
 - `public/api/admin-upsert-guardian-for-student.php` exige `student_id`; uma
@@ -61,6 +61,27 @@ O dashboard mostra aluno com matrícula e mantém o UUID internamente.
 
 Ao alterar esses fluxos, preserve o rótulo `Nome • Matrícula` e o UUID como valor
 real. Nomes servem apenas para apresentação.
+
+## Arquitetura do dashboard administrativo
+
+`public/admin/dashboard.php` é somente o compositor autenticado. A estrutura fica
+fora do document root em `src/Admin/Dashboard/View`, com uma partial protegida por
+aba, e as consultas ficam em `src/Admin/Dashboard/Data`.
+
+- `DashboardDefinition` é a fonte única da matriz de abas por papel.
+- `DashboardDataLoader` não executa loaders financeiros nem de governança para
+  `secretaria`.
+- A secretaria recebe somente Chamada, Famílias, Sem WhatsApp, Mensalistas e
+  Entradas; não renderize shells restritos apenas para escondê-los com CSS.
+- O frontend fonte fica em `frontend/admin`, dividido entre `core` e `domains`.
+- Vite gera JS e CSS com hash em `public/assets/admin-dist`; esse diretório é
+  gerado e não deve ser versionado.
+- `src/ViteAssets.php` resolve o manifest e falha fechado se a entrada ou o
+  bundle estiver ausente.
+- `window.__adminDashboardBooted` só pode ser marcado após todos os
+  inicializadores terminarem. O fallback inline apenas mantém navegação básica.
+- Não restaure `public/assets/js/admin-dashboard.js`, versão manual por query
+  string, `getStudentByName()` ou seleção silenciosa por nome.
 
 ## Idempotência e duplicidade
 
@@ -468,18 +489,27 @@ php tests/xss_security_test.php
 php tests/monthly_workshop_security_test.php
 php tests/monthly_legacy_charge_audit_test.php
 php tests/deploy_release_security_test.php
+php tests/admin_dashboard_contract_test.php
+php tests/admin_dashboard_data_loader_test.php
+php tests/admin_dashboard_view_rbac_test.php
+php tests/vite_assets_test.php
+php tests/vite_assets_flattened_release_test.php
+php tests/exclusion_log_storage_test.php
+npm ci
+npm audit --audit-level=high
+npm run check
 php -l public/api/admin-charge.php
 php -l public/api/admin-sync-recebidas.php
 php -l public/api/admin-sync-charges-payments.php
-node --check public/assets/js/admin-dashboard.js
 ```
 
 `tests/asaas_identity_safety_test.php` verifica seleção explícita, identidade
 composta, ausência de busca parcial, compensação de cobrança órfã, idempotência
 e cancelamento remoto antes da exclusão local.
 
-Após mudanças no JavaScript administrativo, incremente a versão de cache em
-`public/admin/dashboard.php` e atualize os testes.
+Após mudanças no frontend administrativo, gere novamente o bundle. O hash do
+Vite substitui a versão manual de cache; não edite o manifest nem os arquivos
+em `public/assets/admin-dist` diretamente.
 
 ## Histórico da correção
 

@@ -25,7 +25,7 @@ $codeFix = $read('supabase/migrations/20260903003357_fix_monthly_entry_code_gene
 $service = $read('src/Services/MonthlyWorkshopService.php');
 $monthlyStudents = $read('src/MonthlyStudents.php');
 $adminPlans = $read('public/api/admin-monthly-students.php');
-$dashboard = $read('public/admin/dashboard.php');
+$dashboardDefinition = $read('src/Admin/Dashboard/Data/DashboardDefinition.php');
 
 $contains('quota mensal é duas oficinas por dia', $schema, 'required_slots = weekly_days_snapshot * 2');
 $contains('dias mensais são exatos', $schema, 'v_day_count <> v_plan.weekly_days');
@@ -48,7 +48,11 @@ $contains('serviço limita ao mês corrente', $service, '$referenceMonth !== sel
 $contains('consulta de plano falha fechada', $service, "throw new \\RuntimeException('Não foi possível confirmar o plano mensalista");
 $contains('lista mensalista falha fechada', $monthlyStudents, "throw new \\RuntimeException('Não foi possível confirmar o cadastro");
 $contains('plano confirmado bloqueia desativação', $adminPlans, "'MONTHLY_SUBMISSION_LOCKED'");
-$contains('secretaria não recebe seções financeiras', $dashboard, '<?php if ($isAdminPrincipal): ?>');
+$contains(
+    'secretaria recebe somente abas operacionais',
+    $dashboardDefinition,
+    "return ['chamada', 'familias', 'sem-whatsapp', 'mensalistas', 'entries'];"
+);
 
 $paymentEmitters = [
     'public/api/create-payment.php',

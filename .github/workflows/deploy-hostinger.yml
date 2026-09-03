@@ -35,6 +35,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Validar e compilar frontend
+        run: |
+          npm ci
+          npm audit --audit-level=high
+          npm run check
+
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
@@ -68,6 +80,12 @@ jobs:
           php tests/monthly_workshop_security_test.php
           php tests/monthly_legacy_charge_audit_test.php
           php tests/deploy_release_security_test.php
+          php tests/admin_dashboard_contract_test.php
+          php tests/admin_dashboard_data_loader_test.php
+          php tests/admin_dashboard_view_rbac_test.php
+          php tests/vite_assets_test.php
+          php tests/vite_assets_flattened_release_test.php
+          php tests/exclusion_log_storage_test.php
 
       - name: Montar release imutável
         run: |
@@ -108,8 +126,18 @@ jobs:
             exit 1
           fi
 
-          php -l deploy/health.php
-          php -l deploy/src/Bootstrap.php
+          while IFS= read -r -d '' php_file; do
+            php -l "$php_file"
+          done < <(find deploy -type f -name '*.php' -print0)
+
+          test -f deploy/assets/admin-dist/manifest.json
+          ADMIN_JS="$(jq -r '."frontend/admin/main.ts".file // empty' deploy/assets/admin-dist/manifest.json)"
+          ADMIN_CSS="$(jq -r '."frontend/admin/main.ts".css[0] // empty' deploy/assets/admin-dist/manifest.json)"
+          test -n "$ADMIN_JS"
+          test -n "$ADMIN_CSS"
+          test -s "deploy/assets/admin-dist/$ADMIN_JS"
+          test -s "deploy/assets/admin-dist/$ADMIN_CSS"
+          php -r 'require "deploy/vendor/autoload.php"; $a=\App\ViteAssets::adminDashboard(); if (empty($a["script"]) || empty($a["styles"])) { exit(1); }'
 
       - name: Diagnóstico SSH
         env:
@@ -213,8 +241,16 @@ jobs:
             test -f "$RELEASE/.release-root.htaccess"
             test -f "$RELEASE/admin/dashboard.php"
             test -f "$RELEASE/vendor/autoload.php"
+            test -f "$RELEASE/assets/admin-dist/manifest.json"
             test ! -e "$RELEASE/storage"
             test ! -e "$RELEASE/.env"
+
+            ADMIN_JS="$(php -r '$m=json_decode(file_get_contents($argv[1]),true); echo $m["frontend/admin/main.ts"]["file"] ?? "";' "$RELEASE/assets/admin-dist/manifest.json")"
+            ADMIN_CSS="$(php -r '$m=json_decode(file_get_contents($argv[1]),true); echo $m["frontend/admin/main.ts"]["css"][0] ?? "";' "$RELEASE/assets/admin-dist/manifest.json")"
+            test -n "$ADMIN_JS"
+            test -n "$ADMIN_CSS"
+            test -s "$RELEASE/assets/admin-dist/$ADMIN_JS"
+            test -s "$RELEASE/assets/admin-dist/$ADMIN_CSS"
 
             mkdir -p "$TARGET/storage"
             ln -s "../../storage" "$RELEASE/storage"
@@ -271,6 +307,23 @@ jobs:
             --retry 3 --retry-delay 2 --retry-all-errors \
             --output /dev/null \
             https://diarias.village.einsteinhub.co/
+          curl --fail --silent --show-error --location \
+            --retry 3 --retry-delay 2 --retry-all-errors \
+            --output /dev/null \
+            https://diarias.village.einsteinhub.co/admin/dashboard.php
+
+          MANIFEST_URL="https://diarias.village.einsteinhub.co/assets/admin-dist/manifest.json"
+          MANIFEST="$(curl --fail --silent --show-error \
+            --retry 3 --retry-delay 2 --retry-all-errors \
+            "$MANIFEST_URL")"
+          ADMIN_JS="$(printf '%s' "$MANIFEST" | jq -r '."frontend/admin/main.ts".file // empty')"
+          ADMIN_CSS="$(printf '%s' "$MANIFEST" | jq -r '."frontend/admin/main.ts".css[0] // empty')"
+          test -n "$ADMIN_JS"
+          test -n "$ADMIN_CSS"
+          curl --fail --silent --show-error --output /dev/null \
+            "https://diarias.village.einsteinhub.co/assets/admin-dist/$ADMIN_JS"
+          curl --fail --silent --show-error --output /dev/null \
+            "https://diarias.village.einsteinhub.co/assets/admin-dist/$ADMIN_CSS"
 
       - name: Reverter ativação após falha
         if: ${{ failure() }}

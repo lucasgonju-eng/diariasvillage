@@ -5,8 +5,10 @@ $root = dirname(__DIR__);
 $files = [
     'endpoint' => $root . '/public/api/admin-settle-payment.php',
     'cashflow' => $root . '/public/api/admin-cashflow.php',
-    'dashboard_js' => $root . '/public/assets/js/admin-dashboard.js',
-    'dashboard_php' => $root . '/public/admin/dashboard.php',
+    'dashboard_js' => $root . '/frontend/admin/domains/cashflow.ts',
+    'dashboard_dialogs' => $root . '/frontend/admin/core/dialogs.ts',
+    'dashboard_php' => $root . '/src/Admin/Dashboard/View/partials/fluxo-caixa.php',
+    'dashboard_layout' => $root . '/src/Admin/Dashboard/View/layout.php',
 ];
 
 $failures = [];
@@ -46,7 +48,9 @@ function assert_order(string $label, string $haystack, string $first, string $se
 $endpoint = read_test_file($files['endpoint'], $failures);
 $cashflow = read_test_file($files['cashflow'], $failures);
 $dashboardJs = read_test_file($files['dashboard_js'], $failures);
+$dashboardJs .= read_test_file($files['dashboard_dialogs'], $failures);
 $dashboardPhp = read_test_file($files['dashboard_php'], $failures);
+$dashboardLayout = read_test_file($files['dashboard_layout'], $failures);
 
 assert_contains('endpoint autenticação admin', $endpoint, 'Helpers::requireAdminRole(', $failures);
 assert_contains('endpoint admin principal', $endpoint, 'AdminAuth::ROLE_ADMIN', $failures);
@@ -78,7 +82,7 @@ assert_contains('js endpoint baixa manual', $dashboardJs, '/api/admin-settle-pay
 assert_contains('js envia observação', $dashboardJs, 'note: noteResult.value', $failures);
 
 assert_contains('dashboard coluna ação', $dashboardPhp, '<th>Ação</th>', $failures);
-assert_contains('dashboard cache bust js', $dashboardPhp, '/assets/js/admin-dashboard.js?v=82', $failures);
+assert_contains('dashboard usa bundle com hash', $dashboardLayout, '$assets[\'script\']', $failures);
 
 if ($failures !== []) {
     fwrite(STDERR, "Falhas no teste de segurança da baixa manual:\n");

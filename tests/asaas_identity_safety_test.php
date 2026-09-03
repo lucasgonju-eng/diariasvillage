@@ -10,8 +10,9 @@ $files = [
     'checkout' => $root . '/public/api/create-payment.php',
     'view_user' => $root . '/public/api/admin-view-as-user.php',
     'guardian_upsert' => $root . '/public/api/admin-upsert-guardian-for-student.php',
-    'dashboard_js' => $root . '/public/assets/js/admin-dashboard.js',
-    'dashboard_php' => $root . '/public/admin/dashboard.php',
+    'dashboard_js' => $root . '/frontend/admin/domains/view-as-user.ts',
+    'dashboard_students' => $root . '/frontend/admin/core/formatters-students.ts',
+    'dashboard_php' => $root . '/src/Admin/Dashboard/View/layout.php',
     'batch_v1' => $root . '/public/api/admin-send-pending-charges.php',
     'batch_v2' => $root . '/public/api/admin-send-pending-charges-v2.php',
     'attendance' => $root . '/public/api/admin-attendance.php',
@@ -110,11 +111,11 @@ test_not_contains('visão não busca por nome', $contents['view_user'], '&name=e
 test_contains('cadastro de responsável exige student_id', $contents['guardian_upsert'], "\$payload['student_id']", $failures);
 test_not_contains('cadastro não busca aluno por nome', $contents['guardian_upsert'], '&name=eq.', $failures);
 
-test_contains('UI mostra matrícula', $contents['dashboard_js'], 'Matrícula ${enrollment}', $failures);
+test_contains('UI mostra matrícula', $contents['dashboard_students'], 'Matrícula ${enrollment}', $failures);
 test_contains('UI envia student_id', $contents['dashboard_js'], 'student_id: resolved.id', $failures);
 test_contains('UI envia guardian_id', $contents['dashboard_js'], 'guardian_id: selectedGuardianId', $failures);
 test_contains('dashboard possui seletor de responsável', $contents['dashboard_php'], 'id="admin-view-user-guardian"', $failures);
-test_contains('dashboard atualizou cache do JS', $contents['dashboard_php'], '/assets/js/admin-dashboard.js?v=82', $failures);
+test_contains('dashboard usa bundle versionado pelo Vite', $contents['dashboard_php'], '$assets[\'script\']', $failures);
 
 test_contains('cobrança manual exige guardian_id explícito', $contents['manual_charge'], "\$charge['guardian_id']", $failures);
 test_contains('cobrança manual valida vínculo responsável-aluno', $contents['manual_charge'], '&student_id=eq.', $failures);
