@@ -36,11 +36,12 @@ if (!is_array($payload)) {
 
 $paymentId = trim((string) ($payload['id'] ?? ''));
 $reason = trim((string) ($payload['reason'] ?? ''));
+$allowedReasons = ['COBRANCA_EM_DUPLICIDADE', 'MENSALISTA_COBERTO_PELO_PLANO'];
 
 if ($paymentId === '') {
     Helpers::json(['ok' => false, 'error' => 'ID inválido.'], 422);
 }
-if ($reason !== 'COBRANCA_EM_DUPLICIDADE') {
+if (!in_array($reason, $allowedReasons, true)) {
     Helpers::json(['ok' => false, 'error' => 'Motivo inválido.'], 422);
 }
 
@@ -49,8 +50,8 @@ $asaas = new AsaasClient(new HttpClient());
 $paymentLifecycle = new AsaasPaymentLifecycle($asaas);
 $paymentResult = $client->select(
     'payments',
-    'select=id,status,paid_at,billing_type,asaas_payment_id,amount,payment_date,students(name),'
-        . 'guardians(parent_name,email,parent_document,asaas_customer_id)'
+    'select=id,student_id,guardian_id,status,paid_at,billing_type,asaas_payment_id,amount,payment_date,students(name),'
+        . 'guardians(id,student_id,parent_name,email,parent_document,asaas_customer_id)'
         . '&id=eq.' . urlencode($paymentId) . '&limit=1'
 );
 $payment = (($paymentResult['ok'] ?? false) && !empty($paymentResult['data'])) ? $paymentResult['data'][0] : null;
@@ -63,6 +64,9 @@ if ($status === 'paid' || !empty($payment['paid_at'])) {
     Helpers::json(['ok' => false, 'error' => 'Não é possível cancelar cobrança já paga.'], 422);
 }
 if (in_array($status, ['canceled', 'cancelled', 'deleted', 'refunded'], true)) {
+    if ($reason === 'MENSALISTA_COBERTO_PELO_PLANO') {
+        Helpers::json(['ok' => false, 'error' => 'Cobrança mensalista já encerrada; revise o histórico.'], 409);
+    }
     Helpers::json(['ok' => true, 'message' => 'Cobrança já estava cancelada.']);
 }
 if ($status === 'processing_asaas') {
@@ -72,13 +76,66 @@ if ($status === 'processing_asaas') {
     ], 409);
 }
 
+$knownRemoteResponse = null;
+if ($reason === 'MENSALISTA_COBERTO_PELO_PLANO') {
+    $studentId = trim((string) ($payment['student_id'] ?? ''));
+    $paymentGuardianId = trim((string) ($payment['guardian_id'] ?? ''));
+    $guardian = is_array($payment['guardians'] ?? null) ? $payment['guardians'] : [];
+    $guardianId = trim((string) ($guardian['id'] ?? ''));
+    $guardianStudentId = trim((string) ($guardian['student_id'] ?? ''));
+    $paymentDate = trim((string) ($payment['payment_date'] ?? ''));
+    if ($studentId === '' || $paymentDate === '' || $paymentDate >= '2026-09-01') {
+        Helpers::json([
+            'ok' => false,
+            'error' => 'O cancelamento mensalista só é permitido para cobranças históricas anteriores a setembro.',
+        ], 409);
+    }
+    if (
+        $paymentGuardianId === ''
+        || $guardianId === ''
+        || !hash_equals($paymentGuardianId, $guardianId)
+        || $guardianStudentId === ''
+        || !hash_equals($studentId, $guardianStudentId)
+    ) {
+        Helpers::json([
+            'ok' => false,
+            'error' => 'Vínculo entre cobrança, responsável e aluno não confirmado.',
+        ], 409);
+    }
+    $monthlyPlan = $client->select(
+        'monthly_student_plans',
+        'select=student_id&student_id=eq.' . rawurlencode($studentId) . '&active=eq.true&limit=1'
+    );
+    if (!($monthlyPlan['ok'] ?? false) || empty($monthlyPlan['data'][0])) {
+        Helpers::json([
+            'ok' => false,
+            'error' => 'Plano mensalista ativo não confirmado; cancelamento bloqueado.',
+        ], 409);
+    }
+
+    $monthlyAsaasPaymentId = trim((string) ($payment['asaas_payment_id'] ?? ''));
+    if ($monthlyAsaasPaymentId === '') {
+        Helpers::json([
+            'ok' => false,
+            'error' => 'Cobrança mensalista sem ID Asaas; conciliação remota obrigatória.',
+        ], 409);
+    }
+    $knownRemoteResponse = $asaas->getPayment($monthlyAsaasPaymentId);
+    if (!($knownRemoteResponse['ok'] ?? false)) {
+        Helpers::json([
+            'ok' => false,
+            'error' => 'Cobrança mensalista não foi confirmada diretamente no Asaas.',
+        ], 503);
+    }
+}
+
 $asaasPaymentId = trim((string) ($payment['asaas_payment_id'] ?? ''));
 $billingType = strtoupper(trim((string) ($payment['billing_type'] ?? '')));
 if ($asaasPaymentId !== '') {
     $guardianIdentity = is_array($payment['guardians'] ?? null) ? $payment['guardians'] : [];
     $remoteCancel = $paymentLifecycle->cancelBeforeLocalMutation(
         $asaasPaymentId,
-        null,
+        $knownRemoteResponse,
         $guardianIdentity
     );
     if (!($remoteCancel['ok'] ?? false)) {
@@ -118,7 +175,7 @@ append_exclusion_log([
     'guardian_name' => $guardianName,
     'payment_date' => $paymentDate,
     'amount' => $amount,
-    'reason' => 'COBRANÇA EM DUPLICIDADE',
+    'reason' => $reason,
     'source' => 'admin_inadimplentes',
     'notes' => '',
 ]);

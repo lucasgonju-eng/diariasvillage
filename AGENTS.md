@@ -269,6 +269,11 @@ mutação. Resultado pago, fechado, ausente, desconhecido ou conflitante permane
 para reconciliação humana; mesmo uma cobrança aberta integralmente validada não
 é autorização automática de cancelamento.
 
+Quando o usuário autorizar um item nominal, `admin-delete-payment.php` aceita o
+motivo `MENSALISTA_COBERTO_PELO_PLANO` somente para plano ativo e cobrança
+anterior a setembro de 2026, cancela primeiro no Asaas e registra esse motivo
+exato na trilha local. Não reutilize o motivo de duplicidade nesse caso.
+
 ## Banco e RLS
 
 A migration `20260901135800_lock_down_public_data_api.sql`:

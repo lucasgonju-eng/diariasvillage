@@ -3,8 +3,10 @@ declare(strict_types=1);
 
 $auditPath = dirname(__DIR__) . '/public/api/admin-monthly-legacy-charge-audit.php';
 $audit = file_get_contents($auditPath);
-if ($audit === false) {
-    fwrite(STDERR, "Não foi possível ler o auditor de cobranças legadas.\n");
+$cancelPath = dirname(__DIR__) . '/public/api/admin-delete-payment.php';
+$cancel = file_get_contents($cancelPath);
+if ($audit === false || $cancel === false) {
+    fwrite(STDERR, "Não foi possível ler o fluxo de cobranças legadas.\n");
     exit(1);
 }
 
@@ -55,6 +57,22 @@ foreach ([
 ] as $mutation) {
     $notContains('auditor não pode conter mutação ' . $mutation, $mutation);
 }
+
+$cancelContains = static function (string $label, string $needle) use (&$failures, $cancel): void {
+    if (!str_contains($cancel, $needle)) {
+        $failures[] = $label;
+    }
+};
+$cancelContains('motivo mensalista é explícito', "'MENSALISTA_COBERTO_PELO_PLANO'");
+$cancelContains('cancelamento mensalista exige corte histórico', "\$paymentDate >= '2026-09-01'");
+$cancelContains('cancelamento mensalista exige plano ativo', "'monthly_student_plans'");
+$cancelContains('cancelamento mensalista exige vínculo do guardian da cobrança', 'hash_equals($paymentGuardianId, $guardianId)');
+$cancelContains('cancelamento mensalista exige vínculo guardian-aluno', 'hash_equals($studentId, $guardianStudentId)');
+$cancelContains('cancelamento mensalista exige ID Asaas', "'Cobrança mensalista sem ID Asaas; conciliação remota obrigatória.'");
+$cancelContains('cancelamento mensalista consulta pagamento remoto antes da mutação', '$knownRemoteResponse = $asaas->getPayment($monthlyAsaasPaymentId)');
+$cancelContains('cancelamento mensalista preserva cancelamento remoto primeiro', 'cancelBeforeLocalMutation(');
+$cancelContains('cancelamento mensalista preserva soft cancel local', "['status' => 'canceled']");
+$cancelContains('trilha registra motivo exato', "'reason' => " . '$reason');
 
 if ($failures !== []) {
     fwrite(STDERR, "Falhas no auditor legado mensalista:\n- " . implode("\n- ", $failures) . "\n");
