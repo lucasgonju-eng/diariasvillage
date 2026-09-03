@@ -3,6 +3,7 @@ require_once dirname(__DIR__, 2) . '/src/Bootstrap.php';
 use App\Helpers;
 use App\HttpClient;
 use App\SupabaseClient;
+use App\UploadSecurity;
 
 $returnHtml = ($_GET['return'] ?? '') === 'html';
 
@@ -310,12 +311,31 @@ function normalize_entry(array $entry, array &$placeholderCounter): array
 $entries = [];
 $meta = [];
 
-if (!empty($_FILES['file']['tmp_name'])) {
-    $fileName = $_FILES['file']['name'] ?? '';
-    $ext = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
-    $tmpPath = $_FILES['file']['tmp_name'];
+if (
+    isset($_FILES['file'])
+    && is_array($_FILES['file'])
+    && (int) ($_FILES['file']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE
+) {
+    try {
+        $upload = UploadSecurity::validate(
+            $_FILES['file'],
+            [
+                'json' => ['application/json', 'text/plain'],
+                'pdf' => ['application/pdf'],
+            ],
+            5 * 1024 * 1024
+        );
+    } catch (\InvalidArgumentException $e) {
+        Helpers::json(['ok' => false, 'error' => $e->getMessage()], 422);
+    }
+
+    $ext = $upload['extension'];
+    $tmpPath = $upload['path'];
 
     if ($ext === 'json') {
+        if ($upload['size'] > 2 * 1024 * 1024) {
+            Helpers::json(['ok' => false, 'error' => 'O JSON deve possuir no máximo 2 MB.'], 422);
+        }
         $payload = json_decode(file_get_contents($tmpPath), true);
         if (!is_array($payload)) {
             Helpers::json(['ok' => false, 'error' => 'JSON inválido.'], 422);
@@ -335,11 +355,13 @@ if (!empty($_FILES['file']['tmp_name'])) {
             'students_without_email' => $parsed['missing_email_students'],
         ];
         $entries = $parsed['entries'];
-    } else {
-        Helpers::json(['ok' => false, 'error' => 'Envie um arquivo PDF ou JSON.'], 422);
     }
 } elseif (!empty($_POST['json'])) {
-    $payload = json_decode((string) $_POST['json'], true);
+    $rawJson = (string) $_POST['json'];
+    if (strlen($rawJson) > 2 * 1024 * 1024) {
+        Helpers::json(['ok' => false, 'error' => 'O JSON deve possuir no máximo 2 MB.'], 422);
+    }
+    $payload = json_decode($rawJson, true);
     if (!is_array($payload)) {
         Helpers::json(['ok' => false, 'error' => 'JSON inválido.'], 422);
     }
@@ -349,6 +371,10 @@ if (!empty($_FILES['file']['tmp_name'])) {
     }
 } else {
     Helpers::json(['ok' => false, 'error' => 'Nenhum arquivo enviado.'], 422);
+}
+
+if (count($entries) > 5000) {
+    Helpers::json(['ok' => false, 'error' => 'A importação excede o limite de 5.000 responsáveis.'], 422);
 }
 
 $client = new SupabaseClient(new HttpClient());

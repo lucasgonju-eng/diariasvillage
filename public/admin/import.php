@@ -40,7 +40,8 @@ $success = ($_GET['success'] ?? '') === '1';
 
       <form action="/api/import-students.php" method="post" enctype="multipart/form-data">
         <div class="form-group">
-          <input type="file" name="file" required />
+          <label for="students-file">Arquivo CSV, XLS ou XLSX (máximo 5 MB)</label>
+          <input id="students-file" type="file" name="file" accept=".csv,.xls,.xlsx" required />
         </div>
         <button class="button" type="submit">Importar</button>
       </form>
@@ -110,7 +111,7 @@ $success = ($_GET['success'] ?? '') === '1';
 
       <form action="/api/import-guardians.php?return=html" method="post" enctype="multipart/form-data">
         <div class="form-group">
-          <label for="guardians-file">Arquivo (PDF ou JSON)</label>
+          <label for="guardians-file">Arquivo PDF ou JSON (máximo 5 MB; JSON até 2 MB)</label>
           <input id="guardians-file" type="file" name="file" accept=".pdf,.json" />
         </div>
         <div class="form-group">

@@ -108,6 +108,31 @@ Estados considerados abertos:
 Prefira falso negativo seguro: deixar uma conciliação para revisão é melhor que
 atribuir pagamento à família errada.
 
+## Webhook Asaas
+
+`public/api/asaas-webhook.php` opera em modo fail-closed:
+
+- aceita somente `POST` e o cabeçalho oficial `asaas-access-token`;
+- recusa todas as chamadas se `ASAAS_WEBHOOK_TOKEN` estiver ausente;
+- compara o segredo com `hash_equals` e nunca registra o valor recebido;
+- limita o JSON a 256 KB e valida `event.id`, tipo e `payment.id`;
+- registra e adquire cada evento pela RPC `claim_asaas_webhook_event`;
+- usa `event.id` como chave idempotente e bloqueia payload divergente;
+- consulta o pagamento e o cliente diretamente no Asaas antes de promover
+  status local;
+- exige valor, vínculo responsável-aluno e identidade composta compatíveis;
+- não concilia pendência por URL da fatura nem por CPF isolado;
+- retorna resposta não-2xx após falha transitória para que o Asaas tente
+  novamente;
+- registra conflito permanente como `BLOCKED` e responde 2xx, evitando tentativas
+  inúteis que poderiam pausar toda a fila do webhook.
+
+`asaas_webhook_events` é uma caixa de entrada service-only com RLS. Os estados
+são `RECEIVED`, `PROCESSING`, `PROCESSED`, `IGNORED`, `BLOCKED` e `FAILED`.
+Uma trava de processamento expira após cinco minutos para permitir recuperação
+de encerramento inesperado. Não remova a validação remota nem responda sucesso
+antes de concluir ou bloquear o evento no banco.
+
 ## Primeiro acesso e autenticação administrativa
 
 O primeiro acesso do responsável continua público e simples, mas é estritamente
@@ -185,6 +210,24 @@ Toda mudança de schema deve:
 4. ser confirmada com consulta pós-migration;
 5. revisar os advisors de segurança e desempenho.
 
+## Importações e dependências
+
+O PhpSpreadsheet deve permanecer em `1.30.6` ou versão 1.x posterior sem
+advisories. A versão 1.30.2 possuía nove vulnerabilidades conhecidas, incluindo
+SSRF/RCE no carregamento de arquivos enviados.
+
+- Todo upload administrativo deve passar por `src/UploadSecurity.php`.
+- Valide erro de upload, tamanho real, extensão e MIME; o atributo `accept` do
+  navegador não é controle de segurança.
+- A importação de alunos aceita somente CSV, XLS e XLSX até 5 MB, no máximo
+  5.000 alunos e 50 colunas.
+- Escolha o leitor XLS/XLSX explicitamente; não restaure
+  `IOFactory::load()` com caminho controlado por upload.
+- A importação de responsáveis aceita PDF até 5 MB ou JSON até 2 MB e limita
+  cada operação a 5.000 responsáveis.
+- Execute `composer audit --locked` antes de publicar alterações de
+  dependências.
+
 ## Limpeza executada
 
 - O responsável contaminado de Fernando
@@ -206,6 +249,8 @@ Toda mudança de schema deve:
 Execute antes de publicar:
 
 ```powershell
+php tests/upload_security_test.php
+php tests/asaas_webhook_security_test.php
 php tests/asaas_identity_safety_test.php
 php tests/admin_settle_payment_security_test.php
 php tests/oficina_modular_validity_date_test.php

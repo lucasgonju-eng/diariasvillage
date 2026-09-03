@@ -27,11 +27,26 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
-          extensions: curl, json, mbstring, zip
+          extensions: curl, dom, fileinfo, gd, json, mbstring, simplexml, xml, xmlreader, xmlwriter, zip
           coverage: none
 
       - name: Instalar dependências
-        run: composer install --no-dev --optimize-autoloader --ignore-platform-req=ext-gd
+        run: composer install --no-dev --optimize-autoloader
+
+      - name: Auditar dependências
+        run: |
+          composer validate --strict
+          composer audit --locked
+
+      - name: Executar testes de segurança
+        run: |
+          php tests/upload_security_test.php
+          php tests/asaas_webhook_security_test.php
+          php tests/asaas_identity_safety_test.php
+          php tests/admin_settle_payment_security_test.php
+          php tests/oficina_modular_validity_date_test.php
+          php tests/authentication_security_test.php
+          php tests/monthly_workshop_security_test.php
 
       - name: Diagnóstico SSH (pré-check)
         env:
