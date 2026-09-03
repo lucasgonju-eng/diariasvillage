@@ -13,6 +13,7 @@ foreach ($bootstrapCandidates as $bootstrapFile) {
 use App\Helpers;
 use App\AsaasCustomerIdentity;
 use App\GuardianAccountIdentity;
+use App\GuardianSession;
 use App\HttpClient;
 use App\SupabaseAuth;
 use App\SupabaseClient;
@@ -23,6 +24,15 @@ Helpers::requireAdminRole(\App\AdminAuth::ROLE_ADMIN);
 $payload = json_decode(file_get_contents('php://input'), true);
 if (!is_array($payload)) {
     $payload = [];
+}
+$csrfToken = trim((string) ($payload['csrf_token'] ?? ''));
+$expectedCsrfToken = trim((string) ($_SESSION['admin_csrf_token'] ?? ''));
+if (
+    $csrfToken === ''
+    || $expectedCsrfToken === ''
+    || !hash_equals($expectedCsrfToken, $csrfToken)
+) {
+    Helpers::json(['ok' => false, 'error' => 'Sessão administrativa expirada. Recarregue o painel.'], 403);
 }
 $action = trim((string) ($payload['action'] ?? 'reset'));
 $cpf = trim($payload['cpf'] ?? '');
@@ -42,7 +52,7 @@ $client = new SupabaseClient(new HttpClient());
 $guardianResult = $client->selectAll(
     'guardians',
     'select=id,student_id,email,parent_name,parent_document,password_hash,verified_at,auth_user_id,'
-        . 'first_access_completed_at,students(name,enrollment)&order=id.asc'
+        . 'first_access_completed_at,account_session_version,students(name,enrollment)&order=id.asc'
 );
 
 if (!($guardianResult['ok'] ?? false) || !is_array($guardianResult['data'] ?? null)) {
@@ -122,6 +132,16 @@ if (!is_string($novaSenha) || strlen($novaSenha) < 6) {
 }
 
 $targetRows = is_array($identity['guardians'] ?? null) ? $identity['guardians'] : [];
+$selectedTarget = is_array($identity['selected'] ?? null) ? $identity['selected'] : ($targetRows[0] ?? []);
+$currentSessionVersion = (int) ($selectedTarget['account_session_version'] ?? 0);
+if ($currentSessionVersion < 1) {
+    Helpers::json(['ok' => false, 'error' => 'A versão da conta é inválida.'], 409);
+}
+foreach ($targetRows as $targetRow) {
+    if ((int) ($targetRow['account_session_version'] ?? 0) !== $currentSessionVersion) {
+        Helpers::json(['ok' => false, 'error' => 'A conta possui versões de sessão conflitantes.'], 409);
+    }
+}
 $adminId = trim((string) ($_SESSION['admin_id'] ?? ''));
 $auditStart = $client->insert('admin_audit_log', [[
     'admin_user_id' => $adminId !== '' ? $adminId : null,
@@ -186,24 +206,46 @@ if (($identity['mode'] ?? '') === 'supabase_auth') {
         ], 409);
     }
 
+    $rotation = (new GuardianSession($client))->rotate(
+        $guardianId,
+        $authUserId,
+        $currentSessionVersion
+    );
+    if (
+        !($rotation['ok'] ?? false)
+        || (int) ($rotation['session_version'] ?? 0) !== $currentSessionVersion + 1
+        || (int) ($rotation['updated_guardians'] ?? 0) !== count($targetRows)
+    ) {
+        $updateAudit(false, 'SESSION_ROTATION_FAILED');
+        Helpers::json([
+            'ok' => false,
+            'error' => 'Os vínculos mudaram. A senha Auth não foi alterada.',
+        ], 409);
+    }
+
     $auth = new SupabaseAuth(new HttpClient());
     $updateResult = $auth->updateUser($authUserId, [
         'password' => $novaSenha,
         'email_confirm' => true,
     ]);
     if (!($updateResult['ok'] ?? false)) {
-        $updateAudit(false, 'AUTH_UPDATE_FAILED');
+        $updateAudit(false, 'AUTH_UPDATE_FAILED_SESSIONS_REVOKED');
         Helpers::json([
             'ok' => false,
-            'error' => 'Não foi possível atualizar a conta vinculada no Supabase Auth.',
+            'error' => 'Não foi possível atualizar a conta Auth. As sessões anteriores foram encerradas.',
         ], 502);
     }
 } else {
     $passwordHash = password_hash($novaSenha, PASSWORD_DEFAULT);
     $localUpdate = $client->update(
         'guardians',
-        'id=eq.' . rawurlencode($guardianId) . '&auth_user_id=is.null',
-        ['password_hash' => $passwordHash]
+        'id=eq.' . rawurlencode($guardianId)
+            . '&auth_user_id=is.null'
+            . '&account_session_version=eq.' . $currentSessionVersion,
+        [
+            'password_hash' => $passwordHash,
+            'account_session_version' => $currentSessionVersion + 1,
+        ]
     );
     if (!($localUpdate['ok'] ?? false) || count($localUpdate['data'] ?? []) !== 1) {
         $updateAudit(false, 'LEGACY_UPDATE_FAILED');
@@ -219,7 +261,7 @@ if (!$auditCompleted) {
     error_log('[admin-reset-password] operação concluída com registro STARTED preservado');
 }
 
-$selected = is_array($identity['selected'] ?? null) ? $identity['selected'] : ($targetRows[0] ?? []);
+$selected = $selectedTarget;
 Helpers::json([
     'ok' => true,
     'message' => 'Senha alterada para a conta explicitamente selecionada.',

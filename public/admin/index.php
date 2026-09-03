@@ -11,6 +11,7 @@ foreach ($bootstrapCandidates as $bootstrapFile) {
 }
 
 use App\AdminAuth;
+use App\LoginThrottle;
 
 $error = '';
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
@@ -20,16 +21,43 @@ header('Expires: 0');
 $adminAuth = new AdminAuth();
 $adminAuth->bootstrapFromEnvironment();
 $currentAdmin = $adminAuth->currentSession();
+$adminLoginCsrf = trim((string) ($_SESSION['admin_login_csrf'] ?? ''));
+if ($adminLoginCsrf === '') {
+    $adminLoginCsrf = bin2hex(random_bytes(32));
+    $_SESSION['admin_login_csrf'] = $adminLoginCsrf;
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $usernameInput = (string) ($_POST['admin_login_user'] ?? ($_POST['username'] ?? ''));
     $passwordInput = (string) ($_POST['admin_login_pass'] ?? ($_POST['password'] ?? ''));
-    $login = $adminAuth->login($usernameInput, $passwordInput);
-    if ($login['ok']) {
-        header('Location: /admin/dashboard.php?tab=entries');
-        exit;
+    $submittedCsrf = trim((string) ($_POST['csrf_token'] ?? ''));
+    if ($submittedCsrf === '' || !hash_equals($adminLoginCsrf, $submittedCsrf)) {
+        http_response_code(403);
+        $error = 'Formulário expirado. Recarregue a página.';
+    } else {
+        $throttle = new LoginThrottle();
+        $claim = $throttle->claim('admin', $usernameInput);
+        if (!($claim['ok'] ?? false)) {
+            http_response_code(503);
+            $error = 'Login temporariamente indisponível. Tente novamente.';
+        } elseif (!($claim['allowed'] ?? false)) {
+            $retryAfter = max(1, (int) ($claim['retry_after'] ?? 60));
+            http_response_code(429);
+            header('Retry-After: ' . $retryAfter);
+            $error = 'Muitas tentativas. Aguarde alguns minutos antes de tentar novamente.';
+        } else {
+            $login = $adminAuth->login($usernameInput, $passwordInput);
+            if ($login['ok']) {
+                if (!$throttle->clearAfterSuccess()) {
+                    error_log('[admin-login] falha ao limpar contadores após autenticação válida');
+                }
+                unset($_SESSION['admin_login_csrf']);
+                header('Location: /admin/dashboard.php?tab=entries');
+                exit;
+            }
+            $error = (string) ($login['error'] ?? 'Usuário ou senha inválidos.');
+        }
     }
-    $error = (string) ($login['error'] ?? 'Usuário ou senha inválidos.');
 }
 ?>
 <!DOCTYPE html>
@@ -59,6 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <?php else: ?>
         <p class="subtitle">Informe usuário e senha para continuar.</p>
         <form method="post">
+          <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($adminLoginCsrf, ENT_QUOTES, 'UTF-8'); ?>" />
           <input
             type="text"
             name="username"

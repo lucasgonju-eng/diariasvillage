@@ -18,7 +18,7 @@ use App\Services\AsaasPaymentLifecycle;
 use App\Services\MonthlyWorkshopService;
 use App\SupabaseClient;
 
-if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
     http_response_code(405);
     exit('Método inválido.');
 }
@@ -122,7 +122,16 @@ function resolveExpectedAmountForPayment(array $payment): float
 }
 
 $user = Helpers::requireAuthWeb();
-$paymentId = trim((string) ($_GET['payment_id'] ?? ''));
+$csrfToken = trim((string) ($_POST['csrf_token'] ?? ''));
+$expectedCsrfToken = trim((string) ($_SESSION['financeiro_csrf_token'] ?? ''));
+if (
+    $csrfToken === ''
+    || $expectedCsrfToken === ''
+    || !hash_equals($expectedCsrfToken, $csrfToken)
+) {
+    $redirectWithError('Sessão de pagamento expirada. Reabra o financeiro.');
+}
+$paymentId = trim((string) ($_POST['payment_id'] ?? ''));
 if ($paymentId === '') {
     $redirectWithError('Cobrança não informada.');
 }
@@ -137,7 +146,10 @@ $paymentResult = $client->select(
     'select=id,guardian_id,student_id,payment_date,daily_type,amount,status,billing_type,asaas_payment_id'
     . '&id=eq.' . urlencode($paymentId) . '&limit=1'
 );
-$payment = $paymentResult['data'][0] ?? null;
+$paymentRows = ($paymentResult['ok'] ?? false) && is_array($paymentResult['data'] ?? null)
+    ? $paymentResult['data']
+    : [];
+$payment = $paymentRows[0] ?? null;
 if (!$payment) {
     $redirectWithError('Cobrança não encontrada.');
 }
@@ -147,14 +159,14 @@ $sessionGuardianId = trim((string) ($user['id'] ?? ''));
 $sessionStudentId = trim((string) ($user['student_id'] ?? ''));
 $paymentGuardianId = trim((string) ($payment['guardian_id'] ?? ''));
 $paymentStudentId = trim((string) ($payment['student_id'] ?? ''));
-$allowed = false;
-if ($sessionGuardianId !== '' && $paymentGuardianId !== '' && $sessionGuardianId === $paymentGuardianId) {
-    $allowed = true;
-}
-if ($sessionStudentId !== '' && $paymentStudentId !== '' && $sessionStudentId === $paymentStudentId) {
-    $allowed = true;
-}
-if (!$allowed) {
+if (
+    $sessionGuardianId === ''
+    || $sessionStudentId === ''
+    || $paymentGuardianId === ''
+    || $paymentStudentId === ''
+    || !hash_equals($sessionGuardianId, $paymentGuardianId)
+    || !hash_equals($sessionStudentId, $paymentStudentId)
+) {
     $redirectWithError('Você não tem permissão para pagar esta cobrança.');
 }
 if ($paymentStudentId !== '' && (new MonthlyWorkshopService($client))->getActivePlan($paymentStudentId) !== null) {
@@ -175,7 +187,9 @@ if (!in_array($statusRaw, ['queued', 'pending', 'pending_asaas', 'overdue', 'awa
 $guardianResult = $client->select(
     'guardians',
     'select=id,parent_name,parent_phone,parent_document,email,asaas_customer_id'
-    . '&id=eq.' . urlencode($paymentGuardianId) . '&limit=1'
+    . '&id=eq.' . rawurlencode($paymentGuardianId)
+    . '&student_id=eq.' . rawurlencode($paymentStudentId)
+    . '&limit=1'
 );
 $guardian = $guardianResult['data'][0] ?? null;
 if (!$guardian) {
@@ -209,10 +223,22 @@ if ($existingAsaasPaymentId !== '') {
     $existingPaymentResponse = $asaasPaymentResponse;
     $asaasData = $asaasPaymentResponse['data'];
     $asaasStatus = strtoupper(trim((string) ($asaasData['status'] ?? '')));
+    $remoteCustomerId = trim((string) ($asaasData['customer'] ?? ''));
+    $asaasValue = (float) ($asaasData['value'] ?? 0);
+    if ($remoteCustomerId === '' || !hash_equals($customerId, $remoteCustomerId)) {
+        $redirectWithError('A cobrança atual não pertence ao responsável validado. Operação bloqueada.');
+    }
     if (in_array($asaasStatus, ['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH'], true)) {
+        if ($asaasValue <= 0 || ($expectedAmount > 0 && abs($asaasValue - $expectedAmount) > 0.009)) {
+            $redirectWithError('O valor recebido no Asaas diverge da cobrança local. Operação bloqueada.');
+        }
         $paidUpdate = $client->update(
             'payments',
-            'id=eq.' . urlencode($paymentId),
+            'id=eq.' . rawurlencode($paymentId)
+                . '&guardian_id=eq.' . rawurlencode($paymentGuardianId)
+                . '&student_id=eq.' . rawurlencode($paymentStudentId)
+                . '&asaas_payment_id=eq.' . rawurlencode($existingAsaasPaymentId)
+                . '&status=eq.' . rawurlencode($statusRaw),
             ['status' => 'paid', 'paid_at' => date('c')]
         );
         if (!($paidUpdate['ok'] ?? false) || empty($paidUpdate['data'][0])) {
@@ -222,13 +248,7 @@ if ($existingAsaasPaymentId !== '') {
         exit;
     }
 
-    $remoteCustomerId = trim((string) ($asaasData['customer'] ?? ''));
-    if ($remoteCustomerId === '' || $remoteCustomerId !== $customerId) {
-        $redirectWithError('A cobrança atual não pertence ao responsável validado. Operação bloqueada.');
-    }
-
     $invoiceUrl = trim((string) ($asaasData['invoiceUrl'] ?? ($asaasData['bankSlipUrl'] ?? '')));
-    $asaasValue = (float) ($asaasData['value'] ?? 0);
     $closedStatuses = ['CANCELED', 'CANCELLED', 'DELETED', 'REFUNDED', 'REFUND_REQUESTED', 'REFUND_IN_PROGRESS'];
     $reusableStatuses = ['PENDING', 'OVERDUE', 'AWAITING_RISK_ANALYSIS'];
     if (in_array($asaasStatus, $closedStatuses, true)) {
@@ -269,7 +289,17 @@ if ($shouldCreateNew) {
     if (!($claim['ok'] ?? false) || empty($claim['data'][0])) {
         $redirectWithError('Esta cobrança já está sendo processada. Aguarde alguns instantes.');
     }
-    $releaseClaim = static function () use ($client, $paymentId, $statusRaw, $operationToken): void {
+    $remoteMutationOccurred = false;
+    $releaseClaimIfSafe = static function () use (
+        $client,
+        $paymentId,
+        $statusRaw,
+        $operationToken,
+        &$remoteMutationOccurred
+    ): void {
+        if ($remoteMutationOccurred) {
+            return;
+        }
         $client->update(
             'payments',
             'id=eq.' . urlencode($paymentId)
@@ -288,9 +318,10 @@ if ($shouldCreateNew) {
             $guardian
         );
         if (!($cancelOld['ok'] ?? false)) {
-            $releaseClaim();
+            $releaseClaimIfSafe();
             $redirectWithError((string) ($cancelOld['error'] ?? 'Não foi possível cancelar a cobrança anterior.'));
         }
+        $remoteMutationOccurred = true;
     }
 
     $createPaymentResponse = $asaas->createPayment([
@@ -303,11 +334,12 @@ if ($shouldCreateNew) {
     ]);
     if (!($createPaymentResponse['ok'] ?? false)) {
         if ($paymentLifecycle->isDefinitiveCreationRejection($createPaymentResponse)) {
-            $releaseClaim();
+            $releaseClaimIfSafe();
             $redirectWithError('O Asaas rejeitou a nova cobrança. Revise os dados e tente novamente.');
         }
         $redirectWithError('O resultado da criação ficou incerto. Operação bloqueada para conciliação segura.');
     }
+    $remoteMutationOccurred = true;
     $asaasNewData = is_array($createPaymentResponse['data'] ?? null) ? $createPaymentResponse['data'] : [];
     $invoiceUrl = trim((string) ($asaasNewData['invoiceUrl'] ?? ($asaasNewData['bankSlipUrl'] ?? '')));
     $effectiveAsaasPaymentId = trim((string) ($asaasNewData['id'] ?? ''));
@@ -316,9 +348,6 @@ if ($shouldCreateNew) {
         $message = ($compensation['ok'] ?? false)
             ? 'O Asaas retornou uma cobrança inválida; ela foi cancelada. Tente novamente.'
             : 'O Asaas retornou uma cobrança inválida e a compensação falhou. Contate o atendimento.';
-        if ($compensation['ok'] ?? false) {
-            $releaseClaim();
-        }
         $redirectWithError($message);
     }
     $localUpdate = $client->update(
@@ -337,15 +366,21 @@ if ($shouldCreateNew) {
         $message = ($compensation['ok'] ?? false)
             ? 'A atualização local falhou e a nova cobrança foi cancelada. Tente novamente.'
             : 'A atualização local e o cancelamento compensatório falharam. Contate o atendimento.';
-        if ($compensation['ok'] ?? false) {
-            $releaseClaim();
-        }
         $redirectWithError($message);
     }
 }
 
 if ($invoiceUrl === '') {
     $redirectWithError('Link de pagamento indisponível no momento. Tente novamente.');
+}
+$invoiceParts = filter_var($invoiceUrl, FILTER_VALIDATE_URL) ? parse_url($invoiceUrl) : false;
+$invoiceScheme = is_array($invoiceParts) ? strtolower((string) ($invoiceParts['scheme'] ?? '')) : '';
+$invoiceHost = is_array($invoiceParts) ? strtolower((string) ($invoiceParts['host'] ?? '')) : '';
+if (
+    $invoiceScheme !== 'https'
+    || ($invoiceHost !== 'asaas.com' && !str_ends_with($invoiceHost, '.asaas.com'))
+) {
+    $redirectWithError('O Asaas retornou um link de pagamento inválido.');
 }
 
 header('Location: ' . $invoiceUrl);

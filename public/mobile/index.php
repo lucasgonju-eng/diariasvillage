@@ -1,7 +1,14 @@
 <?php
 require_once dirname(__DIR__, 2) . '/src/Bootstrap.php';
 
-$isLoggedIn = !empty($_SESSION['user']);
+$r = $_GET['r'] ?? null;
+$session = \App\Helpers::currentUserSession();
+if (!($session['ok'] ?? false) && ($session['unavailable'] ?? false) === true) {
+    http_response_code(503);
+    header('Retry-After: 5');
+    exit('Não foi possível validar a sessão. Tente novamente.');
+}
+$isLoggedIn = ($session['ok'] ?? false) === true;
 
 // ── New router: ?r= (friendly app routes) ──
 $appRoutes = [
@@ -12,8 +19,6 @@ $appRoutes = [
     'perfil'          => 'perfil',
     'resumo'          => 'resumo',
 ];
-
-$r = $_GET['r'] ?? null;
 
 // O primeiro acesso canônico exige busca e confirmação explícita do student_id.
 if ($r === 'primeiro-acesso') {

@@ -10,9 +10,5 @@ foreach ($bootstrapCandidates as $bootstrapFile) {
     }
 }
 
-$_SESSION = [];
-if (session_status() === PHP_SESSION_ACTIVE) {
-    session_destroy();
-}
-header('Location: /mobile/?r=login');
+header('Location: /logout.php?context=user&return=mobile');
 exit;

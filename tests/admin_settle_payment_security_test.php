@@ -78,7 +78,7 @@ assert_contains('js endpoint baixa manual', $dashboardJs, '/api/admin-settle-pay
 assert_contains('js envia observação', $dashboardJs, 'note: noteResult.value', $failures);
 
 assert_contains('dashboard coluna ação', $dashboardPhp, '<th>Ação</th>', $failures);
-assert_contains('dashboard cache bust js', $dashboardPhp, '/assets/js/admin-dashboard.js?v=80', $failures);
+assert_contains('dashboard cache bust js', $dashboardPhp, '/assets/js/admin-dashboard.js?v=81', $failures);
 
 if ($failures !== []) {
     fwrite(STDERR, "Falhas no teste de segurança da baixa manual:\n");

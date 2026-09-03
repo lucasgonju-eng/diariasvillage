@@ -12,6 +12,7 @@ foreach ($bootstrapCandidates as $bootstrapFile) {
 
 use App\AsaasCustomerIdentity;
 use App\GuardianAccountIdentity;
+use App\GuardianSession;
 use App\Helpers;
 use App\HttpClient;
 use App\SupabaseAuth;
@@ -109,6 +110,15 @@ try {
         }
         $updateFilter = 'auth_user_id=eq.' . rawurlencode($authUserId);
     }
+    $currentSessionVersion = (int) ($current['account_session_version'] ?? 0);
+    if ($currentSessionVersion < 1) {
+        Helpers::json(['ok' => false, 'error' => 'A versão da conta é inválida. Entre novamente.'], 409);
+    }
+    foreach ($targetRows as $targetRow) {
+        if ((int) ($targetRow['account_session_version'] ?? 0) !== $currentSessionVersion) {
+            Helpers::json(['ok' => false, 'error' => 'A conta familiar possui sessões conflitantes.'], 409);
+        }
+    }
 
     $update = [
         'parent_name' => (string) ($current['parent_name'] ?? $requestedName),
@@ -119,6 +129,10 @@ try {
         $update['password_hash'] = $authUserId !== ''
             ? password_hash(bin2hex(random_bytes(32)), PASSWORD_DEFAULT)
             : password_hash($password, PASSWORD_DEFAULT);
+        if ($authUserId === '') {
+            $update['account_session_version'] = $currentSessionVersion + 1;
+            $updateFilter .= '&account_session_version=eq.' . $currentSessionVersion;
+        }
     }
 
     $result = $client->update('guardians', $updateFilter, $update);
@@ -127,15 +141,31 @@ try {
     }
 
     if ($password !== '' && $authUserId !== '') {
+        $rotation = (new GuardianSession($client))->rotate(
+            $guardianId,
+            $authUserId,
+            $currentSessionVersion
+        );
+        if (
+            !($rotation['ok'] ?? false)
+            || (int) ($rotation['session_version'] ?? 0) !== $currentSessionVersion + 1
+            || (int) ($rotation['updated_guardians'] ?? 0) !== count($targetRows)
+        ) {
+            Helpers::json([
+                'ok' => false,
+                'error' => 'Os vínculos mudaram. A senha não foi alterada.',
+            ], 409);
+        }
         $auth = new SupabaseAuth(new HttpClient());
         $authUpdate = $auth->updateUser($authUserId, [
             'password' => $password,
             'email_confirm' => true,
         ]);
         if (!($authUpdate['ok'] ?? false)) {
+            Helpers::clearUserSession();
             Helpers::json([
                 'ok' => false,
-                'error' => 'Os dados foram salvos, mas a senha Auth não pôde ser alterada. A senha anterior continua válida.',
+                'error' => 'A senha Auth não pôde ser alterada. Entre novamente com a senha anterior.',
             ], 502);
         }
     }
@@ -150,7 +180,10 @@ try {
     if (!is_array($updatedUser)) {
         Helpers::json(['ok' => false, 'error' => 'Perfil salvo, mas a sessão precisa ser refeita.'], 409);
     }
-    $_SESSION['user'] = $updatedUser;
+    if ($password !== '') {
+        $updatedUser['account_session_version'] = $currentSessionVersion + 1;
+    }
+    Helpers::establishUserSession($updatedUser, false);
     Helpers::json(['ok' => true]);
 } catch (Throwable $e) {
     error_log('profile.php error: ' . $e->getMessage());

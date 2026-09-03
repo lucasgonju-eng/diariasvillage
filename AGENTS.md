@@ -204,6 +204,15 @@ CPF e aluno e usa as RPCs `begin_first_access_claim`,
   dessa conta são revalidadas e a ação entra em `admin_audit_log`.
 - Login, reset e expansão familiar não podem usar busca parcial de CPF nem
   escolher silenciosamente a primeira linha ou o primeiro e-mail.
+- Logins de responsável e admin usam `LoginThrottle`: três chaves HMAC
+  persistidas (IP, conta e combinação), aquisição atômica e resposta `429`.
+  Nunca grave CPF, usuário ou IP em texto na tabela de limitação.
+- Sessões de responsável expiram por tempo absoluto e inatividade, reconsultam
+  o vínculo a cada acesso operacional e exigem `account_session_version`.
+  Sessão sem versão não pode ser promovida silenciosamente.
+- Troca de senha rotaciona primeiro a versão de todos os vínculos da conta pela
+  RPC `rotate_guardian_account_session`; falha posterior no Auth não reativa
+  sessões antigas.
 - Quando uma conta possui mais de um `student_id`, todo login cria o estado
   bloqueante `family_student_selection_required`. Nenhuma página ou API
   operacional fica disponível antes da escolha explícita em
@@ -234,6 +243,13 @@ baixas, reset de senha e mutações sensíveis são exclusivos do admin principa
 `SECRETARIA_SECRET` deve ser configurado no ambiente. Até isso ocorrer, existe
 um fallback legado temporário e auditado. Remova o fallback assim que o segredo
 for configurado.
+
+Toda mutação administrativa autenticada exige CSRF no helper central. O
+financeiro do responsável mostra e opera somente cobranças que correspondam
+simultaneamente ao `guardian_id` e ao `student_id` ativos. Criar ou substituir
+PIX exige `POST` com CSRF; nunca restaure o proxy financeiro por `GET`.
+Logout por link apenas abre confirmação e a mutação ocorre por `POST`, separando
+a sessão do responsável da sessão administrativa durante impersonação.
 
 ## Chamada presencial e aprovação humana
 
@@ -412,6 +428,7 @@ php tests/payment_lifecycle_behavior_test.php
 php tests/authentication_security_test.php
 php tests/guardian_account_identity_test.php
 php tests/family_student_selection_test.php
+php tests/login_session_security_test.php
 php tests/xss_security_test.php
 php tests/monthly_workshop_security_test.php
 php tests/monthly_legacy_charge_audit_test.php

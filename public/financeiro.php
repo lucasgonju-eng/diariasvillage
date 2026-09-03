@@ -107,6 +107,18 @@ function day_use_row_key(string $studentId, string $studentName, string $date): 
     return $studentKey . '|' . $dateKey;
 }
 
+function is_safe_asaas_payment_url(string $value): bool
+{
+    if (!filter_var($value, FILTER_VALIDATE_URL)) {
+        return false;
+    }
+    $parts = parse_url($value);
+    $scheme = strtolower((string) ($parts['scheme'] ?? ''));
+    $host = strtolower((string) ($parts['host'] ?? ''));
+    return $scheme === 'https'
+        && ($host === 'asaas.com' || str_ends_with($host, '.asaas.com'));
+}
+
 function parse_single_day_use_date(string $raw): string
 {
     $value = trim($raw);
@@ -157,105 +169,22 @@ function money(float $value): string
     return 'R$ ' . number_format($value, 2, ',', '.');
 }
 
-function only_digits(string $value): string
-{
-    return preg_replace('/\D+/', '', $value) ?? '';
-}
-
-function mask_cpf(string $digits): string
-{
-    if (strlen($digits) !== 11) {
-        return $digits;
-    }
-    return substr($digits, 0, 3) . '.'
-        . substr($digits, 3, 3) . '.'
-        . substr($digits, 6, 3) . '-'
-        . substr($digits, 9, 2);
-}
-
 $user = Helpers::requireAuthWeb();
+$financeiroCsrfToken = trim((string) ($_SESSION['financeiro_csrf_token'] ?? ''));
+if ($financeiroCsrfToken === '') {
+    $financeiroCsrfToken = bin2hex(random_bytes(32));
+    $_SESSION['financeiro_csrf_token'] = $financeiroCsrfToken;
+}
 $client = new SupabaseClient(new HttpClient());
 $financeiroError = isset($_SESSION['financeiro_error']) ? (string) $_SESSION['financeiro_error'] : '';
 unset($_SESSION['financeiro_error']);
-$guardianIds = [];
-$studentIdsScope = [];
 $sessionGuardianId = trim((string) ($user['id'] ?? ''));
-if ($sessionGuardianId !== '') {
-    $guardianIds[$sessionGuardianId] = true;
-}
 $sessionStudentId = trim((string) ($user['student_id'] ?? ''));
-if ($sessionStudentId !== '') {
-    $studentIdsScope[$sessionStudentId] = true;
+if ($sessionGuardianId === '' || $sessionStudentId === '') {
+    http_response_code(409);
+    exit('A sessão não possui responsável e aluno ativos.');
 }
-
-$sessionCpfDigits = only_digits((string) ($user['parent_document'] ?? ''));
-if ($sessionCpfDigits !== '') {
-    $cpfAttempts = [
-        'parent_document=eq.' . urlencode($sessionCpfDigits) . '&select=id,student_id',
-        'parent_document=eq.' . urlencode(mask_cpf($sessionCpfDigits)) . '&select=id,student_id',
-        'parent_document=ilike.' . urlencode('*' . $sessionCpfDigits . '*') . '&select=id,student_id',
-    ];
-    foreach ($cpfAttempts as $query) {
-        $guardiansByCpf = $client->select('guardians', $query);
-        if (!($guardiansByCpf['ok'] ?? false) || empty($guardiansByCpf['data'])) {
-            continue;
-        }
-        foreach ($guardiansByCpf['data'] as $row) {
-            $gid = trim((string) ($row['id'] ?? ''));
-            if ($gid !== '') {
-                $guardianIds[$gid] = true;
-            }
-            $sid = trim((string) ($row['student_id'] ?? ''));
-            if ($sid !== '') {
-                $studentIdsScope[$sid] = true;
-            }
-        }
-    }
-}
-
-$sessionEmail = trim((string) ($user['email'] ?? ''));
-if ($sessionEmail !== '') {
-    $emailAttempts = [
-        'email=eq.' . urlencode($sessionEmail) . '&select=id,student_id&limit=200',
-        'email=ilike.' . urlencode($sessionEmail) . '&select=id,student_id&limit=200',
-    ];
-    foreach ($emailAttempts as $query) {
-        $guardiansByEmail = $client->select('guardians', $query);
-        if (!($guardiansByEmail['ok'] ?? false) || empty($guardiansByEmail['data'])) {
-            continue;
-        }
-        foreach ($guardiansByEmail['data'] as $row) {
-            $gid = trim((string) ($row['id'] ?? ''));
-            if ($gid !== '') {
-                $guardianIds[$gid] = true;
-            }
-            $sid = trim((string) ($row['student_id'] ?? ''));
-            if ($sid !== '') {
-                $studentIdsScope[$sid] = true;
-            }
-        }
-    }
-}
-
-if (!empty($guardianIds)) {
-    $quotedGuardianIds = array_map(static fn($id) => '"' . str_replace('"', '', $id) . '"', array_keys($guardianIds));
-    $guardiansByStudent = $client->select(
-        'guardians',
-        'select=id,student_id&id=in.(' . implode(',', $quotedGuardianIds) . ')&limit=500'
-    );
-    if (($guardiansByStudent['ok'] ?? false) && !empty($guardiansByStudent['data'])) {
-        foreach ($guardiansByStudent['data'] as $row) {
-            $gid = trim((string) ($row['id'] ?? ''));
-            if ($gid !== '') {
-                $guardianIds[$gid] = true;
-            }
-            $sid = trim((string) ($row['student_id'] ?? ''));
-            if ($sid !== '') {
-                $studentIdsScope[$sid] = true;
-            }
-        }
-    }
-}
+$studentIdsScope = [$sessionStudentId => true];
 
 $payments = [];
 $paymentColumns = 'select=id,student_id,payment_date,daily_type,amount,status,billing_type,paid_at,created_at,guardian_id';
@@ -276,43 +205,15 @@ $appendPayments = static function (array $rows) use (&$payments, &$paymentsById)
     }
 };
 
-$studentIdList = array_keys($studentIdsScope);
-if (!empty($studentIdList)) {
-    $quotedStudentIds = array_map(static fn($id) => '"' . str_replace('"', '', $id) . '"', $studentIdList);
-    $paymentsByStudent = $client->select(
-        'payments',
-        $paymentColumns
-        . '&student_id=in.(' . implode(',', $quotedStudentIds) . ')'
+$paymentsForActiveContext = $client->select(
+    'payments',
+    $paymentColumns
+        . '&guardian_id=eq.' . rawurlencode($sessionGuardianId)
+        . '&student_id=eq.' . rawurlencode($sessionStudentId)
         . '&order=payment_date.desc&limit=5000'
-    );
-    if ($paymentsByStudent['ok'] ?? false) {
-        $appendPayments($paymentsByStudent['data'] ?? []);
-    }
-}
-
-$guardianIdList = array_keys($guardianIds);
-if (!empty($guardianIdList)) {
-    $quotedGuardianIds = array_map(static fn($id) => '"' . str_replace('"', '', $id) . '"', $guardianIdList);
-    $paymentsByGuardian = $client->select(
-        'payments',
-        $paymentColumns
-        . '&guardian_id=in.(' . implode(',', $quotedGuardianIds) . ')'
-        . '&order=payment_date.desc&limit=5000'
-    );
-    if ($paymentsByGuardian['ok'] ?? false) {
-        $appendPayments($paymentsByGuardian['data'] ?? []);
-    }
-}
-if (empty($payments) && $sessionGuardianId !== '') {
-    $paymentsFallback = $client->select(
-        'payments',
-        $paymentColumns
-        . '&guardian_id=eq.' . urlencode($sessionGuardianId)
-        . '&order=payment_date.desc&limit=1000'
-    );
-    if ($paymentsFallback['ok'] ?? false) {
-        $appendPayments($paymentsFallback['data'] ?? []);
-    }
+);
+if ($paymentsForActiveContext['ok'] ?? false) {
+    $appendPayments($paymentsForActiveContext['data'] ?? []);
 }
 
 $monthlyItems = MonthlyStudents::load();
@@ -431,7 +332,7 @@ foreach ($payments as $payment) {
     }
     $createdAtRaw = (string) ($payment['created_at'] ?? '');
     $paymentId = trim((string) ($payment['id'] ?? ''));
-    $payProxyUrl = $paymentId !== '' ? '/api/financeiro-pay.php?payment_id=' . rawurlencode($paymentId) : '';
+    $payProxyUrl = $paymentId !== '' ? '/api/financeiro-pay.php' : '';
     $asaasPaymentId = trim((string) ($payment['asaas_payment_id'] ?? ''));
     $payUrl = '';
     if ($isOpen && $asaasPaymentId !== '') {
@@ -446,6 +347,9 @@ foreach ($payments as $payment) {
             }
         }
         $payUrl = (string) ($paymentLinksByAsaasId[$asaasPaymentId] ?? '');
+        if (!is_safe_asaas_payment_url($payUrl)) {
+            $payUrl = '';
+        }
         $asaasStatus = (string) ($paymentStatusByAsaasId[$asaasPaymentId] ?? '');
         if (in_array($asaasStatus, ['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH'], true)) {
             $statusLabel = 'Pago';
@@ -487,14 +391,6 @@ foreach ($payments as $payment) {
 }
 
 $studentScopeForAttendance = array_fill_keys(array_keys($studentIdsScope), true);
-$studentNameScopeForAttendance = [];
-foreach ($studentScopeForAttendance as $sid => $_) {
-    $studentName = trim((string) ($studentsById[$sid]['name'] ?? ''));
-    $studentKey = normalize_text_key($studentName);
-    if ($studentKey !== '') {
-        $studentNameScopeForAttendance[$studentKey] = true;
-    }
-}
 
 foreach ($attendanceCalls as $call) {
     if (!is_array($call)) {
@@ -502,10 +398,7 @@ foreach ($attendanceCalls as $call) {
     }
     $studentId = trim((string) ($call['student_id'] ?? ''));
     $studentName = trim((string) ($call['student_name'] ?? 'Aluno'));
-    $studentNameKey = normalize_text_key($studentName);
-    $inScope = ($studentId !== '' && isset($studentScopeForAttendance[$studentId]))
-        || ($studentId === '' && $studentNameKey !== '' && isset($studentNameScopeForAttendance[$studentNameKey]));
-    if (!$inScope) {
+    if ($studentId === '' || !isset($studentScopeForAttendance[$studentId])) {
         continue;
     }
     $attendanceDate = date_key((string) ($call['attendance_date'] ?? ''));
@@ -763,12 +656,11 @@ $economy = max(0, $totalBase - $totalEffective);
                           PAGAR
                         </a>
                       <?php elseif ($isPending && $payProxyUrl !== ''): ?>
-                        <a
-                          class="btn btn-primary btn-sm finance-pay-btn"
-                          href="<?php echo htmlspecialchars($payProxyUrl, ENT_QUOTES, 'UTF-8'); ?>"
-                        >
-                          PAGAR
-                        </a>
+                        <form method="post" action="<?php echo htmlspecialchars($payProxyUrl, ENT_QUOTES, 'UTF-8'); ?>">
+                          <input type="hidden" name="payment_id" value="<?php echo htmlspecialchars((string) ($row['payment_id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                          <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($financeiroCsrfToken, ENT_QUOTES, 'UTF-8'); ?>" />
+                          <button class="btn btn-primary btn-sm finance-pay-btn" type="submit">PAGAR</button>
+                        </form>
                       <?php elseif ($isPending): ?>
                         <span class="finance-pay-muted">Link indisponível</span>
                       <?php else: ?>

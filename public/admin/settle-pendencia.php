@@ -6,6 +6,7 @@ use App\HttpClient;
 use App\SupabaseClient;
 
 Helpers::requireAdminRoleWeb(\App\AdminAuth::ROLE_ADMIN);
+$adminCsrfToken = Helpers::adminCsrfToken();
 
 $client = new SupabaseClient(new HttpClient());
 $result = $client->select(
@@ -112,7 +113,10 @@ $ok = isset($_GET['ok']) && $_GET['ok'] === '1';
       try {
         const res = await fetch('/api/admin-settle-pendencia.php', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': <?php echo json_encode($adminCsrfToken); ?>,
+          },
           body: JSON.stringify({ id: id, payment_date: paymentDate || new Date().toISOString().slice(0, 10) }),
         });
         const data = await res.json();

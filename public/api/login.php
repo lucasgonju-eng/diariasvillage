@@ -15,6 +15,7 @@ use App\AsaasCustomerIdentity;
 use App\GuardianAccountIdentity;
 use App\Helpers;
 use App\HttpClient;
+use App\LoginThrottle;
 use App\SupabaseClient;
 
 Helpers::requirePost();
@@ -31,16 +32,33 @@ if ($cpf === '' || $password === '') {
 }
 
 $cpfDigits = preg_replace('/\D+/', '', $cpf) ?? '';
+$client = new SupabaseClient(new HttpClient());
+$throttle = new LoginThrottle($client);
+$throttleClaim = $throttle->claim('guardian', $cpfDigits !== '' ? $cpfDigits : $cpf);
+if (!($throttleClaim['ok'] ?? false)) {
+    Helpers::json(['ok' => false, 'error' => 'Login temporariamente indisponível. Tente novamente.'], 503);
+}
+if (!($throttleClaim['allowed'] ?? false)) {
+    $retryAfter = max(1, (int) ($throttleClaim['retry_after'] ?? 60));
+    header('Retry-After: ' . $retryAfter);
+    Helpers::json([
+        'ok' => false,
+        'error' => 'Muitas tentativas. Aguarde alguns minutos antes de tentar novamente.',
+    ], 429);
+}
+
 if (strlen($cpfDigits) !== 11 || !AsaasCustomerIdentity::isValidCpfOrCnpj($cpfDigits)) {
     Helpers::json(['ok' => false, 'error' => 'CPF inválido.'], 422);
 }
 
-$client = new SupabaseClient(new HttpClient());
 $auth = new Auth($client);
 $result = $auth->login($cpfDigits, $password);
 
 if (!$result['ok']) {
     Helpers::json(['ok' => false, 'error' => $result['error']], 401);
+}
+if (!$throttle->clearAfterSuccess()) {
+    error_log('[login] não foi possível liberar a reserva após autenticação válida');
 }
 
 $user = is_array($result['user'] ?? null) ? $result['user'] : [];
@@ -90,7 +108,7 @@ if ($studentIds === []) {
 }
 
 $requiresSelection = count($studentIds) > 1;
-$_SESSION['user'] = $user;
+Helpers::establishUserSession($user);
 $_SESSION['family_student_selection_required'] = $requiresSelection;
 $_SESSION['family_student_selection_confirmed'] = !$requiresSelection;
 $_SESSION['family_student_count'] = count($studentIds);
@@ -99,7 +117,6 @@ if ($requiresSelection) {
 } else {
     $_SESSION['family_student_selected_at'] = time();
 }
-session_regenerate_id(true);
 
 Helpers::json([
     'ok' => true,

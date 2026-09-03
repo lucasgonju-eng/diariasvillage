@@ -5,6 +5,7 @@ use App\Helpers;
 
 $debug = ($_GET['debug'] ?? '') === '1';
 $adminSession = Helpers::requireAdminRoleWeb(AdminAuth::ROLE_ADMIN);
+$adminCsrfToken = Helpers::adminCsrfToken();
 
 if ($debug) {
     ini_set('display_errors', '1');
@@ -27,7 +28,7 @@ $success = ($_GET['success'] ?? '') === '1';
       <div class="logo">Diárias Village</div>
       <nav class="nav">
         <a class="button secondary" href="/admin/dashboard.php?tab=entries">Entradas</a>
-        <a class="button secondary" href="/logout.php">Sair</a>
+        <a class="button secondary" href="/logout.php?context=admin">Sair</a>
       </nav>
     </header>
 
@@ -39,6 +40,7 @@ $success = ($_GET['success'] ?? '') === '1';
       <?php endif; ?>
 
       <form action="/api/import-students.php" method="post" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($adminCsrfToken, ENT_QUOTES, 'UTF-8'); ?>" />
         <div class="form-group">
           <label for="students-file">Arquivo CSV, XLS ou XLSX (máximo 5 MB)</label>
           <input id="students-file" type="file" name="file" accept=".csv,.xls,.xlsx" required />
@@ -110,6 +112,7 @@ $success = ($_GET['success'] ?? '') === '1';
       <p class="subtitle">Envie PDF ou JSON com colunas: student_name, guardian_name, guardian_email, guardian_phone, guardian_cpf.</p>
 
       <form action="/api/import-guardians.php?return=html" method="post" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($adminCsrfToken, ENT_QUOTES, 'UTF-8'); ?>" />
         <div class="form-group">
           <label for="guardians-file">Arquivo PDF ou JSON (máximo 5 MB; JSON até 2 MB)</label>
           <input id="guardians-file" type="file" name="file" accept=".pdf,.json" />
@@ -145,7 +148,10 @@ $success = ($_GET['success'] ?? '') === '1';
       try {
         const response = await fetch('/api/admin-create-student.php', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': <?php echo json_encode($adminCsrfToken); ?>,
+          },
           body: JSON.stringify(payload),
         });
         const data = await response.json().catch(() => ({}));

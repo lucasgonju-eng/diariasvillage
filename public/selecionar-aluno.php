@@ -20,8 +20,7 @@ $client = new SupabaseClient(new HttpClient());
 $authUserId = trim((string) ($user['auth_user_id'] ?? ''));
 
 if ($authUserId === '') {
-    $_SESSION = [];
-    session_destroy();
+    Helpers::clearUserSession();
     header('Location: /login.php?reauth=1');
     exit;
 }
@@ -39,8 +38,7 @@ if (
     $currentGuardianId === ''
     || ($identity['code'] ?? '') === 'GUARDIAN_SELECTION_MISMATCH'
 ) {
-    $_SESSION = [];
-    session_destroy();
+    Helpers::clearUserSession();
     header('Location: /login.php?reauth=1');
     exit;
 }

@@ -1,5 +1,17 @@
 const tabs = document.querySelectorAll('[data-tab]');
 const adminCsrfToken = document.querySelector('meta[name="admin-csrf-token"]')?.content || '';
+const nativeAdminFetch = window.fetch.bind(window);
+window.fetch = (input, init = {}) => {
+  const method = String(init.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
+  const target = input instanceof Request ? input.url : String(input);
+  const targetUrl = new URL(target, window.location.href);
+  if (targetUrl.origin === window.location.origin && !['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    const headers = new Headers(init.headers || {});
+    headers.set('X-CSRF-Token', adminCsrfToken);
+    init = { ...init, headers };
+  }
+  return nativeAdminFetch(input, init);
+};
 window.__adminDashboardBooted = true;
 console.info('[admin-dashboard] bootstrap ok', { tabs: tabs.length });
 const tabEntries = document.querySelector('#tab-entries');
@@ -5275,7 +5287,7 @@ if (
       const res = await fetch('/api/admin-reset-password.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'lookup', cpf }),
+        body: JSON.stringify({ action: 'lookup', cpf, csrf_token: adminCsrfToken }),
       });
       const data = await res.json();
       if (!res.ok || !data?.ok) {
@@ -5373,6 +5385,7 @@ if (
           cpf,
           guardian_id: guardianId,
           nova_senha: novaSenha,
+          csrf_token: adminCsrfToken,
         }),
       });
       let data;
@@ -5629,6 +5642,7 @@ if (viewUserButton && viewUserStudentInput) {
         body: JSON.stringify({
           student_id: resolved.id,
           guardian_id: selectedGuardianId || null,
+          csrf_token: adminCsrfToken,
         }),
       });
       const data = await res.json();

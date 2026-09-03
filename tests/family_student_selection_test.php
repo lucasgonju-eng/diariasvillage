@@ -80,7 +80,7 @@ $ordered(
     'login deve validar a família antes de criar a sessão',
     $loginApi,
     'GuardianAccountIdentity::analyze($familyGuardians)',
-    "\$_SESSION['user'] = \$user"
+    'Helpers::establishUserSession($user)'
 );
 $contains('frontend deve obedecer ao redirect do servidor', $loginJs, "data.redirect || '/dashboard.php'");
 $contains('cache do login deve ser atualizado', $loginPage, '/assets/js/login.js?v=3');
@@ -114,10 +114,11 @@ $contains('seletor deve enviar student_id UUID', $selector, 'name="student_id"')
 $contains('seletor deve enviar CSRF', $selector, 'name="csrf_token"');
 
 $contains('troca deve aceitar sessão ainda pendente', $selectStudent, 'Helpers::requireAuth(true)');
-$contains('troca deve revalidar guardian atual no banco', $selectStudent, "'select=id,auth_user_id&id=eq.'");
+$contains('troca deve reutilizar guardian revalidado pela sessão', $selectStudent, "\$sessionAuthUserId = trim((string) (\$user['auth_user_id']");
 $contains('troca deve validar CSRF', $selectStudent, 'hash_equals($expectedCsrfToken, $csrfToken)');
 $contains('troca deve exigir mesma conta Auth', $selectStudent, '&auth_user_id=eq.');
 $contains('troca deve exigir student_id escolhido', $selectStudent, '&student_id=eq.');
+$contains('troca deve exigir mesma versão de sessão', $selectStudent, '&account_session_version=eq.');
 $contains(
     'troca deve liberar fluxos somente após validar',
     $selectStudent,
@@ -170,7 +171,7 @@ $contains('dashboard deve mostrar aluno de origem', $adminDashboard, 'Aluno já 
 $contains('dashboard deve mostrar aluno solicitado', $adminDashboard, 'Aluno solicitado');
 $contains('aprovação deve exigir digitação explícita', $adminDashboardJs, 'Digite ${confirmationWord}');
 $contains('revisão deve enviar CSRF', $adminDashboardJs, 'csrf_token: adminCsrfToken');
-$contains('cache administrativo deve avançar', $adminDashboard, 'admin-dashboard.js?v=80');
+$contains('cache administrativo deve avançar', $adminDashboard, 'admin-dashboard.js?v=81');
 
 $contains('migration deve remover unicidade de e-mail por linha', $migration, 'drop constraint if exists guardians_email_key');
 $contains('migration deve proteger identidade de e-mail', $migration, 'trg_guardians_email_identity');

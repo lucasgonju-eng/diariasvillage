@@ -733,7 +733,7 @@ if (!empty($exclusionsLog)) {
           <a class="btn btn-danger btn-sm" href="/admin/settle-pendencia.php">Baixa manual</a>
           <a class="btn btn-ghost btn-sm" href="/admin/import.php">Importar alunos</a>
         <?php endif; ?>
-        <a class="btn btn-ghost btn-sm" href="/logout.php">Sair</a>
+        <a class="btn btn-ghost btn-sm" href="/logout.php?context=admin">Sair</a>
       </div>
     </header>
     <?php if ($canViewAsUser): ?>
@@ -2316,7 +2316,7 @@ if (!empty($exclusionsLog)) {
     window.__monthlyStudents = <?php echo json_encode($monthlyRowsForJs, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
     window.__adminCanApproveAttendance = <?php echo $canAttendanceApprove ? 'true' : 'false'; ?>;
   </script>
-  <script src="/assets/js/admin-dashboard.js?v=80"></script>
+  <script src="/assets/js/admin-dashboard.js?v=81"></script>
   <script>
     (function () {
       function activateTab(name) {

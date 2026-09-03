@@ -50,3 +50,13 @@ if (!empty($_SESSION['admin_authenticated'])) {
         }
     }
 }
+
+if (isset($_SESSION['user'])) {
+    $userSessionExpired = (
+        (int) ($_SESSION['user_session_expires_at'] ?? PHP_INT_MAX) <= time()
+        || (int) ($_SESSION['user_session_idle_expires_at'] ?? PHP_INT_MAX) <= time()
+    );
+    if ($userSessionExpired) {
+        \App\Helpers::clearUserSession();
+    }
+}

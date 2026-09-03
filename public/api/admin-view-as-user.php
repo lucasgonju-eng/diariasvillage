@@ -18,6 +18,16 @@ Helpers::requireAdminRole(\App\AdminAuth::ROLE_ADMIN);
 
 Helpers::requirePost();
 $payload = json_decode(file_get_contents('php://input'), true);
+$payload = is_array($payload) ? $payload : [];
+$csrfToken = trim((string) ($payload['csrf_token'] ?? ''));
+$expectedCsrfToken = trim((string) ($_SESSION['admin_csrf_token'] ?? ''));
+if (
+    $csrfToken === ''
+    || $expectedCsrfToken === ''
+    || !hash_equals($expectedCsrfToken, $csrfToken)
+) {
+    Helpers::json(['ok' => false, 'error' => 'Sessão administrativa expirada. Recarregue o painel.'], 403);
+}
 $studentId = trim((string) ($payload['student_id'] ?? ''));
 $guardianId = trim((string) ($payload['guardian_id'] ?? ''));
 if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $studentId)) {
@@ -105,7 +115,7 @@ if ($guardianId !== '') {
     $guardian = $guardians[0];
 }
 
-$_SESSION['user'] = $guardian;
+Helpers::establishUserSession($guardian);
 $_SESSION['family_student_selection_required'] = false;
 $_SESSION['family_student_selection_confirmed'] = true;
 $_SESSION['family_student_count'] = 1;
