@@ -19,9 +19,14 @@ final class OficinaModularGradeService
         $this->client = $client ?? new SupabaseClient(new HttpClient());
     }
 
-    public function selecionarOficinaModular(string $diariaId, string $oficinaModularId, ?string $slotIdPreferido = null): array
+    public function selecionarOficinaModular(
+        string $diariaId,
+        string $guardianId,
+        string $oficinaModularId,
+        ?string $slotIdPreferido = null
+    ): array
     {
-        $diaria = $this->buscarDiaria($diariaId);
+        $diaria = $this->buscarDiariaDoResponsavel($diariaId, $guardianId);
         if ($diaria === null) {
             return ['ok' => false, 'error' => 'Diária não encontrada.'];
         }
@@ -139,6 +144,7 @@ final class OficinaModularGradeService
         // Transação no banco encapsulada na função RPC.
         $tx = $this->client->rpc('oficina_modular_grade_travar_e_reservar', [
             'p_diaria_id' => $diariaId,
+            'p_guardian_id' => $guardianId,
             'p_oficina_modular_id' => $oficinaModularId,
             'p_dia_semana' => $diaDiaria,
             'p_slot_id' => $slotId,
@@ -179,9 +185,14 @@ final class OficinaModularGradeService
         ];
     }
 
-    public function removerOficinaModular(string $diariaId, string $oficinaModularId, ?string $slotIdPreferido = null): array
+    public function removerOficinaModular(
+        string $diariaId,
+        string $guardianId,
+        string $oficinaModularId,
+        ?string $slotIdPreferido = null
+    ): array
     {
-        $diaria = $this->buscarDiaria($diariaId);
+        $diaria = $this->buscarDiariaDoResponsavel($diariaId, $guardianId);
         if ($diaria === null) {
             return ['ok' => false, 'error' => 'Diária não encontrada.'];
         }
@@ -215,6 +226,7 @@ final class OficinaModularGradeService
         // Transação no banco encapsulada na função RPC.
         $tx = $this->client->rpc('oficina_modular_grade_liberar_e_cancelar', [
             'p_diaria_id' => $diariaId,
+            'p_guardian_id' => $guardianId,
             'p_oficina_modular_id' => $oficinaModularId,
             'p_slot_id' => $slotId,
             'p_marcar_cancelada' => true,
@@ -222,6 +234,11 @@ final class OficinaModularGradeService
 
         if (!$tx['ok']) {
             return ['ok' => false, 'error' => 'Erro ao remover seleção de oficina.'];
+        }
+
+        $txData = $this->normalizarRetornoRpc($tx['data'] ?? null);
+        if (!is_array($txData) || ($txData['ok'] ?? false) !== true) {
+            return ['ok' => false, 'error' => 'Diária não encontrada.'];
         }
 
         return [
@@ -401,6 +418,26 @@ final class OficinaModularGradeService
         if (!$result['ok'] || empty($result['data']) || !is_array($result['data'][0])) {
             return null;
         }
+        return $result['data'][0];
+    }
+
+    private function buscarDiariaDoResponsavel(string $diariaId, string $guardianId): ?array
+    {
+        if ($diariaId === '' || $guardianId === '') {
+            return null;
+        }
+
+        $query = 'select=*'
+            . '&id=eq.' . rawurlencode($diariaId)
+            . '&guardian_id=eq.' . rawurlencode($guardianId)
+            . '&status_pagamento=eq.PENDENTE'
+            . '&grade_travada=eq.false'
+            . '&limit=1';
+        $result = $this->client->select('diaria', $query);
+        if (!$result['ok'] || empty($result['data']) || !is_array($result['data'][0])) {
+            return null;
+        }
+
         return $result['data'][0];
     }
 

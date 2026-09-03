@@ -163,6 +163,18 @@ baixas, reset de senha e mutações sensíveis são exclusivos do admin principa
 um fallback legado temporário e auditado. Remova o fallback assim que o segredo
 for configurado.
 
+## Autorização da grade de oficinas
+
+Seleção e remoção de Oficina Modular são sempre vinculadas ao responsável da
+sessão. `OficinaModularGradeService` consulta a diária por `id` e `guardian_id`
+e aceita mutação somente enquanto ela está `PENDENTE` e não está travada.
+
+As RPCs `oficina_modular_grade_travar_e_reservar` e
+`oficina_modular_grade_liberar_e_cancelar` recebem `p_guardian_id`, repetem a
+validação com `FOR UPDATE` e são executáveis somente por `service_role`.
+Nunca restaure as assinaturas antigas sem responsável nem confie apenas no UUID
+da diária recebido pela rota.
+
 ## Alunos mensalistas
 
 A fonte histórica é a aba **Mensalistas** do admin. Em 02/09/2026, os 60 planos
@@ -262,6 +274,7 @@ php tests/asaas_webhook_security_test.php
 php tests/asaas_identity_safety_test.php
 php tests/admin_settle_payment_security_test.php
 php tests/oficina_modular_validity_date_test.php
+php tests/oficina_modular_authorization_test.php
 php tests/authentication_security_test.php
 php tests/monthly_workshop_security_test.php
 php -l public/api/admin-charge.php

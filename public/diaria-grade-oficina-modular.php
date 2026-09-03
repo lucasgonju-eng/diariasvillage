@@ -80,7 +80,7 @@ $preselectOficinaId = isset($_GET['preselect_oficina_modular_id']) ? trim((strin
 
 $service = new OficinaModularGradeService($client);
 if ($fromUpsell && $preselectOficinaId !== '') {
-    $auto = $service->selecionarOficinaModular($diariaId, $preselectOficinaId);
+    $auto = $service->selecionarOficinaModular($diariaId, $guardianId, $preselectOficinaId);
     if (($auto['ok'] ?? false) === true) {
         $message = "Pronto! Já reservei o próximo encontro 😊 Agora é só confirmar e seguir para o pagamento.";
     } else {

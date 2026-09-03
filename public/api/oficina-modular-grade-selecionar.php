@@ -15,13 +15,14 @@ use App\Helpers;
 use App\Services\OficinaModularGradeService;
 
 Helpers::requirePost();
-Helpers::requireAuth();
+$user = Helpers::requireAuth();
 
 $diariaId = isset($_GET['diariaId']) ? trim((string) $_GET['diariaId']) : '';
 $oficinaId = isset($_GET['oficinaId']) ? trim((string) $_GET['oficinaId']) : '';
 $slotId = isset($_GET['slotId']) ? trim((string) $_GET['slotId']) : '';
+$guardianId = trim((string) ($user['id'] ?? ''));
 
-if ($diariaId === '' || $oficinaId === '') {
+if ($diariaId === '' || $oficinaId === '' || $guardianId === '') {
     Helpers::json([
         'ok' => false,
         'error' => 'Parâmetros de rota inválidos.',
@@ -29,7 +30,12 @@ if ($diariaId === '' || $oficinaId === '') {
 }
 
 $service = new OficinaModularGradeService();
-$result = $service->selecionarOficinaModular($diariaId, $oficinaId, $slotId !== '' ? $slotId : null);
+$result = $service->selecionarOficinaModular(
+    $diariaId,
+    $guardianId,
+    $oficinaId,
+    $slotId !== '' ? $slotId : null
+);
 
 if (($result['ok'] ?? false) === true) {
     Helpers::json($result);
