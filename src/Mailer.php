@@ -15,6 +15,7 @@ class Mailer
             $mail->isSMTP();
             $mail->Host = Env::get('SMTP_HOST', '');
             $mail->Port = (int) Env::get('SMTP_PORT', '587');
+            $mail->Timeout = 20;
             $mail->SMTPAuth = true;
             $mail->Username = Env::get('SMTP_USER', '');
             $mail->Password = Env::get('SMTP_PASS', '');

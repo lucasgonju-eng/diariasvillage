@@ -21,6 +21,8 @@ class HttpClient
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_CUSTOMREQUEST => $method,
             CURLOPT_HTTPHEADER => $this->formatHeaders($headers),
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT => 30,
         ];
         if ($userAgent !== null) {
             $options[CURLOPT_USERAGENT] = $userAgent;
