@@ -101,6 +101,17 @@ jobs:
           cp -r src deploy/
           cp -r vendor deploy/
           cp .env.example deploy/
+          shopt -s globstar nullglob
+          BLOCKED_ARTIFACTS=(
+            deploy/**/*.bak deploy/**/*.bkp deploy/**/*.old deploy/**/*.orig
+            deploy/**/*.save deploy/**/*.swp deploy/**/*.sql deploy/**/*.zip
+            deploy/**/*.tar deploy/**/*.gz deploy/**/*.7z
+          )
+          if [ "${#BLOCKED_ARTIFACTS[@]}" -gt 0 ]; then
+            echo "ERRO: artefatos proibidos no pacote de deploy:"
+            printf '%s\n' "${BLOCKED_ARTIFACTS[@]}"
+            exit 1
+          fi
 
       - name: Preparar server-dir
         id: serverdir
@@ -138,6 +149,39 @@ jobs:
           source: "deploy"
           target: ${{ secrets.SSH_TARGET_DIR }}
           strip_components: 1
+
+      - name: Remover backups legados do servidor
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script_stop: true
+          script: |
+            TARGET="${{ secrets.SSH_TARGET_DIR }}"
+            TARGET="${TARGET%/}"
+            if [ -z "$TARGET" ]; then
+              echo "SSH_TARGET_DIR vazio no workflow."
+              exit 1
+            fi
+
+            LEGACY_BACKUPS="
+            $TARGET/dashboard.php.bkp
+            $TARGET/index.php.bkp
+            $TARGET/login.php.bkp
+            $TARGET/primeiro-acesso.php.bkp
+            $TARGET/profile.php.bkp
+            $TARGET/assets/style.css.bkp
+            "
+
+            for FILE in $LEGACY_BACKUPS; do
+              rm -f -- "$FILE"
+              if [ -e "$FILE" ]; then
+                echo "ERRO: backup legado permaneceu no servidor: $FILE"
+                exit 1
+              fi
+            done
 
       - name: Validar arquivo deployado (admin dashboard)
         uses: appleboy/ssh-action@v1.0.3

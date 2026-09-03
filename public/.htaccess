@@ -1,8 +1,8 @@
 # Diarias Village - Hostinger Cloud
 Options -Indexes
 
-# Bloqueia arquivos sensíveis (inclui .env e variações)
-<FilesMatch "(^\.env($|\.))|(^\.git)|(^composer\.(json|lock)$)|(^error_log_custom\.txt$)">
+# Bloqueia arquivos sensíveis, backups e arquivos que nunca devem ser publicados.
+<FilesMatch "(^\.env($|\.))|(^\.git)|(^composer\.(json|lock)$)|(^error_log_custom\.txt$)|\.(bak|bkp|old|orig|save|swp|sql|zip|tar|gz|7z)$">
     Require all denied
 </FilesMatch>
 

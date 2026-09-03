@@ -230,6 +230,11 @@ SSRF/RCE no carregamento de arquivos enviados.
   cada operação a 5.000 responsáveis.
 - Execute `composer audit --locked` antes de publicar alterações de
   dependências.
+- `public/` não pode conter backups nem arquivos com extensões `.bak`, `.bkp`,
+  `.old`, `.orig`, `.save`, `.swp`, `.sql`, `.zip`, `.tar`, `.gz` ou `.7z`.
+- O `.htaccess` nega essas extensões e o workflow deve rejeitá-las no pacote.
+  Não remova a limpeza dos seis backups legados do servidor enquanto o deploy
+  continuar sendo feito por sobreposição.
 
 ## Limpeza executada
 

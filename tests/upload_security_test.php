@@ -75,6 +75,9 @@ expect_upload_rejection(
 
 $studentImporter = file_get_contents(dirname(__DIR__) . '/public/api/import-students.php');
 $lock = file_get_contents(dirname(__DIR__) . '/composer.lock');
+$publicRoot = dirname(__DIR__) . '/public';
+$htaccess = file_get_contents($publicRoot . '/.htaccess');
+$deployWorkflow = file_get_contents(dirname(__DIR__) . '/.github/workflows/deploy-hostinger.yml');
 
 check_upload(
     str_contains($studentImporter, 'new Xls()') && str_contains($studentImporter, 'new Xlsx()'),
@@ -87,6 +90,32 @@ check_upload(
 check_upload(
     str_contains($lock, '"version": "1.30.6"'),
     'composer.lock deve fixar PhpSpreadsheet 1.30.6'
+);
+
+$blockedExtensions = ['bak', 'bkp', 'old', 'orig', 'save', 'swp', 'sql', 'zip', 'tar', 'gz', '7z'];
+$publishedBackups = [];
+$files = new RecursiveIteratorIterator(
+    new RecursiveDirectoryIterator($publicRoot, FilesystemIterator::SKIP_DOTS)
+);
+foreach ($files as $file) {
+    if ($file->isFile() && in_array(strtolower($file->getExtension()), $blockedExtensions, true)) {
+        $publishedBackups[] = $file->getPathname();
+    }
+}
+
+check_upload(
+    $publishedBackups === [],
+    'public não deve conter backups ou arquivos de dados publicáveis'
+);
+check_upload(
+    is_string($htaccess) && str_contains($htaccess, '\.(bak|bkp|old|orig|save|swp|sql|zip|tar|gz|7z)$'),
+    '.htaccess deve negar extensões de backup e dados'
+);
+check_upload(
+    is_string($deployWorkflow)
+        && str_contains($deployWorkflow, 'BLOCKED_ARTIFACTS')
+        && str_contains($deployWorkflow, 'Remover backups legados do servidor'),
+    'deploy deve rejeitar novos backups e remover os legados do servidor'
 );
 
 if ($failures) {
