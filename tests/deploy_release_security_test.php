@@ -53,6 +53,8 @@ $contains('workflow', $workflow, 'uses: actions/setup-node@v4');
 $contains('workflow', $workflow, 'npm ci');
 $contains('workflow', $workflow, 'npm audit --audit-level=high');
 $contains('workflow', $workflow, 'npm run check');
+$contains('workflow', $workflow, 'npx playwright install --with-deps chromium');
+$contains('workflow', $workflow, 'npm run e2e');
 $contains('workflow', $workflow, 'php tests/admin_dashboard_contract_test.php');
 $contains('workflow', $workflow, 'php tests/admin_dashboard_data_loader_test.php');
 $contains('workflow', $workflow, 'php tests/admin_dashboard_view_rbac_test.php');
@@ -68,6 +70,12 @@ $contains('workflow', $workflow, 'https://diarias.village.einsteinhub.co/admin/d
 $contains('workflow', $workflow, 'mv -f "$TARGET/.htaccess.rollback" "$TARGET/.htaccess"');
 $contains('workflow', $workflow, "-name '*.bak.*'");
 $notContains('workflow', $workflow, 'cp .env.example deploy/');
+$order(
+    'E2E deve executar após PHP e dependências estarem disponíveis',
+    $workflow,
+    'composer install --no-dev --optimize-autoloader',
+    'npm run e2e'
+);
 $order(
     'frontend deve ser compilado antes de montar a release',
     $workflow,

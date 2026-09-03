@@ -8,6 +8,8 @@
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "e2e": "playwright test",
+    "e2e:install": "playwright install chromium",
     "check": "npm run typecheck && npm test && npm run build"
   },
   "repository": {
@@ -20,6 +22,7 @@
   },
   "homepage": "https://github.com/lucasgonju-eng/diariasvillage#readme",
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@types/node": "^26.4.1",
     "esbuild": "^0.28.2",
     "jsdom": "^29.1.1",

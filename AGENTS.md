@@ -498,6 +498,8 @@ php tests/exclusion_log_storage_test.php
 npm ci
 npm audit --audit-level=high
 npm run check
+npx playwright install chromium
+npm run e2e
 php -l public/api/admin-charge.php
 php -l public/api/admin-sync-recebidas.php
 php -l public/api/admin-sync-charges-payments.php
@@ -510,6 +512,11 @@ e cancelamento remoto antes da exclusão local.
 Após mudanças no frontend administrativo, gere novamente o bundle. O hash do
 Vite substitui a versão manual de cache; não edite o manifest nem os arquivos
 em `public/assets/admin-dist` diretamente.
+
+Os E2E administrativos usam o fixture isolado em `tests/e2e`: ele renderiza as
+views e o bundle reais para `admin_principal` e `secretaria`, com dados fictícios
+e APIs GET vazias. O teste deve continuar proibindo qualquer POST/PUT/PATCH/DELETE
+e nunca usar credenciais ou dados de produção.
 
 ## Histórico da correção
 

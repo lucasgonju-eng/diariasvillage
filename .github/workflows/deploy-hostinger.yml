@@ -57,6 +57,13 @@ jobs:
       - name: Instalar dependências
         run: composer install --no-dev --optimize-autoloader
 
+      - name: Executar testes E2E administrativos
+        run: |
+          npx playwright install --with-deps chromium
+          php -l tests/e2e/router.php
+          php -l tests/e2e/admin-dashboard-fixture.php
+          npm run e2e
+
       - name: Auditar dependências
         run: |
           composer validate --strict
