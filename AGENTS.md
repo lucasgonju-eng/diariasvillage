@@ -262,6 +262,13 @@ mensalistas, além de duas filas locais antigas. Não cancele esses registros em
 lote: audite identidade, competência e situação remota individualmente e
 cancele no Asaas antes de reconciliar localmente.
 
+`public/api/admin-monthly-legacy-charge-audit.php` é o inventário administrativo
+somente leitura desses registros. Ele consulta cada ID Asaas exato, confere
+vínculo responsável-aluno, cliente, identidade composta e valor, e nunca executa
+mutação. Resultado pago, fechado, ausente, desconhecido ou conflitante permanece
+para reconciliação humana; mesmo uma cobrança aberta integralmente validada não
+é autorização automática de cancelamento.
+
 ## Banco e RLS
 
 A migration `20260901135800_lock_down_public_data_api.sql`:
@@ -337,6 +344,7 @@ php tests/oficina_modular_authorization_test.php
 php tests/payment_lifecycle_behavior_test.php
 php tests/authentication_security_test.php
 php tests/monthly_workshop_security_test.php
+php tests/monthly_legacy_charge_audit_test.php
 php -l public/api/admin-charge.php
 php -l public/api/admin-sync-recebidas.php
 php -l public/api/admin-sync-charges-payments.php
