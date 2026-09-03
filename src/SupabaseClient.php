@@ -25,6 +25,44 @@ class SupabaseClient
         return $this->http->request('GET', $url, $this->headers());
     }
 
+    public function selectAll(
+        string $table,
+        string $query = '',
+        int $pageSize = 500,
+        int $maxPages = 100
+    ): array {
+        $pageSize = max(1, min(1000, $pageSize));
+        $maxPages = max(1, min(1000, $maxPages));
+        $baseQuery = trim($query, '&');
+        $rows = [];
+
+        for ($page = 0; $page < $maxPages; $page++) {
+            $pageQuery = $baseQuery;
+            if ($pageQuery !== '') {
+                $pageQuery .= '&';
+            }
+            $pageQuery .= 'limit=' . $pageSize . '&offset=' . ($page * $pageSize);
+            $result = $this->select($table, $pageQuery);
+            if (!($result['ok'] ?? false) || !is_array($result['data'] ?? null)) {
+                return $result;
+            }
+
+            $pageRows = array_values($result['data']);
+            array_push($rows, ...$pageRows);
+            if (count($pageRows) < $pageSize) {
+                $result['data'] = $rows;
+                return $result;
+            }
+        }
+
+        return [
+            'ok' => false,
+            'status' => 503,
+            'data' => [],
+            'error' => 'Paginação excedeu o limite seguro configurado.',
+        ];
+    }
+
     public function insert(string $table, array $payload): array
     {
         $url = $this->url . '/rest/v1/' . $table;

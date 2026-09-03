@@ -11,12 +11,16 @@ foreach ($bootstrapCandidates as $bootstrapFile) {
 }
 
 use App\Auth;
+use App\AsaasCustomerIdentity;
 use App\Helpers;
 use App\HttpClient;
 use App\SupabaseClient;
 
 Helpers::requirePost();
 $payload = json_decode(file_get_contents('php://input'), true);
+if (!is_array($payload)) {
+    $payload = [];
+}
 
 $cpf = trim($payload['cpf'] ?? '');
 $password = $payload['password'] ?? '';
@@ -26,7 +30,7 @@ if ($cpf === '' || $password === '') {
 }
 
 $cpfDigits = preg_replace('/\D+/', '', $cpf) ?? '';
-if (strlen($cpfDigits) !== 11) {
+if (strlen($cpfDigits) !== 11 || !AsaasCustomerIdentity::isValidCpfOrCnpj($cpfDigits)) {
     Helpers::json(['ok' => false, 'error' => 'CPF inválido.'], 422);
 }
 

@@ -114,7 +114,7 @@ test_contains('UI mostra matrícula', $contents['dashboard_js'], 'Matrícula ${e
 test_contains('UI envia student_id', $contents['dashboard_js'], 'student_id: resolved.id', $failures);
 test_contains('UI envia guardian_id', $contents['dashboard_js'], 'guardian_id: selectedGuardianId', $failures);
 test_contains('dashboard possui seletor de responsável', $contents['dashboard_php'], 'id="admin-view-user-guardian"', $failures);
-test_contains('dashboard atualizou cache do JS', $contents['dashboard_php'], '/assets/js/admin-dashboard.js?v=77', $failures);
+test_contains('dashboard atualizou cache do JS', $contents['dashboard_php'], '/assets/js/admin-dashboard.js?v=78', $failures);
 
 test_contains('cobrança manual exige guardian_id explícito', $contents['manual_charge'], "\$charge['guardian_id']", $failures);
 test_contains('cobrança manual valida vínculo responsável-aluno', $contents['manual_charge'], '&student_id=eq.', $failures);

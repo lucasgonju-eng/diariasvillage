@@ -5071,23 +5071,129 @@ mergeButtons.forEach((button) => {
 });
 
 const resetCpfInput = document.querySelector('#reset-cpf');
+const resetLookupBtn = document.querySelector('#reset-lookup-btn');
+const resetGuardianSelect = document.querySelector('#reset-guardian');
 const resetSenhaNovaInput = document.querySelector('#reset-senha-nova');
 const resetSenhaConfirmInput = document.querySelector('#reset-senha-confirm');
 const resetSenhaBtn = document.querySelector('#reset-senha-btn');
 const resetSenhaMessage = document.querySelector('#reset-senha-message');
 
-if (resetSenhaBtn && resetCpfInput && resetSenhaNovaInput && resetSenhaConfirmInput) {
+if (
+  resetSenhaBtn &&
+  resetLookupBtn &&
+  resetGuardianSelect &&
+  resetCpfInput &&
+  resetSenhaNovaInput &&
+  resetSenhaConfirmInput
+) {
+  const clearResetAccountSelection = () => {
+    resetGuardianSelect.replaceChildren();
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'Busque um CPF válido';
+    resetGuardianSelect.appendChild(option);
+    resetGuardianSelect.setAttribute('disabled', 'disabled');
+    resetSenhaBtn.setAttribute('disabled', 'disabled');
+  };
+
   resetCpfInput.addEventListener('input', (event) => {
     event.target.value = normalizeCpf(event.target.value);
+    clearResetAccountSelection();
   });
+
+  resetGuardianSelect.addEventListener('change', () => {
+    if (resetGuardianSelect.value) {
+      resetSenhaBtn.removeAttribute('disabled');
+    } else {
+      resetSenhaBtn.setAttribute('disabled', 'disabled');
+    }
+  });
+
+  resetLookupBtn.addEventListener('click', async () => {
+    const cpf = normalizeCpf(resetCpfInput.value || '');
+    clearResetAccountSelection();
+    if (cpf.length !== 11) {
+      if (resetSenhaMessage) {
+        resetSenhaMessage.textContent = 'Informe um CPF válido (11 dígitos).';
+        resetSenhaMessage.className = 'charge-message error';
+      }
+      return;
+    }
+
+    resetLookupBtn.setAttribute('disabled', 'disabled');
+    if (resetSenhaMessage) {
+      resetSenhaMessage.textContent = 'Validando identidade e conta...';
+      resetSenhaMessage.className = 'charge-message';
+    }
+
+    try {
+      const res = await fetch('/api/admin-reset-password.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'lookup', cpf }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || 'Falha ao buscar a conta.');
+      }
+
+      const candidates = Array.isArray(data.candidates) ? data.candidates : [];
+      if (data.blocked) {
+        if (resetSenhaMessage) {
+          resetSenhaMessage.textContent =
+            `CPF bloqueado por conflito de identidade ou conta (${data.code || 'revisão necessária'}). ` +
+            `${candidates.length} vínculo(s) encontrado(s); corrija o cadastro antes do reset.`;
+          resetSenhaMessage.className = 'charge-message error';
+        }
+        return;
+      }
+
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = 'Selecione e confirme o vínculo';
+      resetGuardianSelect.replaceChildren(placeholder);
+      candidates.forEach((candidate) => {
+        const option = document.createElement('option');
+        option.value = String(candidate.guardian_id || '');
+        const studentLabel = candidate.student_name
+          ? `${candidate.student_name}${candidate.enrollment ? ` • ${candidate.enrollment}` : ''}`
+          : 'Aluno não identificado';
+        option.textContent =
+          `${candidate.guardian_name || 'Responsável'} • ${studentLabel} • ` +
+          `${candidate.email_masked || 'sem e-mail'}`;
+        resetGuardianSelect.appendChild(option);
+      });
+      resetGuardianSelect.removeAttribute('disabled');
+      if (resetSenhaMessage) {
+        resetSenhaMessage.textContent = 'Confira o vínculo e selecione-o antes de redefinir a senha.';
+        resetSenhaMessage.className = 'charge-message';
+      }
+    } catch (error) {
+      if (resetSenhaMessage) {
+        resetSenhaMessage.textContent = error?.message || 'Falha ao buscar a conta.';
+        resetSenhaMessage.className = 'charge-message error';
+      }
+    } finally {
+      resetLookupBtn.removeAttribute('disabled');
+    }
+  });
+
   resetSenhaBtn.addEventListener('click', async () => {
     const cpf = normalizeCpf(resetCpfInput.value || '');
+    const guardianId = String(resetGuardianSelect.value || '').trim();
     const novaSenha = (resetSenhaNovaInput.value || '').trim();
     const confirmSenha = (resetSenhaConfirmInput.value || '').trim();
 
     if (cpf.length !== 11) {
       if (resetSenhaMessage) {
         resetSenhaMessage.textContent = 'Informe um CPF válido (11 dígitos).';
+        resetSenhaMessage.className = 'charge-message error';
+      }
+      return;
+    }
+    if (!guardianId) {
+      if (resetSenhaMessage) {
+        resetSenhaMessage.textContent = 'Busque o CPF e selecione explicitamente o vínculo.';
         resetSenhaMessage.className = 'charge-message error';
       }
       return;
@@ -5117,7 +5223,12 @@ if (resetSenhaBtn && resetCpfInput && resetSenhaNovaInput && resetSenhaConfirmIn
       const res = await fetch('/api/admin-reset-password.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cpf, nova_senha: novaSenha }),
+        body: JSON.stringify({
+          action: 'reset',
+          cpf,
+          guardian_id: guardianId,
+          nova_senha: novaSenha,
+        }),
       });
       let data;
       try {
@@ -5149,6 +5260,7 @@ if (resetSenhaBtn && resetCpfInput && resetSenhaNovaInput && resetSenhaConfirmIn
         resetCpfInput.value = '';
         resetSenhaNovaInput.value = '';
         resetSenhaConfirmInput.value = '';
+        clearResetAccountSelection();
       }
     } catch {
       if (resetSenhaMessage) {
@@ -5156,7 +5268,9 @@ if (resetSenhaBtn && resetCpfInput && resetSenhaNovaInput && resetSenhaConfirmIn
         resetSenhaMessage.className = 'charge-message error';
       }
     } finally {
-      resetSenhaBtn.removeAttribute('disabled');
+      if (resetGuardianSelect.value) {
+        resetSenhaBtn.removeAttribute('disabled');
+      }
     }
   });
 }

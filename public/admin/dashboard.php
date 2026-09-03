@@ -1853,12 +1853,21 @@ if (!empty($exclusionsLog)) {
 
       <section id="tab-reset-senha" class="<?php echo $activeTab === 'reset-senha' ? '' : 'hidden'; ?>">
         <h2>Resetar senha do usuário</h2>
-        <p class="muted">Busque o usuário pelo CPF e defina uma nova senha. Use para recuperação quando o responsável esquecer a senha.</p>
+        <p class="muted">Busque o CPF, confira explicitamente o responsável e o aluno, e só então defina a nova senha. CPFs com identidade ou conta divergente ficam bloqueados para revisão.</p>
 
         <div class="charge-fields" style="margin-bottom:12px;">
           <div class="form-group">
             <label>CPF do responsável</label>
             <input id="reset-cpf" type="text" placeholder="Digite o CPF (apenas números)" inputmode="numeric" maxlength="14" />
+          </div>
+          <div class="form-group" style="display:flex;align-items:flex-end;">
+            <button id="reset-lookup-btn" class="btn btn-primary btn-sm" type="button">Buscar conta</button>
+          </div>
+          <div class="form-group">
+            <label>Vínculo confirmado</label>
+            <select id="reset-guardian" disabled>
+              <option value="">Busque um CPF válido</option>
+            </select>
           </div>
           <div class="form-group">
             <label>Nova senha</label>
@@ -1869,7 +1878,7 @@ if (!empty($exclusionsLog)) {
             <input id="reset-senha-confirm" type="password" placeholder="Repita a nova senha" minlength="6" autocomplete="new-password" />
           </div>
           <div class="form-group" style="display:flex;align-items:flex-end;">
-            <button id="reset-senha-btn" class="btn btn-danger btn-sm" type="button">Resetar senha</button>
+            <button id="reset-senha-btn" class="btn btn-danger btn-sm" type="button" disabled>Resetar senha</button>
           </div>
         </div>
         <div id="reset-senha-message" class="charge-message"></div>
@@ -2181,7 +2190,7 @@ if (!empty($exclusionsLog)) {
     window.__monthlyStudents = <?php echo json_encode($monthlyRowsForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
     window.__adminCanApproveAttendance = <?php echo $canAttendanceApprove ? 'true' : 'false'; ?>;
   </script>
-  <script src="/assets/js/admin-dashboard.js?v=77"></script>
+  <script src="/assets/js/admin-dashboard.js?v=78"></script>
   <script>
     (function () {
       function activateTab(name) {

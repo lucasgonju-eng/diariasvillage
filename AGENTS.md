@@ -189,7 +189,22 @@ CPF e aluno e usa as RPCs `begin_first_access_claim`,
 - A troca de filho no dashboard usa `auth_user_id` e valida o vínculo-aluno;
   CPF, nome ou e-mail isolados não autorizam ampliar a sessão.
 - Claims concorrentes ou já concluídos devem bloquear o cadastro.
-- Login e expansão familiar não podem usar busca parcial de CPF.
+- `src/GuardianAccountIdentity.php` classifica uma identidade de conta antes de
+  login ou reset. CPF com nomes divergentes, mais de um `auth_user_id`, vínculo
+  Auth parcial ou múltiplas linhas legadas sem conta comum deve bloquear.
+- Login normaliza o CPF e avalia todas as linhas correspondentes. Quando existe
+  `auth_user_id`, só aceita a resposta do Supabase Auth com esse UUID e nunca
+  retorna ao hash local antigo.
+- Reset administrativo possui uma etapa de consulta e exige `guardian_id`
+  explícito. A conta Auth é atualizada diretamente pelo UUID, todas as linhas
+  dessa conta são revalidadas e a ação entra em `admin_audit_log`.
+- Login, reset e expansão familiar não podem usar busca parcial de CPF nem
+  escolher silenciosamente a primeira linha ou o primeiro e-mail.
+
+Na auditoria de 03/09/2026, 153 dos 156 grupos de CPF eram determinísticos
+(25 contas Auth compartilhadas e 128 vínculos legados únicos). Três grupos têm
+identidades conflitantes e permanecem bloqueados para correção humana; não
+contorne o bloqueio para restaurar acesso.
 
 Administradores usam `src/AdminAuth.php`, a tabela `admin_users`, hashes de
 senha, roles (`admin_principal` e `secretaria`), sessão versionada e
@@ -257,10 +272,22 @@ As tabelas `monthly_student_plans`, `monthly_workshop_submissions`,
 service-only. As RPCs `confirm_monthly_workshops` e
 `unlock_monthly_workshops` fazem as mutações transacionais.
 
-Existem 50 cobranças Asaas abertas anteriores a setembro vinculadas aos atuais
-mensalistas, além de duas filas locais antigas. Não cancele esses registros em
-lote: audite identidade, competência e situação remota individualmente e
-cancele no Asaas antes de reconciliar localmente.
+Na auditoria de 03/09/2026 havia 50 cobranças Asaas abertas anteriores a
+setembro vinculadas aos atuais mensalistas, além de duas filas locais antigas.
+A cobrança de Julia Andrade Diniz (`pay_ldlnzizxs2acbyt6`) foi nominalmente
+autorizada, cancelada no Asaas e marcada como `canceled` no registro local.
+Permanecem como dívida futura:
+
+- 30 cobranças remotas abertas que passaram em vínculo, identidade composta e
+  valor, mas ainda dependem de autorização nominal e confirmação da vigência
+  histórica do plano;
+- 19 cobranças remotas abertas bloqueadas por conflito de cliente, identidade
+  composta ou valor;
+- 2 filas locais sem `asaas_payment_id`, cuja ausência de ID não prova que não
+  houve criação remota.
+
+Não cancele esses registros em lote. Audite identidade, competência e situação
+remota individualmente e cancele no Asaas antes de reconciliar localmente.
 
 `public/api/admin-monthly-legacy-charge-audit.php` é o inventário administrativo
 somente leitura desses registros. Ele consulta cada ID Asaas exato, confere
@@ -348,6 +375,7 @@ php tests/oficina_modular_validity_date_test.php
 php tests/oficina_modular_authorization_test.php
 php tests/payment_lifecycle_behavior_test.php
 php tests/authentication_security_test.php
+php tests/guardian_account_identity_test.php
 php tests/monthly_workshop_security_test.php
 php tests/monthly_legacy_charge_audit_test.php
 php -l public/api/admin-charge.php
