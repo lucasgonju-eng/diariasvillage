@@ -353,6 +353,12 @@ Não crie políticas permissivas para eliminar o aviso informativo
 `rls_enabled_no_policy`. A ausência de políticas é intencional neste modelo
 service-only. Nunca exponha a chave `service_role` ao navegador.
 
+A migration `20260903155027_index_remaining_foreign_keys.sql` cobre as nove
+chaves estrangeiras antigas que ainda não tinham índice. Não remova esses
+índices apenas porque o advisor os classifica como `unused_index` logo após a
+criação; eles protegem consultas, exclusões e atualizações das linhas
+referenciadas à medida que as tabelas crescem.
+
 Toda mudança de schema deve:
 
 1. ser criada com o Supabase CLI;
