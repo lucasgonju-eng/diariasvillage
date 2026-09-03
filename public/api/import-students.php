@@ -3,18 +3,36 @@ require_once dirname(__DIR__, 2) . '/src/Bootstrap.php';
 use App\Helpers;
 use App\HttpClient;
 use App\SupabaseClient;
-use PhpOffice\PhpSpreadsheet\IOFactory;
+use App\UploadSecurity;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Reader\Xls;
+use PhpOffice\PhpSpreadsheet\Reader\Xlsx;
 
 Helpers::requireAdminRole(\App\AdminAuth::ROLE_ADMIN);
+Helpers::requirePost();
 
-if (empty($_FILES['file']['tmp_name'])) {
-    echo 'Arquivo não enviado.';
+try {
+    $upload = UploadSecurity::validate(
+        is_array($_FILES['file'] ?? null) ? $_FILES['file'] : [],
+        [
+            'csv' => ['text/csv', 'text/plain', 'application/csv', 'application/vnd.ms-excel'],
+            'xls' => ['application/vnd.ms-excel', 'application/x-ole-storage', 'application/octet-stream'],
+            'xlsx' => [
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'application/zip',
+                'application/octet-stream',
+            ],
+        ],
+        5 * 1024 * 1024
+    );
+} catch (\InvalidArgumentException $e) {
+    http_response_code(422);
+    echo htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8');
     exit;
 }
 
-$path = $_FILES['file']['tmp_name'];
-$original = $_FILES['file']['name'] ?? '';
-$ext = strtolower(pathinfo($original, PATHINFO_EXTENSION));
+$path = $upload['path'];
+$ext = $upload['extension'];
 
 $rows = [];
 
@@ -22,13 +40,38 @@ if ($ext === 'csv') {
     if (($handle = fopen($path, 'r')) !== false) {
         while (($data = fgetcsv($handle, 0, ',')) !== false) {
             $rows[] = $data;
+            if (count($rows) > 5001) {
+                fclose($handle);
+                http_response_code(422);
+                echo 'A planilha excede o limite de 5.000 alunos.';
+                exit;
+            }
         }
         fclose($handle);
     }
 } else {
-    $spreadsheet = IOFactory::load($path);
-    $sheet = $spreadsheet->getActiveSheet();
-    $rows = $sheet->toArray();
+    try {
+        $reader = $ext === 'xls' ? new Xls() : new Xlsx();
+        $reader->setReadDataOnly(true);
+        $spreadsheet = $reader->load($path);
+        $sheet = $spreadsheet->getActiveSheet();
+        if (
+            $sheet->getHighestDataRow() > 5001
+            || Coordinate::columnIndexFromString($sheet->getHighestDataColumn()) > 50
+        ) {
+            http_response_code(422);
+            echo 'A planilha excede o limite de 5.000 alunos ou 50 colunas.';
+            exit;
+        }
+        $rows = $sheet->toArray();
+        $spreadsheet->disconnectWorksheets();
+        unset($spreadsheet);
+    } catch (\Throwable $e) {
+        error_log('[import-students] Falha ao ler planilha: ' . $e->getMessage());
+        http_response_code(422);
+        echo 'Não foi possível ler a planilha.';
+        exit;
+    }
 }
 
 if (count($rows) < 2) {
@@ -101,13 +144,23 @@ for ($i = 1; $i < count($rows); $i++) {
     ];
 
     if (count($payload) >= 200) {
-        $client->insert('students', $payload);
+        $insert = $client->insert('students', $payload);
+        if (!($insert['ok'] ?? false)) {
+            http_response_code(503);
+            echo 'Falha ao gravar um lote de alunos.';
+            exit;
+        }
         $payload = [];
     }
 }
 
 if (!empty($payload)) {
-    $client->insert('students', $payload);
+    $insert = $client->insert('students', $payload);
+    if (!($insert['ok'] ?? false)) {
+        http_response_code(503);
+        echo 'Falha ao gravar os alunos.';
+        exit;
+    }
 }
 
 header('Location: /admin/import.php?success=1');

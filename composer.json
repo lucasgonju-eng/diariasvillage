@@ -2,11 +2,12 @@
   "name": "einsteinhub/diariasvillage",
   "description": "SaaS para diarias do Einstein Village",
   "type": "project",
+  "license": "proprietary",
   "require": {
     "php": ">=8.1",
     "vlucas/phpdotenv": "^5.6",
     "phpmailer/phpmailer": "^6.9",
-    "phpoffice/phpspreadsheet": "^1.29"
+    "phpoffice/phpspreadsheet": "^1.30.6"
   },
   "autoload": {
     "psr-4": {
