@@ -259,7 +259,8 @@ $missingWhatsapp = $missingWhatsappResult['data'] ?? [];
 
 $pendenciasResult = $client->select(
     'pendencia_de_cadastro',
-    'select=id,student_name,student_id,guardian_name,guardian_cpf,guardian_email,created_at,paid_at,payment_date,access_code,enrollment,asaas_payment_id,asaas_invoice_url&order=created_at.desc&limit=500'
+    'select=id,student_name,student_id,guardian_name,guardian_cpf,guardian_email,created_at,paid_at,payment_date,access_code,enrollment,asaas_payment_id,asaas_invoice_url,status,canceled_at,cancel_reason'
+        . '&status=neq.canceled&order=created_at.desc&limit=500'
 );
 if (!($pendenciasResult['ok'] ?? false)) {
     // Fallback para ambientes com schema antigo sem campos asaas_*.
@@ -269,9 +270,13 @@ if (!($pendenciasResult['ok'] ?? false)) {
     );
 }
 $pendenciasAll = $pendenciasResult['data'] ?? [];
-$pendenciasPagas = array_filter($pendenciasAll, fn($p) => !empty($p['paid_at']));
+$pendenciasPagas = array_filter(
+    $pendenciasAll,
+    fn($p) => !empty($p['paid_at']) || strtolower((string) ($p['status'] ?? '')) === 'paid'
+);
 $pendencias = array_values(array_filter($pendenciasAll, static function ($p): bool {
-    return empty($p['paid_at']) && empty($p['student_id']);
+    $status = strtolower((string) ($p['status'] ?? 'pending'));
+    return $status !== 'canceled' && empty($p['paid_at']) && empty($p['student_id']);
 }));
 $valorPendencia = 77.00;
 
@@ -1153,7 +1158,7 @@ if (!empty($exclusionsLog)) {
                         type="button"
                         data-id="<?php echo htmlspecialchars((string) ($payment['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
                       >
-                        Excluir
+                        Cancelar
                       </button>
                     </td>
                   </tr>
@@ -1178,6 +1183,7 @@ if (!empty($exclusionsLog)) {
                         'paid' => 'Concluído',
                         'overdue' => 'Vencida',
                         'awaiting_risk_analysis' => 'Em análise de risco',
+                        'processing_asaas' => 'Processamento financeiro em andamento',
                         'queued' => 'Na fila (não enviada)',
                     ];
                     $statusLabel = $statusMap[$statusRaw] ?? (trim((string) ($payment['status'] ?? '')) !== '' ? (string) $payment['status'] : 'Pendente no Asaas');
@@ -1241,7 +1247,7 @@ if (!empty($exclusionsLog)) {
                         type="button"
                         data-id="<?php echo htmlspecialchars((string) ($payment['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
                       >
-                        Excluir
+                        Cancelar
                       </button>
                       <?php if ($canResendFebruaryCharge): ?>
                         <button
@@ -1405,7 +1411,7 @@ if (!empty($exclusionsLog)) {
                 <th>Ações do aluno</th>
                 <th>Status Asaas</th>
                 <th>Pago em</th>
-                <th>Excluir pendência</th>
+                <th>Cancelar pendência</th>
               </tr>
             </thead>
             <tbody>
@@ -1479,7 +1485,7 @@ if (!empty($exclusionsLog)) {
                           type="button"
                           data-id="<?php echo htmlspecialchars($pendencia['id'], ENT_QUOTES, 'UTF-8'); ?>"
                         >
-                          Excluir
+                          Cancelar
                         </button>
                       <?php endif; ?>
                     </td>
@@ -2175,7 +2181,7 @@ if (!empty($exclusionsLog)) {
     window.__monthlyStudents = <?php echo json_encode($monthlyRowsForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
     window.__adminCanApproveAttendance = <?php echo $canAttendanceApprove ? 'true' : 'false'; ?>;
   </script>
-  <script src="/assets/js/admin-dashboard.js?v=76"></script>
+  <script src="/assets/js/admin-dashboard.js?v=77"></script>
   <script>
     (function () {
       function activateTab(name) {

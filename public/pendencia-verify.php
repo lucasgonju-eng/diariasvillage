@@ -36,6 +36,12 @@ if (!$pendenciaResult['ok'] || empty($pendenciaResult['data'])) {
 }
 
 $pendencia = $pendenciaResult['data'][0];
+$pendenciaStatus = strtolower(trim((string) ($pendencia['status'] ?? 'pending')));
+if ($pendenciaStatus === 'canceled') {
+    http_response_code(410);
+    echo 'Esta pendência foi cancelada e não pode gerar uma nova cobrança.';
+    exit;
+}
 if (empty($pendencia['verified_at'])) {
     $client->update('pendencia_de_cadastro', 'id=eq.' . urlencode($pendenciaId), [
         'verified_at' => date('c'),

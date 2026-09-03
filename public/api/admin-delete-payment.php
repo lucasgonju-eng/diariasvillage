@@ -11,7 +11,9 @@ foreach ($bootstrapCandidates as $bootstrapFile) {
 }
 
 use App\Helpers;
+use App\AsaasClient;
 use App\HttpClient;
+use App\Services\AsaasPaymentLifecycle;
 use App\SupabaseClient;
 
 function append_exclusion_log(array $entry): void
@@ -43,9 +45,13 @@ if ($reason !== 'COBRANCA_EM_DUPLICIDADE') {
 }
 
 $client = new SupabaseClient(new HttpClient());
+$asaas = new AsaasClient(new HttpClient());
+$paymentLifecycle = new AsaasPaymentLifecycle($asaas);
 $paymentResult = $client->select(
     'payments',
-    'select=id,status,amount,payment_date,students(name),guardians(parent_name,email)&id=eq.' . urlencode($paymentId) . '&limit=1'
+    'select=id,status,paid_at,billing_type,asaas_payment_id,amount,payment_date,students(name),'
+        . 'guardians(parent_name,email,parent_document,asaas_customer_id)'
+        . '&id=eq.' . urlencode($paymentId) . '&limit=1'
 );
 $payment = (($paymentResult['ok'] ?? false) && !empty($paymentResult['data'])) ? $paymentResult['data'][0] : null;
 if (!$payment) {
@@ -53,13 +59,50 @@ if (!$payment) {
 }
 
 $status = strtolower(trim((string) ($payment['status'] ?? '')));
-if ($status === 'paid') {
-    Helpers::json(['ok' => false, 'error' => 'Não é possível excluir cobrança já paga.'], 422);
+if ($status === 'paid' || !empty($payment['paid_at'])) {
+    Helpers::json(['ok' => false, 'error' => 'Não é possível cancelar cobrança já paga.'], 422);
+}
+if (in_array($status, ['canceled', 'cancelled', 'deleted', 'refunded'], true)) {
+    Helpers::json(['ok' => true, 'message' => 'Cobrança já estava cancelada.']);
+}
+if ($status === 'processing_asaas') {
+    Helpers::json([
+        'ok' => false,
+        'error' => 'Cobrança em conciliação financeira. Aguarde ou conclua a revisão antes de cancelar.',
+    ], 409);
 }
 
-$delete = $client->delete('payments', 'id=eq.' . urlencode($paymentId) . '&status=in.(pending,pending_asaas,queued)');
-if (!($delete['ok'] ?? false)) {
-    Helpers::json(['ok' => false, 'error' => 'Falha ao excluir cobrança.'], 500);
+$asaasPaymentId = trim((string) ($payment['asaas_payment_id'] ?? ''));
+$billingType = strtoupper(trim((string) ($payment['billing_type'] ?? '')));
+if ($asaasPaymentId !== '') {
+    $guardianIdentity = is_array($payment['guardians'] ?? null) ? $payment['guardians'] : [];
+    $remoteCancel = $paymentLifecycle->cancelBeforeLocalMutation(
+        $asaasPaymentId,
+        null,
+        $guardianIdentity
+    );
+    if (!($remoteCancel['ok'] ?? false)) {
+        $httpStatus = ($remoteCancel['code'] ?? '') === 'ASAAS_LOOKUP_FAILED' ? 503 : 409;
+        Helpers::json([
+            'ok' => false,
+            'error' => (string) ($remoteCancel['error'] ?? 'Cancelamento remoto bloqueado.'),
+        ], $httpStatus);
+    }
+} elseif ($status !== 'queued' || $billingType !== 'PIX_MANUAL_QUEUE') {
+    Helpers::json([
+        'ok' => false,
+        'error' => 'Cobrança sem vínculo Asaas em estado inconsistente. Revise antes de cancelar.',
+    ], 409);
+}
+
+$cancel = $client->update(
+    'payments',
+    'id=eq.' . urlencode($paymentId)
+        . '&status=in.(queued,pending,pending_asaas,overdue,awaiting_risk_analysis)',
+    ['status' => 'canceled']
+);
+if (!($cancel['ok'] ?? false) || empty($cancel['data'][0])) {
+    Helpers::json(['ok' => false, 'error' => 'Falha ao registrar cancelamento local.'], 500);
 }
 
 $studentName = trim((string) ($payment['students']['name'] ?? ''));
@@ -82,6 +125,6 @@ append_exclusion_log([
 
 Helpers::json([
     'ok' => true,
-    'message' => 'Cobrança excluída com motivo: Cobrança em duplicidade.',
+    'message' => 'Cobrança cancelada no Asaas e preservada no histórico local.',
 ]);
 

@@ -144,7 +144,7 @@ $existingPayment = $client->select(
     'select=id,status,asaas_payment_id'
     . '&diaria_id=eq.' . rawurlencode($diariaId)
     . '&paid_at=is.null'
-    . '&status=in.(queued,pending,pending_asaas,overdue,awaiting_risk_analysis)'
+    . '&status=in.(queued,processing_asaas,pending,pending_asaas,overdue,awaiting_risk_analysis)'
     . '&order=created_at.desc&limit=1'
 );
 if (!($existingPayment['ok'] ?? false)) {

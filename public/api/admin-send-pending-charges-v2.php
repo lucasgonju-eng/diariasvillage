@@ -302,7 +302,7 @@ try {
                 $candidateAsaas = trim((string) ($candidate['asaas_payment_id'] ?? ''));
                 if (
                     $candidateAsaas !== ''
-                    || in_array($candidateStatus, array('pending', 'pending_asaas', 'overdue', 'awaiting_risk_analysis', 'paid'), true)
+                    || in_array($candidateStatus, array('processing_asaas', 'pending', 'pending_asaas', 'overdue', 'awaiting_risk_analysis', 'paid'), true)
                     || !empty($candidate['paid_at'])
                 ) {
                     $duplicateFound = array('id' => $candidateId, 'status' => $candidateStatus !== '' ? $candidateStatus : 'desconhecido');

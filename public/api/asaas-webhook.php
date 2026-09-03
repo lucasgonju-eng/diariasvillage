@@ -173,11 +173,33 @@ if (!($paymentResult['ok'] ?? false)) {
     $failWebhook('Falha ao consultar pagamento local.', 503);
 }
 
+$operationRecoveryToken = '';
+if (empty($paymentResult['data'])) {
+    $externalReference = trim((string) ($payment['externalReference'] ?? ''));
+    if (preg_match('/^payment:([0-9a-f-]{36}):([0-9a-f]{32})$/i', $externalReference, $operationMatch)) {
+        $operationPaymentId = strtolower((string) $operationMatch[1]);
+        $operationRecoveryToken = strtolower((string) $operationMatch[2]);
+        $operationResult = $client->select(
+            'payments',
+            'select=*&id=eq.' . urlencode($operationPaymentId)
+                . '&status=eq.processing_asaas'
+                . '&asaas_operation_token=eq.' . urlencode($operationRecoveryToken)
+                . '&limit=1'
+        );
+        if (!($operationResult['ok'] ?? false)) {
+            $failWebhook('Falha ao consultar tentativa financeira local.', 503);
+        }
+        if (!empty($operationResult['data'][0])) {
+            $paymentResult = $operationResult;
+        }
+    }
+}
+
 if (empty($paymentResult['data'])) {
     $invoiceUrl = $payment['invoiceUrl'] ?? $payment['bankSlipUrl'] ?? '';
     $pendenciaResult = $client->select(
         'pendencia_de_cadastro',
-        'select=id,paid_at,student_id,enrollment,student_name,guardian_name,guardian_cpf,guardian_email,payment_date'
+        'select=id,paid_at,status,student_id,enrollment,student_name,guardian_name,guardian_cpf,guardian_email,payment_date'
             . '&asaas_payment_id=eq.' . urlencode($payment['id'])
     );
     if (!($pendenciaResult['ok'] ?? false)) {
@@ -185,6 +207,9 @@ if (empty($paymentResult['data'])) {
     }
     if (!empty($pendenciaResult['data'])) {
         $pendenciaRow = $pendenciaResult['data'][0];
+        if (strtolower((string) ($pendenciaRow['status'] ?? 'pending')) === 'canceled') {
+            $blockWebhook('Pendência local já cancelada.');
+        }
         if (empty($pendenciaRow['paid_at'])) {
             $studentId = trim((string) ($pendenciaRow['student_id'] ?? ''));
             $enrollment = $pendenciaRow['enrollment'] ?? null;
@@ -424,12 +449,20 @@ if (
 
 $accessCode = $paymentRow['access_code'] ?: Helpers::randomNumericCode(6);
 if (!$wasAlreadyPaid) {
-    $paymentUpdate = $client->update('payments', 'id=eq.' . $paymentRow['id'], [
+    $paymentUpdateQuery = 'id=eq.' . $paymentRow['id'];
+    $paymentUpdatePayload = [
         'status' => 'paid',
         'paid_at' => date('c'),
         'access_code' => $accessCode,
-    ]);
-    if (!($paymentUpdate['ok'] ?? false)) {
+    ];
+    if ($operationRecoveryToken !== '') {
+        $paymentUpdateQuery .= '&status=eq.processing_asaas&asaas_operation_token=eq.'
+            . urlencode($operationRecoveryToken);
+        $paymentUpdatePayload['asaas_payment_id'] = $paymentId;
+        $paymentUpdatePayload['asaas_operation_token'] = null;
+    }
+    $paymentUpdate = $client->update('payments', $paymentUpdateQuery, $paymentUpdatePayload);
+    if (!($paymentUpdate['ok'] ?? false) || empty($paymentUpdate['data'][0])) {
         $failWebhook('Falha ao promover pagamento local.', 503);
     }
     error_log(

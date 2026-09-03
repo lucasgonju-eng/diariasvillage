@@ -22,6 +22,7 @@ use App\AsaasClient;
 use App\AsaasCustomerIdentity;
 use App\Helpers;
 use App\HttpClient;
+use App\Services\AsaasPaymentLifecycle;
 use App\SupabaseClient;
 
 function asaas_status_is_paid(string $status): bool
@@ -208,8 +209,8 @@ function detect_duplicate_dayuse_pendencias(SupabaseClient $client): array
 
     $paidPendenciasResult = $client->select(
         'pendencia_de_cadastro',
-        'select=id,student_name,guardian_name,guardian_email,guardian_cpf,payment_date,paid_at,asaas_payment_id'
-        . '&paid_at=not.is.null&limit=10000'
+        'select=id,student_name,guardian_name,guardian_email,guardian_cpf,payment_date,paid_at,status,asaas_payment_id'
+        . '&paid_at=not.is.null&status=eq.paid&limit=10000'
     );
     $paidPendencias = ($paidPendenciasResult['ok'] ?? false) && is_array($paidPendenciasResult['data'] ?? null)
         ? $paidPendenciasResult['data']
@@ -242,8 +243,9 @@ function detect_duplicate_dayuse_pendencias(SupabaseClient $client): array
 
     $pendingResult = $client->select(
         'pendencia_de_cadastro',
-        'select=id,student_name,guardian_name,guardian_email,guardian_cpf,payment_date,paid_at'
-        . '&paid_at=is.null&limit=10000'
+        'select=id,student_name,guardian_name,guardian_email,guardian_cpf,payment_date,paid_at,status,'
+        . 'asaas_payment_id,asaas_invoice_url'
+        . '&paid_at=is.null&status=eq.pending&limit=10000'
     );
     $pendingRows = ($pendingResult['ok'] ?? false) && is_array($pendingResult['data'] ?? null)
         ? $pendingResult['data']
@@ -295,6 +297,8 @@ function detect_duplicate_dayuse_pendencias(SupabaseClient $client): array
             'guardian_name' => $guardianName,
             'guardian_email' => $guardianEmail,
             'guardian_cpf' => $guardianCpf,
+            'asaas_payment_id' => trim((string) ($row['asaas_payment_id'] ?? '')),
+            'asaas_invoice_url' => trim((string) ($row['asaas_invoice_url'] ?? '')),
             'payment_date' => $date,
             'matched_by' => $matchType,
             'paid_source' => $match['source'] ?? '',
@@ -317,8 +321,9 @@ function detect_duplicate_unpaid_payments(SupabaseClient $client): array
 {
     $result = $client->select(
         'payments',
-        'select=id,student_id,payment_date,daily_type,amount,status,created_at,asaas_payment_id,students(name),guardians(parent_name,email)'
-        . '&status=in.(pending,pending_asaas,queued)&limit=10000'
+        'select=id,student_id,payment_date,daily_type,amount,status,billing_type,created_at,asaas_payment_id,'
+        . 'students(name),guardians(parent_name,email,parent_document,asaas_customer_id)'
+        . '&status=in.(pending,pending_asaas,queued,overdue,awaiting_risk_analysis)&limit=10000'
     );
     $rows = ($result['ok'] ?? false) && is_array($result['data'] ?? null) ? $result['data'] : [];
     $groups = [];
@@ -344,9 +349,12 @@ function detect_duplicate_unpaid_payments(SupabaseClient $client): array
             'student_name' => $studentName,
             'guardian_name' => trim((string) ($row['guardians']['parent_name'] ?? '')),
             'guardian_email' => trim((string) ($row['guardians']['email'] ?? '')),
+            'guardian_document' => trim((string) ($row['guardians']['parent_document'] ?? '')),
+            'guardian_asaas_customer_id' => trim((string) ($row['guardians']['asaas_customer_id'] ?? '')),
             'payment_date' => $date,
             'amount' => (float) ($row['amount'] ?? 0),
             'status' => trim((string) ($row['status'] ?? '')),
+            'billing_type' => trim((string) ($row['billing_type'] ?? '')),
             'created_at' => trim((string) ($row['created_at'] ?? '')),
             'daily_type' => trim((string) ($row['daily_type'] ?? '')),
             'asaas_payment_id' => trim((string) ($row['asaas_payment_id'] ?? '')),
@@ -372,11 +380,15 @@ function detect_duplicate_unpaid_payments(SupabaseClient $client): array
                 'student_name' => $extra['student_name'] ?: $keep['student_name'],
                 'guardian_name' => $extra['guardian_name'] ?: $keep['guardian_name'],
                 'guardian_email' => $extra['guardian_email'] ?: $keep['guardian_email'],
+                'guardian_document' => $extra['guardian_document'] ?: $keep['guardian_document'],
+                'guardian_asaas_customer_id' => $extra['guardian_asaas_customer_id']
+                    ?: $keep['guardian_asaas_customer_id'],
                 'payment_date' => $extra['payment_date'],
                 'keep_created_at' => $keep['created_at'],
                 'remove_created_at' => $extra['created_at'],
                 'remove_amount' => (float) ($extra['amount'] ?? 0),
                 'remove_status' => (string) ($extra['status'] ?? ''),
+                'remove_billing_type' => (string) ($extra['billing_type'] ?? ''),
                 'remove_asaas_payment_id' => (string) ($extra['asaas_payment_id'] ?? ''),
             ];
         }
@@ -462,6 +474,7 @@ try {
 
     $client = new SupabaseClient(new HttpClient());
     $asaas = new AsaasClient(new HttpClient());
+    $paymentLifecycle = new AsaasPaymentLifecycle($asaas);
 
     $summary = [
         'payments_checked' => 0,
@@ -508,11 +521,38 @@ try {
             if ($pendenciaId === '') {
                 continue;
             }
-            $delete = $client->delete('pendencia_de_cadastro', 'id=eq.' . urlencode($pendenciaId));
-            if ($delete['ok'] ?? false) {
+            $duplicateAsaasId = trim((string) ($duplicate['asaas_payment_id'] ?? ''));
+            if ($duplicateAsaasId === '') {
+                $summary['pendencias_remove_duplicate_failed']++;
+                continue;
+            }
+            $remoteCancel = $paymentLifecycle->cancelBeforeLocalMutation(
+                $duplicateAsaasId,
+                null,
+                [
+                    'guardian_name' => $duplicate['guardian_name'] ?? '',
+                    'guardian_email' => $duplicate['guardian_email'] ?? '',
+                    'guardian_cpf' => $duplicate['guardian_cpf'] ?? '',
+                ]
+            );
+            if (!($remoteCancel['ok'] ?? false)) {
+                $summary['pendencias_remove_duplicate_failed']++;
+                continue;
+            }
+            $canceledAt = date('c');
+            $cancel = $client->update(
+                'pendencia_de_cadastro',
+                'id=eq.' . urlencode($pendenciaId) . '&status=eq.pending',
+                [
+                    'status' => 'canceled',
+                    'canceled_at' => $canceledAt,
+                    'cancel_reason' => 'DUPLICATE_DAY_USE',
+                ]
+            );
+            if (($cancel['ok'] ?? false) && !empty($cancel['data'][0])) {
                 $summary['pendencias_removed_duplicate_dayuse']++;
                 append_exclusion_log([
-                    'deleted_at' => date('c'),
+                    'deleted_at' => $canceledAt,
                     'entity_type' => 'pendencia',
                     'entity_id' => $pendenciaId,
                     'student_name' => trim((string) ($duplicate['student_name'] ?? '')),
@@ -521,7 +561,7 @@ try {
                     'amount' => 77.0,
                     'reason' => 'DAY-USE DUPLICADO (JÁ PAGO)',
                     'source' => 'sync_charges_payments',
-                    'notes' => 'Removida via confirmação de duplicidade por mesmo dia.',
+                    'notes' => 'Cancelada no Asaas e preservada após confirmação explícita.',
                 ]);
             } else {
                 $summary['pendencias_remove_duplicate_failed']++;
@@ -537,35 +577,38 @@ try {
             }
             $removeAsaasPaymentId = trim((string) ($duplicate['remove_asaas_payment_id'] ?? ''));
             if ($removeAsaasPaymentId !== '') {
-                $remotePayment = $asaas->getPayment($removeAsaasPaymentId);
-                $remoteData = ($remotePayment['ok'] ?? false) && is_array($remotePayment['data'] ?? null)
-                    ? $remotePayment['data']
-                    : null;
-                if (!is_array($remoteData)) {
+                $remoteCancel = $paymentLifecycle->cancelBeforeLocalMutation(
+                    $removeAsaasPaymentId,
+                    null,
+                    [
+                        'parent_name' => $duplicate['guardian_name'] ?? '',
+                        'email' => $duplicate['guardian_email'] ?? '',
+                        'parent_document' => $duplicate['guardian_document'] ?? '',
+                        'asaas_customer_id' => $duplicate['guardian_asaas_customer_id'] ?? '',
+                    ]
+                );
+                if (!($remoteCancel['ok'] ?? false)) {
                     $summary['duplicate_payments_remove_failed']++;
                     continue;
                 }
-                $remoteStatus = (string) ($remoteData['status'] ?? '');
-                if (asaas_status_is_paid($remoteStatus)) {
-                    $summary['duplicate_payments_remove_failed']++;
-                    continue;
-                }
-                if (asaas_status_is_open($remoteStatus)) {
-                    $remoteDelete = $asaas->deletePayment($removeAsaasPaymentId);
-                    if (!($remoteDelete['ok'] ?? false)) {
-                        $summary['duplicate_payments_remove_failed']++;
-                        continue;
-                    }
-                } elseif (!asaas_status_is_canceled($remoteStatus)) {
-                    $summary['duplicate_payments_remove_failed']++;
-                    continue;
-                }
+            } elseif (
+                strtolower((string) ($duplicate['remove_status'] ?? '')) !== 'queued'
+                || strtoupper((string) ($duplicate['remove_billing_type'] ?? '')) !== 'PIX_MANUAL_QUEUE'
+            ) {
+                $summary['duplicate_payments_remove_failed']++;
+                continue;
             }
-            $delete = $client->delete('payments', 'id=eq.' . urlencode($removePaymentId) . '&status=in.(pending,pending_asaas,queued)');
-            if ($delete['ok'] ?? false) {
+            $canceledAt = date('c');
+            $cancel = $client->update(
+                'payments',
+                'id=eq.' . urlencode($removePaymentId)
+                    . '&status=in.(pending,pending_asaas,queued,overdue,awaiting_risk_analysis)',
+                ['status' => 'canceled']
+            );
+            if (($cancel['ok'] ?? false) && !empty($cancel['data'][0])) {
                 $summary['duplicate_payments_removed']++;
                 append_exclusion_log([
-                    'deleted_at' => date('c'),
+                    'deleted_at' => $canceledAt,
                     'entity_type' => 'payment',
                     'entity_id' => $removePaymentId,
                     'student_name' => trim((string) ($duplicate['student_name'] ?? '')),
@@ -574,7 +617,7 @@ try {
                     'amount' => (float) ($duplicate['remove_amount'] ?? 0),
                     'reason' => 'COBRANÇA EM DUPLICIDADE',
                     'source' => 'sync_charges_payments',
-                    'notes' => 'Removida via confirmação no popup de duplicidade.',
+                    'notes' => 'Cancelada remotamente e preservada via confirmação no popup.',
                 ]);
             } else {
                 $summary['duplicate_payments_remove_failed']++;
@@ -584,8 +627,8 @@ try {
 
     $paymentsResult = $client->select(
         'payments',
-        'select=id,status,paid_at,asaas_payment_id,guardians(parent_name,email,parent_document)'
-            . '&asaas_payment_id=not.is.null&limit=5000'
+        'select=id,status,paid_at,amount,diaria_id,access_code,asaas_payment_id,asaas_operation_token,'
+            . 'guardians(parent_name,email,parent_document,asaas_customer_id)&limit=5000'
     );
     $payments = ($paymentsResult['ok'] ?? false) && is_array($paymentsResult['data'] ?? null)
         ? $paymentsResult['data']
@@ -596,7 +639,126 @@ try {
         $summary['payments_checked']++;
         $paymentId = trim((string) ($payment['id'] ?? ''));
         $asaasId = trim((string) ($payment['asaas_payment_id'] ?? ''));
-        if ($paymentId === '' || $asaasId === '') {
+        $currentStatus = strtolower((string) ($payment['status'] ?? ''));
+        $guardian = is_array($payment['guardians'] ?? null) ? $payment['guardians'] : [];
+        if ($paymentId === '') {
+            continue;
+        }
+
+        if ($currentStatus === 'processing_asaas') {
+            $operationToken = trim((string) ($payment['asaas_operation_token'] ?? ''));
+            if (!preg_match('/^[0-9a-f]{32}$/', $operationToken)) {
+                continue;
+            }
+            $expectedReference = 'payment:' . $paymentId . ':' . $operationToken;
+            $recoveryResponse = $asaas->findPaymentByExternalReference($expectedReference);
+            $recoveryData = is_array($recoveryResponse['data'] ?? null)
+                ? $recoveryResponse['data']
+                : [];
+            $recoveryRows = is_array($recoveryData['data'] ?? null)
+                ? array_values($recoveryData['data'])
+                : [];
+            if (
+                !($recoveryResponse['ok'] ?? false)
+                || ($recoveryData['hasMore'] ?? true) !== false
+                || (int) ($recoveryData['totalCount'] ?? -1) !== 1
+                || count($recoveryRows) !== 1
+                || !is_array($recoveryRows[0])
+            ) {
+                continue;
+            }
+
+            $expectedAmount = (float) ($payment['amount'] ?? 0);
+            $candidate = $recoveryRows[0];
+            $candidateId = trim((string) ($candidate['id'] ?? ''));
+            $candidateCustomerId = trim((string) ($candidate['customer'] ?? ''));
+            $candidateStatus = (string) ($candidate['status'] ?? '');
+            $candidateValue = (float) ($candidate['value'] ?? 0);
+            $linkedCustomerId = trim((string) ($guardian['asaas_customer_id'] ?? ''));
+            if (
+                $candidateId === ''
+                || ($asaasId !== '' && $candidateId === $asaasId)
+                || $candidateCustomerId === ''
+                || trim((string) ($candidate['externalReference'] ?? '')) !== $expectedReference
+                || (!asaas_status_is_open($candidateStatus)
+                    && !asaas_status_is_paid($candidateStatus)
+                    && !asaas_status_is_canceled($candidateStatus))
+                || $candidateValue <= 0
+                || ($expectedAmount > 0 && abs($candidateValue - $expectedAmount) > 0.009)
+                || ($linkedCustomerId !== '' && $candidateCustomerId !== $linkedCustomerId)
+            ) {
+                continue;
+            }
+            if (!array_key_exists($candidateCustomerId, $paymentCustomerCache)) {
+                $customerResponse = $asaas->getCustomer($candidateCustomerId);
+                $paymentCustomerCache[$candidateCustomerId] = (($customerResponse['ok'] ?? false)
+                    && is_array($customerResponse['data'] ?? null))
+                    ? $customerResponse['data']
+                    : null;
+            }
+            $customer = $paymentCustomerCache[$candidateCustomerId] ?? null;
+            if (
+                !is_array($customer)
+                || !AsaasCustomerIdentity::matchesRemoteCustomer(
+                    $customer,
+                    (string) ($guardian['parent_name'] ?? ''),
+                    (string) ($guardian['email'] ?? ''),
+                    (string) ($guardian['parent_document'] ?? '')
+                )
+            ) {
+                continue;
+            }
+
+            $recovered = $candidate;
+            $recoveredStatus = (string) ($recovered['status'] ?? '');
+            $recoveryUpdate = [
+                'asaas_payment_id' => $recovered['id'],
+                'asaas_operation_token' => null,
+                'status' => asaas_status_is_paid($recoveredStatus)
+                    ? 'paid'
+                    : (asaas_status_is_canceled($recoveredStatus) ? 'canceled' : 'pending_asaas'),
+            ];
+            if (asaas_status_is_paid($recoveredStatus)) {
+                $recoveryUpdate['paid_at'] = date('c');
+                $accessCode = trim((string) ($payment['access_code'] ?? ''));
+                $recoveryUpdate['access_code'] = $accessCode !== ''
+                    ? $accessCode
+                    : Helpers::randomNumericCode(6);
+            }
+            $recoveryResult = $client->update(
+                'payments',
+                'id=eq.' . urlencode($paymentId)
+                    . '&status=eq.processing_asaas&asaas_operation_token=eq.' . urlencode($operationToken),
+                $recoveryUpdate
+            );
+            if (
+                ($recoveryResult['ok'] ?? false)
+                && !empty($recoveryResult['data'][0])
+                && asaas_status_is_paid($recoveredStatus)
+            ) {
+                $diariaId = trim((string) ($payment['diaria_id'] ?? ''));
+                if ($diariaId !== '') {
+                    $gradeResult = (new \App\Services\OficinaModularGradeService($client))
+                        ->confirmarGradeNoPagamento($diariaId);
+                    if (!($gradeResult['ok'] ?? false)) {
+                        error_log(
+                            '[admin-sync-charges-payments] Falha ao confirmar grade da operação '
+                            . $paymentId
+                            . '.'
+                        );
+                    } elseif (!empty($gradeResult['user_alert'])) {
+                        $client->update(
+                            'payments',
+                            'id=eq.' . urlencode($paymentId),
+                            ['grade_alerta' => (string) $gradeResult['user_alert']]
+                        );
+                    }
+                }
+            }
+            continue;
+        }
+
+        if ($asaasId === '') {
             continue;
         }
 
@@ -618,7 +780,6 @@ try {
                 : null;
         }
         $customer = $customerId !== '' ? ($paymentCustomerCache[$customerId] ?? null) : null;
-        $guardian = is_array($payment['guardians'] ?? null) ? $payment['guardians'] : [];
         if (
             !is_array($customer)
             || !AsaasCustomerIdentity::matchesRemoteCustomer(
@@ -670,8 +831,8 @@ try {
 
     $pendenciasResult = $client->select(
         'pendencia_de_cadastro',
-        'select=id,student_name,guardian_name,paid_at,asaas_payment_id,asaas_invoice_url,guardian_cpf,guardian_email,payment_date'
-        . '&limit=5000'
+        'select=id,student_name,guardian_name,paid_at,status,asaas_payment_id,asaas_invoice_url,guardian_cpf,guardian_email,payment_date'
+        . '&status=eq.pending&limit=5000'
     );
     $pendencias = ($pendenciasResult['ok'] ?? false) && is_array($pendenciasResult['data'] ?? null)
         ? $pendenciasResult['data']
@@ -774,6 +935,7 @@ try {
         $paidPayment = pick_best_payment($paidCandidates, $paymentDate, true);
         if ($paidPayment !== null) {
             $update = $client->update('pendencia_de_cadastro', 'id=eq.' . urlencode($pendenciaId), [
+                'status' => 'paid',
                 'paid_at' => date('c'),
                 'asaas_payment_id' => $paidPayment['id'] ?? $asaasId ?: null,
                 'asaas_invoice_url' => $paidPayment['invoiceUrl'] ?? ($paidPayment['bankSlipUrl'] ?? ($invoiceUrl ?: null)),
@@ -784,32 +946,8 @@ try {
             continue;
         }
 
-        // Sem cobrança correspondente no Asaas (nem aberta/vencida, nem paga): remove da lista local de pendências.
-        $delete = $client->delete('pendencia_de_cadastro', 'id=eq.' . urlencode($pendenciaId));
-        if ($delete['ok'] ?? false) {
-            $summary['pendencias_removed_no_charge']++;
-            append_exclusion_log([
-                'deleted_at' => date('c'),
-                'entity_type' => 'pendencia',
-                'entity_id' => $pendenciaId,
-                'student_name' => trim((string) ($pendencia['student_name'] ?? '')),
-                'guardian_name' => trim((string) ($pendencia['guardian_name'] ?? '')),
-                'payment_date' => $paymentDate,
-                'amount' => 77.0,
-                'reason' => 'SEM COBRANÇA NO ASAAS',
-                'source' => 'sync_charges_payments',
-                'notes' => 'Removida automaticamente por ausência no Asaas.',
-            ]);
-        } else {
-            // Fallback: ao menos desvincula se não conseguiu remover.
-            $update = $client->update('pendencia_de_cadastro', 'id=eq.' . urlencode($pendenciaId), [
-                'asaas_payment_id' => null,
-                'asaas_invoice_url' => null,
-            ]);
-            if ($update['ok'] ?? false) {
-                $summary['pendencias_unlinked']++;
-            }
-        }
+        // Ausência ou listagem parcial no Asaas não autoriza apagar nem desvincular.
+        // Mantém a pendência para revisão humana.
         continue;
     }
 

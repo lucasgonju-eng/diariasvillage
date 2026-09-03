@@ -77,6 +77,45 @@ Uma repetição não pode criar outra cobrança Asaas.
   depois remova ou reconcilie o registro local.
 - Nunca considere `externalReference` uma garantia de idempotência por si só.
 
+`src/Services/AsaasPaymentLifecycle.php` centraliza o cancelamento seguro:
+
+- falha de consulta, status desconhecido ou pagamento recebido bloqueiam a
+  operação sem mutação local;
+- o cliente remoto da cobrança deve corresponder ao vínculo e à identidade
+  composta local antes de qualquer cancelamento;
+- cobranças abertas são canceladas no Asaas antes de substituição ou
+  cancelamento local;
+- cobranças novas são canceladas imediatamente se ID, URL ou persistência local
+  falharem;
+- `payments` e `pendencia_de_cadastro` são marcados como `canceled`, nunca
+  apagados fisicamente por ações administrativas;
+- pendência sem `asaas_payment_id` é bloqueada para conciliação; ausência de ID
+  local não prova ausência de cobrança remota.
+
+`financeiro-pay.php` e `admin-resend-feb-charge.php` reutilizam cobranças
+`PENDING`, `OVERDUE` ou `AWAITING_RISK_ANALYSIS` compatíveis. Só substituem uma
+cobrança após validar cliente, status e valor e cancelar a anterior. Essas
+regras atuam depois da aprovação financeira e não alteram o lançamento
+`EM_REVISAO` feito pela secretaria.
+
+Substituições adquirem o estado local `processing_asaas` por compare-and-swap
+antes da primeira mutação remota. Isso impede dois cliques concorrentes de
+criarem cobranças distintas. Se a compensação remota falhar, o estado permanece
+travado para revisão humana. A sincronização só libera esse estado quando
+encontra uma resposta completa com exatamente uma cobrança de mesmo token de
+operação, valor e identidade composta pela `externalReference`. Cada tentativa
+persiste antes da chamada um `asaas_operation_token` aleatório e único. Como o
+Asaas não oferece idempotência nativa na criação de cobrança,
+`externalReference` é usada apenas para reconciliação, nunca como garantia de
+unicidade.
+
+`pendencia_de_cadastro.status = canceled` é terminal por trigger. Tokens antigos,
+sincronizações, webhook e baixa manual não podem reativar uma pendência
+cancelada. O trigger também sincroniza `status = paid` quando `paid_at` é
+preenchido e bloqueia `DELETE` físico da tabela. Sincronizações devem preservar
+pendências sem correspondência remota para revisão, pois falha ou paginação
+parcial da API não prova ausência de cobrança.
+
 Proteções aplicadas no banco:
 
 - `20260901181800_payments_one_open_per_diaria.sql`: índice parcial único para
@@ -294,6 +333,7 @@ php tests/asaas_identity_safety_test.php
 php tests/admin_settle_payment_security_test.php
 php tests/oficina_modular_validity_date_test.php
 php tests/oficina_modular_authorization_test.php
+php tests/payment_lifecycle_behavior_test.php
 php tests/authentication_security_test.php
 php tests/monthly_workshop_security_test.php
 php -l public/api/admin-charge.php

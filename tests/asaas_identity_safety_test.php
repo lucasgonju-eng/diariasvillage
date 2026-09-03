@@ -97,7 +97,7 @@ if (AsaasCustomerIdentity::matchesRemoteCustomer(
 
 test_contains('checkout usa resolvedor de identidade', $contents['checkout'], 'new AsaasCustomerIdentity(', $failures);
 test_contains('checkout bloqueia cobrança existente', $contents['checkout'], "'PAYMENT_ALREADY_EXISTS'", $failures);
-test_contains('checkout considera fila como cobrança aberta', $contents['checkout'], 'status=in.(queued,pending,pending_asaas,overdue,awaiting_risk_analysis)', $failures);
+test_contains('checkout considera claim como cobrança aberta', $contents['checkout'], 'status=in.(queued,processing_asaas,pending,pending_asaas,overdue,awaiting_risk_analysis)', $failures);
 test_contains('checkout cancela órfã se persistência falhar', $contents['checkout'], '$asaas->deletePayment($createdAsaasPaymentId);', $failures);
 test_not_contains('checkout não altera somente CPF', $contents['checkout'], "updateCustomer(\$guardianData['asaas_customer_id']", $failures);
 test_order('checkout checa idempotência antes de cobrar', $contents['checkout'], "'PAYMENT_ALREADY_EXISTS'", '$asaas->createPayment(', $failures);
@@ -114,7 +114,7 @@ test_contains('UI mostra matrícula', $contents['dashboard_js'], 'Matrícula ${e
 test_contains('UI envia student_id', $contents['dashboard_js'], 'student_id: resolved.id', $failures);
 test_contains('UI envia guardian_id', $contents['dashboard_js'], 'guardian_id: selectedGuardianId', $failures);
 test_contains('dashboard possui seletor de responsável', $contents['dashboard_php'], 'id="admin-view-user-guardian"', $failures);
-test_contains('dashboard atualizou cache do JS', $contents['dashboard_php'], '/assets/js/admin-dashboard.js?v=76', $failures);
+test_contains('dashboard atualizou cache do JS', $contents['dashboard_php'], '/assets/js/admin-dashboard.js?v=77', $failures);
 
 test_contains('cobrança manual exige guardian_id explícito', $contents['manual_charge'], "\$charge['guardian_id']", $failures);
 test_contains('cobrança manual valida vínculo responsável-aluno', $contents['manual_charge'], '&student_id=eq.', $failures);
@@ -126,12 +126,14 @@ test_not_contains('lista não resolve aluno por nome', $contents['guardians_by_s
 test_contains('sync recebidas exige identidade composta', $contents['sync_received'], 'matchesRemoteCustomer(', $failures);
 test_not_contains('sync recebidas não usa CPF parcial', $contents['sync_received'], 'parent_document=ilike.', $failures);
 test_contains('sync geral exige identidade composta', $contents['sync_charges'], 'find_exact_customer_ids(', $failures);
-test_contains('sync cancela duplicidade no Asaas antes de excluir local', $contents['sync_charges'], '$asaas->deletePayment($removeAsaasPaymentId)', $failures);
+test_contains('sync usa ciclo seguro para cancelar duplicidade', $contents['sync_charges'], 'cancelBeforeLocalMutation(', $failures);
+test_not_contains('sync não apaga histórico de payments', $contents['sync_charges'], "\$client->delete('payments'", $failures);
+test_not_contains('sync não apaga histórico de pendências', $contents['sync_charges'], "\$client->delete('pendencia_de_cadastro'", $failures);
 test_order(
-    'sync cancela remoto antes de excluir local',
+    'sync cancela remoto antes de marcar local',
     $contents['sync_charges'],
-    '$asaas->deletePayment($removeAsaasPaymentId)',
-    "\$client->delete('payments'",
+    'cancelBeforeLocalMutation(',
+    "'status' => 'canceled'",
     $failures
 );
 test_contains('migration cria chave idempotente', $contents['idempotency_migration'], 'uq_payments_idempotency_key', $failures);

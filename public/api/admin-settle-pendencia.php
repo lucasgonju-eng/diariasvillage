@@ -20,7 +20,7 @@ if ($pendenciaId === '') {
 $client = new SupabaseClient(new HttpClient());
 $pendenciaResult = $client->select(
     'pendencia_de_cadastro',
-    'select=id,paid_at,student_name,guardian_name,guardian_cpf,guardian_email,student_id,enrollment&id=eq.'
+    'select=id,paid_at,status,student_name,guardian_name,guardian_cpf,guardian_email,student_id,enrollment&id=eq.'
         . urlencode($pendenciaId)
 );
 if (!$pendenciaResult['ok'] || empty($pendenciaResult['data'])) {
@@ -28,6 +28,9 @@ if (!$pendenciaResult['ok'] || empty($pendenciaResult['data'])) {
 }
 
 $pendenciaRow = $pendenciaResult['data'][0];
+if (strtolower((string) ($pendenciaRow['status'] ?? 'pending')) === 'canceled') {
+    Helpers::json(['ok' => false, 'error' => 'Pendência cancelada não pode ser reativada.'], 409);
+}
 if (!empty($pendenciaRow['paid_at'])) {
     Helpers::json(['ok' => true, 'paid_at' => $pendenciaRow['paid_at']]);
 }
@@ -66,6 +69,7 @@ if (!$studentId) {
 }
 
 $updatePayload = [
+    'status' => 'paid',
     'paid_at' => date('c'),
     'access_code' => $accessCode,
     'payment_date' => $dayUseDate,

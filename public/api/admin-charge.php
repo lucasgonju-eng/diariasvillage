@@ -380,7 +380,7 @@ try {
             'select=id,payment_date,daily_type,status'
                 . '&student_id=eq.' . rawurlencode((string) $studentRow['id'])
                 . '&paid_at=is.null'
-                . '&status=in.(queued,pending,pending_asaas,overdue,awaiting_risk_analysis)'
+                . '&status=in.(queued,processing_asaas,pending,pending_asaas,overdue,awaiting_risk_analysis)'
                 . '&limit=1000'
         );
         if (!($openPaymentsResult['ok'] ?? false)) {

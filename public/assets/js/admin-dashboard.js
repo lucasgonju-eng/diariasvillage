@@ -3955,19 +3955,19 @@ pendingDeleteButtons.forEach((button) => {
     const amount = formatCurrency(amountRaw);
 
     const chooseReason = await showAdminConfirm(
-      `Excluir cobrança?\n\nAluno: ${student}\nDatas do day-use: ${dayUseDates}\nValor: ${amount}\n\nMotivo: COBRANÇA EM DUPLICIDADE`,
-      { title: 'Excluir cobrança' },
+      `Cancelar cobrança?\n\nAluno: ${student}\nDatas do day-use: ${dayUseDates}\nValor: ${amount}\n\nMotivo: COBRANÇA EM DUPLICIDADE`,
+      { title: 'Cancelar cobrança' },
     );
     if (!chooseReason) return;
 
     const confirmDelete = await showAdminConfirm(
-      'Confirmar exclusão desta cobrança em duplicidade?',
-      { title: 'Confirmação final', confirmText: 'Excluir cobrança' },
+      'Confirmar cancelamento desta cobrança em duplicidade no Asaas?',
+      { title: 'Confirmação final', confirmText: 'Cancelar cobrança' },
     );
     if (!confirmDelete) return;
 
     button.setAttribute('disabled', 'disabled');
-    showSendPendingMessage('Excluindo cobrança...', false);
+    showSendPendingMessage('Cancelando cobrança...', false);
     try {
       const res = await fetch('/api/admin-delete-payment.php', {
         method: 'POST',
@@ -3976,16 +3976,16 @@ pendingDeleteButtons.forEach((button) => {
       });
       const data = await res.json();
       if (!res.ok || !data?.ok) {
-        showSendPendingMessage(data?.error || 'Falha ao excluir cobrança.', true);
+        showSendPendingMessage(data?.error || 'Falha ao cancelar cobrança.', true);
         return;
       }
       row.remove();
       buildInadimplentesStudentAutocomplete();
       updateInadimplentesSummary();
-      showSendPendingMessage('Cobrança excluída com motivo: Cobrança em duplicidade.');
+      showSendPendingMessage('Cobrança cancelada e preservada no histórico.');
       maybeAlertInadimplentesDuplicates(true);
     } catch {
-      showSendPendingMessage('Falha ao excluir cobrança.', true);
+      showSendPendingMessage('Falha ao cancelar cobrança.', true);
     } finally {
       button.removeAttribute('disabled');
     }
@@ -4577,20 +4577,20 @@ pendenciaDeleteButtons.forEach((button) => {
     const dayUseDate = row.children?.[4]?.textContent?.trim() || '-';
 
     const chooseReason = await showAdminConfirm(
-      `Excluir pendência?\n\nAluno: ${student}\nResponsável: ${guardian}\nData do day-use: ${dayUseDate}\n\nOpção: DIÁRIA NÃO USADA`,
-      { title: 'Excluir pendência' },
+      `Cancelar pendência?\n\nAluno: ${student}\nResponsável: ${guardian}\nData do day-use: ${dayUseDate}\n\nOpção: DIÁRIA NÃO USADA`,
+      { title: 'Cancelar pendência' },
     );
     if (!chooseReason) return;
 
     const confirmDelete = await showAdminConfirm(
-      'CONFIRMAR EXCLUSÃO DA PENDÊNCIA?\n\nLEMBRETE: EXCLUA TAMBÉM A COBRANÇA NO ASAAS.',
-      { title: 'Confirmação final', confirmText: 'Excluir pendência' },
+      'CONFIRMAR CANCELAMENTO DA PENDÊNCIA E DA COBRANÇA NO ASAAS?',
+      { title: 'Confirmação final', confirmText: 'Cancelar pendência' },
     );
     if (!confirmDelete) return;
 
     button.setAttribute('disabled', 'disabled');
     if (pendenciaMessage) {
-      pendenciaMessage.textContent = 'Excluindo pendência...';
+      pendenciaMessage.textContent = 'Cancelando pendência...';
       pendenciaMessage.className = 'charge-message';
     }
 
@@ -4603,7 +4603,7 @@ pendenciaDeleteButtons.forEach((button) => {
       const data = await res.json();
       if (!res.ok || !data?.ok) {
         if (pendenciaMessage) {
-          pendenciaMessage.textContent = data?.error || 'Falha ao excluir pendência.';
+          pendenciaMessage.textContent = data?.error || 'Falha ao cancelar pendência.';
           pendenciaMessage.className = 'charge-message error';
         }
         return;
@@ -4611,16 +4611,16 @@ pendenciaDeleteButtons.forEach((button) => {
 
       row.remove();
       if (pendenciaMessage) {
-        pendenciaMessage.textContent = 'Pendência excluída. LEMBRETE: EXCLUA TAMBÉM A COBRANÇA NO ASAAS.';
+        pendenciaMessage.textContent = 'Pendência cancelada e preservada no histórico.';
         pendenciaMessage.className = 'charge-message success';
       }
       await showAdminAlert(
-        'PENDÊNCIA EXCLUÍDA.\nLEMBRETE: EXCLUA TAMBÉM A COBRANÇA NO ASAAS.',
-        { title: 'Pendência excluída' },
+        'PENDÊNCIA E COBRANÇA ASAAS CANCELADAS.',
+        { title: 'Pendência cancelada' },
       );
     } catch {
       if (pendenciaMessage) {
-        pendenciaMessage.textContent = 'Falha ao excluir pendência.';
+        pendenciaMessage.textContent = 'Falha ao cancelar pendência.';
         pendenciaMessage.className = 'charge-message error';
       }
     } finally {

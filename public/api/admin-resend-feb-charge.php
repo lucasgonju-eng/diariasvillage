@@ -120,6 +120,7 @@ try {
 
     $client = new \App\SupabaseClient(new \App\HttpClient());
     $asaas = new \App\AsaasClient(new \App\HttpClient());
+    $paymentLifecycle = new \App\Services\AsaasPaymentLifecycle($asaas);
     $mailer = new \App\Mailer();
     $today = date('Y-m-d');
     $portalLink = \App\Helpers::baseUrl() ?: 'https://diarias.village.einsteinhub.co';
@@ -137,6 +138,12 @@ try {
     $statusRaw = strtolower(trim((string) ($paymentRow['status'] ?? '')));
     if (in_array($statusRaw, array('paid', 'received', 'confirmed', 'canceled', 'cancelled', 'deleted', 'refunded'), true)) {
         \App\Helpers::json(array('ok' => false, 'error' => 'Cobrança já concluída/cancelada e não pode ser reenviada.'), 422);
+    }
+    if ($statusRaw === 'processing_asaas') {
+        \App\Helpers::json(array('ok' => false, 'error' => 'Cobrança já está sendo processada.'), 409);
+    }
+    if (!in_array($statusRaw, array('queued', 'pending', 'pending_asaas', 'overdue', 'awaiting_risk_analysis'), true)) {
+        \App\Helpers::json(array('ok' => false, 'error' => 'Estado local desconhecido. Reenvio bloqueado.'), 409);
     }
 
     $isoDates = extractIsoDatesFromPaymentRow((array) $paymentRow);
@@ -194,36 +201,68 @@ try {
         ), (int) ($identity['status'] ?? 422));
     }
     $customerId = (string) $identity['customer_id'];
-
-    $existingAsaasPaymentId = trim((string) ($paymentRow['asaas_payment_id'] ?? ''));
-    $mustCreateNewCharge = $existingAsaasPaymentId === '';
-    $invoiceUrl = '';
-    $effectiveAsaasPaymentId = $existingAsaasPaymentId;
-    $createdNewCharge = false;
-
-    if ($existingAsaasPaymentId !== '') {
-        $asaasPaymentResponse = $asaas->getPayment($existingAsaasPaymentId);
-        if (($asaasPaymentResponse['ok'] ?? false) && is_array($asaasPaymentResponse['data'] ?? null)) {
-            $asaasPaymentData = $asaasPaymentResponse['data'];
-            $asaasStatus = strtoupper(trim((string) ($asaasPaymentData['status'] ?? '')));
-            if (in_array($asaasStatus, array('RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH'), true)) {
-                \App\Helpers::json(array('ok' => false, 'error' => 'Cobrança já consta como paga no Asaas.'), 422);
-            }
-            if ($asaasStatus === 'OVERDUE') {
-                $mustCreateNewCharge = true;
-            } else {
-                $mustCreateNewCharge = false;
-                $invoiceUrl = (string) ($asaasPaymentData['invoiceUrl'] ?? ($asaasPaymentData['bankSlipUrl'] ?? ''));
-            }
-        } else {
-            $mustCreateNewCharge = true;
-        }
-    }
-
     $amount = (float) ($paymentRow['amount'] ?? 0);
     if ($amount <= 0) {
         $amount = 77.00;
     }
+
+    $existingAsaasPaymentId = trim((string) ($paymentRow['asaas_payment_id'] ?? ''));
+    if ($existingAsaasPaymentId === '') {
+        \App\Helpers::json(array(
+            'ok' => false,
+            'error' => 'Cobrança sem vínculo Asaas. Use o processamento da fila manual.',
+        ), 422);
+    }
+    $mustCreateNewCharge = false;
+    $invoiceUrl = '';
+    $effectiveAsaasPaymentId = $existingAsaasPaymentId;
+    $createdNewCharge = false;
+    $existingPaymentResponse = null;
+
+    $asaasPaymentResponse = $asaas->getPayment($existingAsaasPaymentId);
+    if (!($asaasPaymentResponse['ok'] ?? false) && (int) ($asaasPaymentResponse['status'] ?? 0) === 404) {
+        $asaasPaymentResponse = array(
+            'ok' => true,
+            'status' => 200,
+            'data' => array('status' => 'DELETED', 'customer' => $customerId),
+        );
+    }
+    if (!($asaasPaymentResponse['ok'] ?? false) || !is_array($asaasPaymentResponse['data'] ?? null)) {
+        \App\Helpers::json(array(
+            'ok' => false,
+            'error' => 'Não foi possível confirmar a cobrança atual no Asaas. Tente novamente.',
+        ), 503);
+    }
+    $existingPaymentResponse = $asaasPaymentResponse;
+    $asaasPaymentData = $asaasPaymentResponse['data'];
+    $asaasStatus = strtoupper(trim((string) ($asaasPaymentData['status'] ?? '')));
+    if (in_array($asaasStatus, array('RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH'), true)) {
+        \App\Helpers::json(array('ok' => false, 'error' => 'Cobrança já consta como paga no Asaas.'), 422);
+    }
+    $remoteCustomerId = trim((string) ($asaasPaymentData['customer'] ?? ''));
+    if ($remoteCustomerId === '' || $remoteCustomerId !== $customerId) {
+        \App\Helpers::json(array(
+            'ok' => false,
+            'error' => 'A cobrança existente não pertence ao responsável validado.',
+        ), 409);
+    }
+    $closedStatuses = array('CANCELED', 'CANCELLED', 'DELETED', 'REFUNDED', 'REFUND_REQUESTED', 'REFUND_IN_PROGRESS');
+    $reusableStatuses = array('PENDING', 'OVERDUE', 'AWAITING_RISK_ANALYSIS');
+    if (in_array($asaasStatus, $closedStatuses, true)) {
+        $mustCreateNewCharge = true;
+    } elseif (!in_array($asaasStatus, $reusableStatuses, true)) {
+        \App\Helpers::json(array(
+            'ok' => false,
+            'error' => 'Estado remoto desconhecido. Reenvio bloqueado para revisão.',
+        ), 409);
+    } else {
+        $invoiceUrl = trim((string) ($asaasPaymentData['invoiceUrl'] ?? ($asaasPaymentData['bankSlipUrl'] ?? '')));
+        $remoteValue = (float) ($asaasPaymentData['value'] ?? 0);
+        $mustCreateNewCharge = $invoiceUrl === ''
+            || $remoteValue <= 0
+            || abs($remoteValue - $amount) > 0.009;
+    }
+
     $dateLabels = array();
     foreach ($isoDates as $isoDate) {
         $dateLabels[] = date('d/m/Y', strtotime((string) $isoDate));
@@ -231,6 +270,46 @@ try {
     $dateLabel = implode(', ', $dateLabels);
 
     if ($mustCreateNewCharge || $invoiceUrl === '') {
+        $operationToken = bin2hex(random_bytes(16));
+        $claim = $client->update(
+            'payments',
+            'id=eq.' . urlencode($paymentId) . '&status=eq.' . urlencode($statusRaw),
+            array(
+                'status' => 'processing_asaas',
+                'asaas_operation_token' => $operationToken,
+            )
+        );
+        if (!($claim['ok'] ?? false) || empty($claim['data'][0])) {
+            \App\Helpers::json(array(
+                'ok' => false,
+                'error' => 'Cobrança já está sendo processada por outra requisição.',
+            ), 409);
+        }
+        $releaseClaim = static function () use ($client, $paymentId, $statusRaw, $operationToken): void {
+            $client->update(
+                'payments',
+                'id=eq.' . urlencode($paymentId)
+                    . '&status=eq.processing_asaas&asaas_operation_token=eq.' . urlencode($operationToken),
+                array(
+                    'status' => $statusRaw,
+                    'asaas_operation_token' => null,
+                )
+            );
+        };
+
+        $cancelOld = $paymentLifecycle->cancelBeforeLocalMutation(
+            $existingAsaasPaymentId,
+            $existingPaymentResponse,
+            $guardian
+        );
+        if (!($cancelOld['ok'] ?? false)) {
+            $releaseClaim();
+            \App\Helpers::json(array(
+                'ok' => false,
+                'error' => (string) ($cancelOld['error'] ?? 'Não foi possível cancelar a cobrança anterior.'),
+            ), 409);
+        }
+
         $createdNewCharge = true;
         $dailyBaseRaw = strtolower(trim((string) (explode('|', (string) ($paymentRow['daily_type'] ?? ''), 2)[0] ?? 'planejada')));
         $dailyBaseType = $dailyBaseRaw === 'emergencial' ? 'emergencial' : 'planejada';
@@ -240,24 +319,72 @@ try {
             'value' => $amount,
             'dueDate' => $today,
             'description' => 'Diária ' . $dailyBaseType . ' - reenvio fevereiro - Einstein Village',
+            'externalReference' => 'payment:' . $paymentId . ':' . $operationToken,
         ));
         if (!($createPaymentResponse['ok'] ?? false)) {
-            \App\Helpers::json(array('ok' => false, 'error' => asaasErrorMessage($createPaymentResponse)), 422);
+            if ($paymentLifecycle->isDefinitiveCreationRejection($createPaymentResponse)) {
+                $releaseClaim();
+                \App\Helpers::json(array(
+                    'ok' => false,
+                    'error' => asaasErrorMessage($createPaymentResponse),
+                ), 422);
+            }
+            \App\Helpers::json(array(
+                'ok' => false,
+                'error' => 'Resultado remoto incerto. Cobrança travada para conciliação segura.',
+            ), 503);
         }
         $newPaymentData = is_array($createPaymentResponse['data'] ?? null) ? $createPaymentResponse['data'] : array();
-        $invoiceUrl = (string) ($newPaymentData['invoiceUrl'] ?? ($newPaymentData['bankSlipUrl'] ?? ''));
+        $invoiceUrl = trim((string) ($newPaymentData['invoiceUrl'] ?? ($newPaymentData['bankSlipUrl'] ?? '')));
         $effectiveAsaasPaymentId = trim((string) ($newPaymentData['id'] ?? ''));
-        $updateResult = $client->update('payments', 'id=eq.' . urlencode($paymentId), array(
+        if ($effectiveAsaasPaymentId === '' || $invoiceUrl === '') {
+            $compensation = $paymentLifecycle->compensateCreatedPayment($effectiveAsaasPaymentId);
+            if ($compensation['ok'] ?? false) {
+                $releaseClaim();
+            }
+            \App\Helpers::json(array(
+                'ok' => false,
+                'error' => ($compensation['ok'] ?? false)
+                    ? 'Cobrança inválida retornada pelo Asaas; ela foi cancelada.'
+                    : 'Cobrança inválida e falha na compensação. Revisão manual obrigatória.',
+            ), 502);
+        }
+        $updateResult = $client->update(
+            'payments',
+            'id=eq.' . urlencode($paymentId)
+                . '&status=eq.processing_asaas&asaas_operation_token=eq.' . urlencode($operationToken),
+            array(
             'billing_type' => 'PIX_MANUAL',
             'status' => 'pending_asaas',
-            'asaas_payment_id' => $effectiveAsaasPaymentId !== '' ? $effectiveAsaasPaymentId : null,
-        ));
-        if (!($updateResult['ok'] ?? false)) {
-            \App\Helpers::json(array('ok' => false, 'error' => 'Nova cobrança criada no Asaas, mas falhou ao atualizar o registro local.'), 500);
+            'asaas_payment_id' => $effectiveAsaasPaymentId,
+            'asaas_operation_token' => null,
+            )
+        );
+        if (!($updateResult['ok'] ?? false) || empty($updateResult['data'][0])) {
+            $compensation = $paymentLifecycle->compensateCreatedPayment($effectiveAsaasPaymentId);
+            if ($compensation['ok'] ?? false) {
+                $releaseClaim();
+            }
+            \App\Helpers::json(array(
+                'ok' => false,
+                'error' => ($compensation['ok'] ?? false)
+                    ? 'Falha local; a nova cobrança foi cancelada no Asaas.'
+                    : 'Falha local e falha na compensação remota. Revisão manual obrigatória.',
+            ), 500);
         }
     } else {
         if ($statusRaw !== 'pending' && $statusRaw !== 'pending_asaas' && $statusRaw !== 'awaiting_risk_analysis') {
-            $client->update('payments', 'id=eq.' . urlencode($paymentId), array('status' => 'pending_asaas'));
+            $statusUpdate = $client->update(
+                'payments',
+                'id=eq.' . urlencode($paymentId),
+                array('status' => 'pending_asaas')
+            );
+            if (!($statusUpdate['ok'] ?? false) || empty($statusUpdate['data'][0])) {
+                \App\Helpers::json(array(
+                    'ok' => false,
+                    'error' => 'Falha ao sincronizar o estado local da cobrança existente.',
+                ), 500);
+            }
         }
     }
 

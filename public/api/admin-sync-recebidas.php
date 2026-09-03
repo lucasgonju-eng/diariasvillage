@@ -156,7 +156,8 @@ foreach ($payments as $payment) {
 // 2) Promove pendências locais já vinculadas.
 $pendenciasResult = $client->select(
     'pendencia_de_cadastro',
-    'select=id,paid_at,payment_date,guardian_name,guardian_cpf,guardian_email,asaas_payment_id,asaas_invoice_url&paid_at=is.null&limit=5000'
+    'select=id,paid_at,status,payment_date,guardian_name,guardian_cpf,guardian_email,asaas_payment_id,asaas_invoice_url'
+        . '&paid_at=is.null&status=eq.pending&limit=5000'
 );
 $pendencias = ($pendenciasResult['ok'] ?? false) && is_array($pendenciasResult['data'] ?? null) ? $pendenciasResult['data'] : [];
 foreach ($pendencias as $pendencia) {
@@ -246,6 +247,7 @@ foreach ($pendencias as $pendencia) {
         continue;
     }
     $update = $client->update('pendencia_de_cadastro', 'id=eq.' . urlencode($pendenciaId), [
+        'status' => 'paid',
         'paid_at' => date('c'),
         'asaas_payment_id' => $candidate['id'] ?? ($asaasPaymentId !== '' ? $asaasPaymentId : null),
         'asaas_invoice_url' => $candidate['invoiceUrl'] ?? ($candidate['bankSlipUrl'] ?? ($invoiceUrl !== '' ? $invoiceUrl : null)),
@@ -340,6 +342,88 @@ foreach ($paidPayments as $asaasPaymentId => $payment) {
         continue;
     }
 
+    // Cobrança de tentativa ambígua: reconcilia o registro original pelo token
+    // persistido antes da chamada remota. Nunca importa como novo payment.
+    $externalReference = trim((string) ($payment['externalReference'] ?? ''));
+    if (preg_match('/^payment:([0-9a-f-]{36}):([0-9a-f]{32})$/i', $externalReference, $operationMatch)) {
+        $operationPaymentId = strtolower((string) $operationMatch[1]);
+        $operationToken = strtolower((string) $operationMatch[2]);
+        $operationResult = $client->select(
+            'payments',
+            'select=id,status,amount,diaria_id,access_code,asaas_operation_token,'
+                . 'guardians(parent_name,email,parent_document,asaas_customer_id)'
+                . '&id=eq.' . urlencode($operationPaymentId)
+                . '&status=eq.processing_asaas'
+                . '&asaas_operation_token=eq.' . urlencode($operationToken)
+                . '&limit=1'
+        );
+        $operationRow = $operationResult['data'][0] ?? null;
+        $operationGuardian = is_array($operationRow['guardians'] ?? null)
+            ? $operationRow['guardians']
+            : [];
+        $linkedCustomerId = trim((string) ($operationGuardian['asaas_customer_id'] ?? ''));
+        $expectedAmount = (float) ($operationRow['amount'] ?? 0);
+        $remoteAmount = (float) ($payment['value'] ?? 0);
+        if (
+            !is_array($operationRow)
+            || !is_array($paymentCustomer)
+            || ($linkedCustomerId !== '' && $linkedCustomerId !== $paymentCustomerId)
+            || $remoteAmount <= 0
+            || ($expectedAmount > 0 && abs($remoteAmount - $expectedAmount) > 0.009)
+            || !AsaasCustomerIdentity::matchesRemoteCustomer(
+                $paymentCustomer,
+                (string) ($operationGuardian['parent_name'] ?? ''),
+                (string) ($operationGuardian['email'] ?? ''),
+                (string) ($operationGuardian['parent_document'] ?? '')
+            )
+        ) {
+            $summary['asaas_identity_conflicts_blocked']++;
+            continue;
+        }
+
+        $paidAtRaw = pick_non_empty($payment, ['clientPaymentDate', 'paymentDate', 'confirmedDate']);
+        $paidAt = $paidAtRaw !== '' ? date('c', strtotime($paidAtRaw)) : date('c');
+        $accessCode = trim((string) ($operationRow['access_code'] ?? ''));
+        if ($accessCode === '') {
+            $accessCode = Helpers::randomNumericCode(6);
+        }
+        $operationUpdate = $client->update(
+            'payments',
+            'id=eq.' . urlencode($operationPaymentId)
+                . '&status=eq.processing_asaas'
+                . '&asaas_operation_token=eq.' . urlencode($operationToken),
+            [
+                'status' => 'paid',
+                'paid_at' => $paidAt,
+                'access_code' => $accessCode,
+                'asaas_payment_id' => $asaasPaymentId,
+                'asaas_operation_token' => null,
+            ]
+        );
+        if (($operationUpdate['ok'] ?? false) && !empty($operationUpdate['data'][0])) {
+            $diariaId = trim((string) ($operationRow['diaria_id'] ?? ''));
+            if ($diariaId !== '') {
+                $gradeResult = (new \App\Services\OficinaModularGradeService($client))
+                    ->confirmarGradeNoPagamento($diariaId);
+                if (!($gradeResult['ok'] ?? false)) {
+                    error_log(
+                        '[admin-sync-recebidas] Falha ao confirmar grade da operação '
+                        . $operationPaymentId
+                        . '.'
+                    );
+                } elseif (!empty($gradeResult['user_alert'])) {
+                    $client->update(
+                        'payments',
+                        'id=eq.' . urlencode($operationPaymentId),
+                        ['grade_alerta' => (string) $gradeResult['user_alert']]
+                    );
+                }
+            }
+            $summary['payments_promoted_paid']++;
+        }
+        continue;
+    }
+
     // b) Já existe pendência desse asaas id: marca paga.
     $existingPend = $client->select(
         'pendencia_de_cadastro',
@@ -365,6 +449,7 @@ foreach ($paidPayments as $asaasPaymentId => $payment) {
             $paidAt = $paidAtRaw !== '' ? date('c', strtotime($paidAtRaw)) : date('c');
             $invoiceUrl = pick_non_empty($payment, ['invoiceUrl', 'bankSlipUrl']);
             $update = $client->update('pendencia_de_cadastro', 'id=eq.' . urlencode((string) $pendRow['id']), [
+                'status' => 'paid',
                 'paid_at' => $paidAt,
                 'asaas_invoice_url' => $invoiceUrl !== '' ? $invoiceUrl : null,
             ]);

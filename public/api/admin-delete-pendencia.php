@@ -11,7 +11,9 @@ foreach ($bootstrapCandidates as $bootstrapFile) {
 }
 
 use App\Helpers;
+use App\AsaasClient;
 use App\HttpClient;
+use App\Services\AsaasPaymentLifecycle;
 use App\SupabaseClient;
 
 function append_exclusion_log(array $entry): void
@@ -43,25 +45,58 @@ if ($reason !== 'DIARIA_NAO_USADA') {
 }
 
 $client = new SupabaseClient(new HttpClient());
+$asaas = new AsaasClient(new HttpClient());
+$paymentLifecycle = new AsaasPaymentLifecycle($asaas);
 $rowResult = $client->select(
     'pendencia_de_cadastro',
-    'select=id,student_name,guardian_name,payment_date,paid_at&id=eq.' . urlencode($pendenciaId) . '&limit=1'
+    'select=id,student_name,guardian_name,guardian_email,guardian_cpf,payment_date,paid_at,status,'
+        . 'asaas_payment_id,asaas_invoice_url'
+        . '&id=eq.' . urlencode($pendenciaId) . '&limit=1'
 );
 $row = (($rowResult['ok'] ?? false) && !empty($rowResult['data'])) ? $rowResult['data'][0] : null;
 if (!$row) {
     Helpers::json(['ok' => false, 'error' => 'Pendência não encontrada.'], 404);
 }
-if (!empty($row['paid_at'])) {
-    Helpers::json(['ok' => false, 'error' => 'Não é possível excluir uma pendência já paga.'], 422);
+if (!empty($row['paid_at']) || strtolower((string) ($row['status'] ?? '')) === 'paid') {
+    Helpers::json(['ok' => false, 'error' => 'Não é possível cancelar uma pendência já paga.'], 422);
+}
+if (strtolower((string) ($row['status'] ?? '')) === 'canceled') {
+    Helpers::json(['ok' => true, 'message' => 'Pendência já estava cancelada.']);
 }
 
-$delete = $client->delete('pendencia_de_cadastro', 'id=eq.' . urlencode($pendenciaId));
-if (!($delete['ok'] ?? false)) {
-    Helpers::json(['ok' => false, 'error' => 'Falha ao excluir pendência.'], 500);
+$asaasPaymentId = trim((string) ($row['asaas_payment_id'] ?? ''));
+if ($asaasPaymentId === '') {
+    Helpers::json([
+        'ok' => false,
+        'error' => 'Pendência sem ID Asaas. Concilie a identidade e a cobrança antes de cancelar.',
+    ], 409);
+}
+
+$remoteCancel = $paymentLifecycle->cancelBeforeLocalMutation($asaasPaymentId, null, $row);
+if (!($remoteCancel['ok'] ?? false)) {
+    $httpStatus = ($remoteCancel['code'] ?? '') === 'ASAAS_LOOKUP_FAILED' ? 503 : 409;
+    Helpers::json([
+        'ok' => false,
+        'error' => (string) ($remoteCancel['error'] ?? 'Cancelamento remoto bloqueado.'),
+    ], $httpStatus);
+}
+
+$canceledAt = date('c');
+$cancel = $client->update(
+    'pendencia_de_cadastro',
+    'id=eq.' . urlencode($pendenciaId) . '&status=eq.pending',
+    [
+        'status' => 'canceled',
+        'canceled_at' => $canceledAt,
+        'cancel_reason' => 'DIARIA_NAO_USADA',
+    ]
+);
+if (!($cancel['ok'] ?? false) || empty($cancel['data'][0])) {
+    Helpers::json(['ok' => false, 'error' => 'Falha ao registrar cancelamento local.'], 500);
 }
 
 append_exclusion_log([
-    'deleted_at' => date('c'),
+    'deleted_at' => $canceledAt,
     'entity_type' => 'pendencia',
     'entity_id' => $pendenciaId,
     'student_name' => trim((string) ($row['student_name'] ?? '')),
@@ -75,8 +110,7 @@ append_exclusion_log([
 
 Helpers::json([
     'ok' => true,
-    'message' => 'Pendência excluída com motivo: Diária não usada.',
-    'reminder' => 'LEMBRETE: EXCLUA TAMBÉM A COBRANÇA NO ASAAS.',
+    'message' => 'Pendência cancelada no Asaas e preservada no histórico local.',
     'pendencia' => [
         'id' => $pendenciaId,
         'student_name' => $row['student_name'] ?? '',
