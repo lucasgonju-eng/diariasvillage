@@ -45,6 +45,53 @@ class Helpers
         return $_SESSION['user'];
     }
 
+    public static function requireAdmin(?AdminAuth $auth = null): array
+    {
+        $admin = ($auth ?? new AdminAuth())->currentSession();
+        if ($admin === null) {
+            self::json(['ok' => false, 'error' => 'Não autenticado.'], 401);
+        }
+        return $admin;
+    }
+
+    /**
+     * @param string|string[] $roles
+     */
+    public static function requireAdminRole(string|array $roles, ?AdminAuth $auth = null): array
+    {
+        $admin = self::requireAdmin($auth);
+        $allowedRoles = is_array($roles) ? $roles : [$roles];
+        if (!in_array((string) ($admin['role'] ?? ''), $allowedRoles, true)) {
+            self::json(['ok' => false, 'error' => 'Acesso negado.'], 403);
+        }
+        return $admin;
+    }
+
+    public static function requireAdminWeb(?AdminAuth $auth = null): array
+    {
+        $admin = ($auth ?? new AdminAuth())->currentSession();
+        if ($admin === null) {
+            header('Location: /admin/');
+            exit;
+        }
+        return $admin;
+    }
+
+    /**
+     * @param string|string[] $roles
+     */
+    public static function requireAdminRoleWeb(string|array $roles, ?AdminAuth $auth = null): array
+    {
+        $admin = self::requireAdminWeb($auth);
+        $allowedRoles = is_array($roles) ? $roles : [$roles];
+        if (!in_array((string) ($admin['role'] ?? ''), $allowedRoles, true)) {
+            http_response_code(403);
+            echo 'Acesso negado.';
+            exit;
+        }
+        return $admin;
+    }
+
     public static function baseUrl(): string
     {
         return rtrim(Env::get('APP_URL', ''), '/');

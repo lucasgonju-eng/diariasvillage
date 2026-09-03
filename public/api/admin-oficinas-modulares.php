@@ -14,12 +14,7 @@ use App\Helpers;
 use App\HttpClient;
 use App\SupabaseClient;
 
-if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
-    Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
-}
-if (($_SESSION['admin_user'] ?? '') !== 'admin') {
-    Helpers::json(['ok' => false, 'error' => 'Somente admin pode criar e editar oficinas modulares.'], 403);
-}
+Helpers::requireAdminRole(\App\AdminAuth::ROLE_ADMIN);
 
 $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
 if (!in_array($method, ['GET', 'POST'], true)) {

@@ -14,6 +14,7 @@ date_default_timezone_set('America/Sao_Paulo');
 use App\AsaasClient;
 use App\Helpers;
 use App\HttpClient;
+use App\Services\MonthlyWorkshopService;
 use App\SupabaseClient;
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
@@ -153,6 +154,9 @@ if ($sessionStudentId !== '' && $paymentStudentId !== '' && $sessionStudentId ==
 }
 if (!$allowed) {
     $redirectWithError('Você não tem permissão para pagar esta cobrança.');
+}
+if ($paymentStudentId !== '' && (new MonthlyWorkshopService($client))->getActivePlan($paymentStudentId) !== null) {
+    $redirectWithError('Aluno mensalista não gera PIX. Confirme as oficinas no fluxo mensal.');
 }
 
 $statusRaw = strtolower(trim((string) ($payment['status'] ?? '')));

@@ -14,6 +14,7 @@ date_default_timezone_set('America/Sao_Paulo');
 
 use App\Helpers;
 use App\HttpClient;
+use App\Services\MonthlyWorkshopService;
 use App\SupabaseClient;
 
 $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
@@ -75,6 +76,20 @@ $guardianId = (string) ($guardianRow['id'] ?? '');
 $studentId = (string) ($guardianRow['student_id'] ?? '');
 if ($guardianId === '' || $studentId === '') {
     $respondError('Dados de responsável/aluno incompletos.', 422);
+}
+
+$monthlyPlan = (new MonthlyWorkshopService($client))->getActivePlan($studentId);
+if (is_array($monthlyPlan)) {
+    $monthlyRedirect = '/monthly-workshops.php';
+    if ($isJsonRequest) {
+        Helpers::json([
+            'ok' => true,
+            'monthly' => true,
+            'redirect_url' => $monthlyRedirect,
+        ]);
+    }
+    header('Location: ' . $monthlyRedirect);
+    exit;
 }
 
 $query = 'select=*'

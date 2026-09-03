@@ -24,9 +24,7 @@ function append_exclusion_log(array $entry): void
     @file_put_contents($path, $line . PHP_EOL, FILE_APPEND);
 }
 
-if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
-    Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
-}
+Helpers::requireAdminRole(\App\AdminAuth::ROLE_ADMIN);
 
 Helpers::requirePost();
 $payload = json_decode(file_get_contents('php://input'), true);

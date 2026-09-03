@@ -21,7 +21,7 @@ use App\SupabaseClient;
 
 function isAdminUser(): bool
 {
-    return (string) ($_SESSION['admin_user'] ?? '') === 'admin';
+    return (string) ($_SESSION['admin_role'] ?? '') === \App\AdminAuth::ROLE_ADMIN;
 }
 
 function parseAttendanceDate(string $raw): ?string
@@ -164,9 +164,7 @@ function isDeliverableGuardianEmail(string $email): bool
     return !preg_match('/@(diariasvillage|placeholder)\.local$/i', $email);
 }
 
-if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
-    Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
-}
+$adminSession = Helpers::requireAdminRole([\App\AdminAuth::ROLE_ADMIN, \App\AdminAuth::ROLE_SECRETARIA]);
 
 $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
 $client = new SupabaseClient(new HttpClient());
@@ -841,85 +839,32 @@ if ($hasPaidSameDate || $hasOpenSameDate) {
 }
 
 $monthlyItems = MonthlyStudents::load();
-$monthlyStoragePath = MonthlyStudents::storagePath();
-if (!is_file($monthlyStoragePath)) {
-    Helpers::json([
-        'ok' => false,
-        'error' => 'Cadastro de mensalistas indisponível no momento. Operação bloqueada para evitar cobrança indevida.',
-    ], 503);
-}
 $monthlyById = MonthlyStudents::mapByStudentId($monthlyItems);
 $monthlyByName = MonthlyStudents::mapByNormalizedName($monthlyItems);
 $plan = MonthlyStudents::resolvePlan($studentId, $studentName, $monthlyById, $monthlyByName);
 
 if (is_array($plan) && in_array((int) ($plan['weekly_days'] ?? 0), [2, 3, 4, 5], true)) {
     $weeklyDays = (int) ($plan['weekly_days'] ?? 0);
-    $usedByWeek = MonthlyStudents::collectUsedDatesByWeek($payments);
-    foreach ($rows as $row) {
-        if (!is_array($row)) {
-            continue;
-        }
-        if ((string) ($row['id'] ?? '') === $id) {
-            continue;
-        }
-        if ((string) ($row['student_id'] ?? '') !== $studentId) {
-            continue;
-        }
-        $status = (string) ($row['status'] ?? '');
-        if (!in_array($status, [AttendanceCalls::STATUS_ALUNO_MENSALISTA, AttendanceCalls::STATUS_AUTORIZADA_COBRANCA], true)) {
-            continue;
-        }
-        $date = parseAttendanceDate((string) ($row['attendance_date'] ?? ''));
-        if ($date === null) {
-            continue;
-        }
-        $week = MonthlyStudents::weekKey($date);
-        if ($week === '') {
-            continue;
-        }
-        if (!isset($usedByWeek[$week])) {
-            $usedByWeek[$week] = [];
-        }
-        $usedByWeek[$week][$date] = true;
-    }
+    $rows[$targetIndex]['status'] = AttendanceCalls::STATUS_ALUNO_MENSALISTA;
+    $rows[$targetIndex]['reviewed_at'] = date('c');
+    $rows[$targetIndex]['reviewed_by'] = 'admin';
+    $rows[$targetIndex]['review_note'] = 'Aluno mensalista (' . $weeklyDays
+        . ' dias/semana). Cobrança bloqueada: oficinas e entradas estão incluídas no plano.';
+    saveAttendanceRowsOrFail($rows);
 
-    $split = MonthlyStudents::splitRequestedDatesByQuota([$attendanceDate], $weeklyDays, $usedByWeek);
-    $overflow = $split['overflow'] ?? [];
-    if (empty($overflow)) {
-        $weekKey = MonthlyStudents::weekKey($attendanceDate);
-        $usedBefore = [];
-        if ($weekKey !== '' && isset($usedByWeek[$weekKey]) && is_array($usedByWeek[$weekKey])) {
-            $usedBefore = array_keys($usedByWeek[$weekKey]);
-        }
-        $usedWithCall = array_values(array_unique(array_merge($usedBefore, [$attendanceDate])));
-        sort($usedWithCall);
-        $remaining = max(0, $weeklyDays - count($usedWithCall));
-
-        $rows[$targetIndex]['status'] = AttendanceCalls::STATUS_ALUNO_MENSALISTA;
-        $rows[$targetIndex]['reviewed_at'] = date('c');
-        $rows[$targetIndex]['reviewed_by'] = 'admin';
-        $rows[$targetIndex]['review_note'] = 'Aluno mensalista (' . $weeklyDays
-            . ' dias/semana). Datas registradas na semana: '
-            . formatDateListBr($usedWithCall)
-            . '. Saldo restante: ' . $remaining . ' dia(s).';
-        saveAttendanceRowsOrFail($rows);
-
-        Helpers::json([
-            'ok' => true,
-            'audit' => $isAudit,
-            'blocked' => true,
-            'blocked_reason' => 'monthly_covered',
-            'item' => $rows[$targetIndex],
-            'message' => 'Aluno mensalista: sem cobrança para essa data. Datas da semana: ' . formatDateListBr($usedWithCall),
-            'monthly' => [
-                'weekly_days' => $weeklyDays,
-                'attendance_date' => $attendanceDate,
-                'week_key' => $weekKey,
-                'used_dates' => $usedWithCall,
-                'remaining_days' => $remaining,
-            ],
-        ]);
-    }
+    Helpers::json([
+        'ok' => true,
+        'audit' => $isAudit,
+        'blocked' => true,
+        'blocked_reason' => 'monthly_covered',
+        'item' => $rows[$targetIndex],
+        'message' => 'Aluno mensalista: nenhuma cobrança foi gerada.',
+        'monthly' => [
+            'weekly_days' => $weeklyDays,
+            'attendance_date' => $attendanceDate,
+            'required_workshop_slots' => $weeklyDays * 2,
+        ],
+    ]);
 }
 
 $guardianResult = $client->select(

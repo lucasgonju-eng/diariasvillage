@@ -107,11 +107,8 @@ function voucherLabelFromBillingType(string $billingType): string
     return '';
 }
 
-if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
-    header('Location: /admin/');
-    exit;
-}
-$isAdminPrincipal = (($_SESSION['admin_user'] ?? '') === 'admin');
+$adminSession = Helpers::requireAdminWeb();
+$isAdminPrincipal = (($adminSession['role'] ?? '') === 'admin_principal');
 $canViewAsUser = $isAdminPrincipal;
 $canMergeDuplicates = $isAdminPrincipal;
 $canAttendanceApprove = $isAdminPrincipal;
@@ -119,7 +116,7 @@ $canManageModularOffices = $isAdminPrincipal;
 
 $allowedTabs = $isAdminPrincipal
     ? ['charges', 'chamada', 'inadimplentes', 'recebidas', 'sem-whatsapp', 'pendencias', 'mensalistas', 'exclusoes', 'reset-senha', 'fluxo-caixa', 'dados-asaas', 'email-massa', 'entries']
-    : ['chamada', 'sem-whatsapp', 'mensalistas', 'reset-senha', 'entries'];
+    : ['chamada', 'sem-whatsapp', 'mensalistas', 'entries'];
 if ($canMergeDuplicates) {
     $allowedTabs[] = 'duplicados';
 }
@@ -138,6 +135,19 @@ $paymentsResult = $client->select(
     'select=*,students(name,enrollment),guardians(parent_name,email)&status=eq.paid&order=paid_at.desc&limit=200'
 );
 $payments = $paymentsResult['data'] ?? [];
+
+$monthlyEntriesResult = $client->select(
+    'monthly_workshop_entries',
+    'select=id,entry_date,status,access_code,created_at,students(name,enrollment),'
+        . 'monthly_workshop_slots(orientadora,hora_inicio,oficina_modular(nome))'
+        . '&status=eq.CONFIRMED_BY_PLAN'
+        . '&entry_date=gte.' . rawurlencode(date('Y-m-01'))
+        . '&order=entry_date.asc'
+        . '&limit=2000'
+);
+$monthlyEntries = (($monthlyEntriesResult['ok'] ?? false) && is_array($monthlyEntriesResult['data'] ?? null))
+    ? $monthlyEntriesResult['data']
+    : [];
 
 $queuedPendingResult = $client->select(
     'payments',
@@ -175,6 +185,16 @@ $monthlyRowsForJs = array_values(array_map(static function (array $row): array {
         'updated_by' => (string) ($row['updated_by'] ?? ''),
     ];
 }, $monthlyItems));
+$monthlySubmissionsResult = $client->select(
+    'monthly_workshop_submissions',
+    'select=id,reference_month,weekly_days_snapshot,required_slots,status,confirmed_at,unlocked_at,students(name,enrollment)'
+        . '&reference_month=eq.' . rawurlencode(date('Y-m-01'))
+        . '&order=confirmed_at.desc'
+        . '&limit=1000'
+);
+$monthlySubmissions = (($monthlySubmissionsResult['ok'] ?? false) && is_array($monthlySubmissionsResult['data'] ?? null))
+    ? $monthlySubmissionsResult['data']
+    : [];
 
 $inadimplentesMonthlyMetaById = [];
 
@@ -770,7 +790,7 @@ if (!empty($exclusionsLog)) {
               </tr>
             </thead>
             <tbody>
-              <?php if (empty($payments) && empty($pendenciasPagas)): ?>
+              <?php if (empty($payments) && empty($pendenciasPagas) && empty($monthlyEntries)): ?>
                 <tr>
                   <td colspan="8">Nenhuma entrada confirmada para conferência.</td>
                 </tr>
@@ -825,12 +845,87 @@ if (!empty($exclusionsLog)) {
                     <td><?php echo htmlspecialchars($codigo ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                   </tr>
                 <?php endforeach; ?>
+                <?php foreach ($monthlyEntries as $monthlyEntry): ?>
+                  <?php
+                    $student = is_array($monthlyEntry['students'] ?? null) ? $monthlyEntry['students'] : [];
+                    $slot = is_array($monthlyEntry['monthly_workshop_slots'] ?? null)
+                        ? $monthlyEntry['monthly_workshop_slots']
+                        : [];
+                    $office = is_array($slot['oficina_modular'] ?? null) ? $slot['oficina_modular'] : [];
+                    $officeName = !empty($slot['orientadora'])
+                        ? 'Escolha pela Orientadora'
+                        : (string) ($office['nome'] ?? 'Oficina');
+                    $entryDate = !empty($monthlyEntry['entry_date'])
+                        ? date('d/m/Y', strtotime((string) $monthlyEntry['entry_date']))
+                        : '-';
+                    $confirmed = !empty($monthlyEntry['created_at'])
+                        ? date('d/m/Y H:i', strtotime((string) $monthlyEntry['created_at']))
+                        : '-';
+                  ?>
+                  <tr>
+                    <td><?php echo htmlspecialchars((string) ($student['name'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars((string) ($student['enrollment'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td>Plano mensal</td>
+                    <td><?php echo htmlspecialchars($officeName, ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo $entryDate; ?></td>
+                    <td><?php echo $confirmed; ?></td>
+                    <td>Incluído</td>
+                    <td><?php echo htmlspecialchars((string) ($monthlyEntry['access_code'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></td>
+                  </tr>
+                <?php endforeach; ?>
+              <?php endif; ?>
+            </tbody>
+          </table>
+        </div>
+        <h3 style="margin-top:20px;">Confirmações de oficinas do mês</h3>
+        <p class="muted">Após o desbloqueio, as entradas recorrentes são canceladas e o responsável pode confirmar novamente.</p>
+        <div id="monthly-confirmations-message" class="charge-message"></div>
+        <div style="overflow-x:auto;">
+          <table class="admin-table">
+            <thead>
+              <tr style="text-align:left;">
+                <th>Aluno</th>
+                <th>Matrícula</th>
+                <th>Competência</th>
+                <th>Plano</th>
+                <th>Status</th>
+                <th>Confirmado em</th>
+                <th>Ação</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php if (empty($monthlySubmissions)): ?>
+                <tr><td colspan="7">Nenhuma confirmação mensal registrada nesta competência.</td></tr>
+              <?php else: ?>
+                <?php foreach ($monthlySubmissions as $submission): ?>
+                  <?php $submissionStudent = is_array($submission['students'] ?? null) ? $submission['students'] : []; ?>
+                  <tr>
+                    <td><?php echo htmlspecialchars((string) ($submissionStudent['name'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars((string) ($submissionStudent['enrollment'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo date('m/Y', strtotime((string) ($submission['reference_month'] ?? date('Y-m-01')))); ?></td>
+                    <td><?php echo (int) ($submission['weekly_days_snapshot'] ?? 0); ?> dias • <?php echo (int) ($submission['required_slots'] ?? 0); ?> encontros</td>
+                    <td><?php echo ($submission['status'] ?? '') === 'CONFIRMED' ? 'Confirmada' : 'Desbloqueada'; ?></td>
+                    <td><?php echo !empty($submission['confirmed_at']) ? date('d/m/Y H:i', strtotime((string) $submission['confirmed_at'])) : '-'; ?></td>
+                    <td>
+                      <?php if (($submission['status'] ?? '') === 'CONFIRMED'): ?>
+                        <button
+                          class="btn btn-warning-yellow btn-sm monthly-unlock-btn"
+                          type="button"
+                          data-submission-id="<?php echo htmlspecialchars((string) ($submission['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                        >Desbloquear</button>
+                      <?php else: ?>
+                        -
+                      <?php endif; ?>
+                    </td>
+                  </tr>
+                <?php endforeach; ?>
               <?php endif; ?>
             </tbody>
           </table>
         </div>
       </section>
 
+      <?php if ($isAdminPrincipal): ?>
       <section id="tab-charges" class="<?php echo $activeTab === 'charges' ? '' : 'hidden'; ?>">
         <h2>Cobrança manual pós-chamada</h2>
         <p class="muted">Use quando o aluno frequentou sem pagamento antecipado. Registre a cobrança manual para revisão antes do envio.</p>
@@ -846,6 +941,7 @@ if (!empty($exclusionsLog)) {
         <button class="btn btn-primary" id="send-charges" type="button">Registrar cobranças manuais (sem envio)</button>
         <div id="charge-message" class="charge-message"></div>
       </section>
+      <?php endif; ?>
 
       <section id="tab-chamada" class="<?php echo $activeTab === 'chamada' ? '' : 'hidden'; ?>">
         <h2>Chamada</h2>
@@ -942,6 +1038,7 @@ if (!empty($exclusionsLog)) {
         <?php endif; ?>
       </section>
 
+      <?php if ($isAdminPrincipal): ?>
       <section id="tab-inadimplentes" class="<?php echo $activeTab === 'inadimplentes' ? '' : 'hidden'; ?>">
         <h2>Cobranças em aberto</h2>
         <p class="muted">Inclui cobranças da fila de envio e cobranças já enviadas que ainda não foram pagas.</p>
@@ -1229,6 +1326,7 @@ if (!empty($exclusionsLog)) {
           </table>
         </div>
       </section>
+      <?php endif; ?>
 
       <section id="tab-sem-whatsapp" class="<?php echo $activeTab === 'sem-whatsapp' ? '' : 'hidden'; ?>">
         <h2>Responsáveis sem WhatsApp</h2>
@@ -1265,6 +1363,7 @@ if (!empty($exclusionsLog)) {
         </div>
       </section>
 
+      <?php if ($isAdminPrincipal): ?>
       <section id="tab-pendencias" class="<?php echo $activeTab === 'pendencias' ? '' : 'hidden'; ?>">
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
           <h2 style="margin:0;">Pendência de cadastro</h2>
@@ -1391,6 +1490,7 @@ if (!empty($exclusionsLog)) {
           </table>
         </div>
       </section>
+      <?php endif; ?>
 
       <section id="tab-mensalistas" class="<?php echo $activeTab === 'mensalistas' ? '' : 'hidden'; ?>">
         <h2>Mensalistas</h2>
@@ -1445,6 +1545,7 @@ if (!empty($exclusionsLog)) {
         </div>
       </section>
 
+      <?php if ($isAdminPrincipal): ?>
       <?php if ($canManageModularOffices): ?>
       <section id="tab-oficinas-modulares" class="<?php echo $activeTab === 'oficinas-modulares' ? '' : 'hidden'; ?>">
         <h2>Criação de Oficinas Modulares</h2>
@@ -2062,6 +2163,7 @@ if (!empty($exclusionsLog)) {
         </div>
       </section>
       <?php endif; ?>
+      <?php endif; ?>
     </div>
 
     <div class="footer">Desenvolvido por Lucas Gonçalves Junior - 2026</div>
@@ -2073,7 +2175,7 @@ if (!empty($exclusionsLog)) {
     window.__monthlyStudents = <?php echo json_encode($monthlyRowsForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
     window.__adminCanApproveAttendance = <?php echo $canAttendanceApprove ? 'true' : 'false'; ?>;
   </script>
-  <script src="/assets/js/admin-dashboard.js?v=75"></script>
+  <script src="/assets/js/admin-dashboard.js?v=76"></script>
   <script>
     (function () {
       function activateTab(name) {

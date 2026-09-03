@@ -18,12 +18,7 @@ use App\SupabaseClient;
 
 function ensureAdminPrincipal(): void
 {
-    if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
-        Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
-    }
-    if (($_SESSION['admin_user'] ?? '') !== 'admin') {
-        Helpers::json(['ok' => false, 'error' => 'Apenas admin principal pode usar este recurso.'], 403);
-    }
+    Helpers::requireAdminRole(\App\AdminAuth::ROLE_ADMIN);
 }
 
 function defaultTemplate(): array

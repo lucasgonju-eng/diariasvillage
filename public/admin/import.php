@@ -1,20 +1,15 @@
 <?php
 require_once __DIR__ . '/../src/Bootstrap.php';
+use App\AdminAuth;
+use App\Helpers;
+
 $debug = ($_GET['debug'] ?? '') === '1';
+$adminSession = Helpers::requireAdminRoleWeb(AdminAuth::ROLE_ADMIN);
 
-$sessionOk = isset($_SESSION['admin_authenticated']) && $_SESSION['admin_authenticated'] === true;
-$isAdminPrincipal = (($_SESSION['admin_user'] ?? '') === 'admin');
-
-if ($debug && $sessionOk) {
+if ($debug) {
     ini_set('display_errors', '1');
     ini_set('display_startup_errors', '1');
     error_reporting(E_ALL);
-}
-
-if (!$sessionOk || !$isAdminPrincipal) {
-    http_response_code(403);
-    echo 'Acesso negado.';
-    exit;
 }
 $success = ($_GET['success'] ?? '') === '1';
 ?>

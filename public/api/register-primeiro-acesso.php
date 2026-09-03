@@ -13,6 +13,7 @@ foreach ($bootstrapCandidates as $bootstrapFile) {
 use App\Helpers;
 use App\HttpClient;
 use App\Mailer;
+use App\AsaasCustomerIdentity;
 use App\SupabaseAuth;
 use App\SupabaseClient;
 
@@ -38,7 +39,7 @@ if ($password !== $passwordConfirm) {
 }
 
 $cpfDigits = preg_replace('/\D+/', '', $cpf) ?? '';
-if (strlen($cpfDigits) !== 11) {
+if (!AsaasCustomerIdentity::isValidCpfOrCnpj($cpfDigits) || strlen($cpfDigits) !== 11) {
     Helpers::json(['ok' => false, 'error' => 'CPF inválido.'], 422);
 }
 
@@ -61,7 +62,9 @@ if ($studentId === '') {
 
 $guardianResult = $client->select(
     'guardians',
-    'select=id,email,parent_name,parent_document,student_id&parent_document=eq.' . urlencode($cpfDigits) . '&limit=200'
+    'select=id,email,parent_name,parent_document,student_id,auth_user_id,first_access_completed_at'
+        . '&student_id=eq.' . urlencode($studentId)
+        . '&limit=200'
 );
 
 if (!$guardianResult['ok'] || empty($guardianResult['data'])) {
@@ -70,8 +73,8 @@ if (!$guardianResult['ok'] || empty($guardianResult['data'])) {
 
 $guardian = null;
 foreach ($guardianResult['data'] as $guardianRow) {
-    $guardianStudentId = (string) ($guardianRow['student_id'] ?? '');
-    if ($guardianStudentId !== '' && $guardianStudentId === $studentId) {
+    $guardianDocument = preg_replace('/\D+/', '', (string) ($guardianRow['parent_document'] ?? '')) ?? '';
+    if ($guardianDocument === $cpfDigits) {
         $guardian = $guardianRow;
         break;
     }
@@ -87,19 +90,61 @@ $emailCheck = $client->select(
     'select=parent_document&email=eq.' . urlencode($email)
 );
 if ($emailCheck['ok'] && !empty($emailCheck['data'])) {
-    $whoHas = $emailCheck['data'][0]['parent_document'] ?? '';
-    if ($whoHas !== $cpfDigits) {
-        Helpers::json(['ok' => false, 'error' => 'Este e-mail já está cadastrado. Use "Já tem cadastro?" para entrar.'], 409);
+    foreach ($emailCheck['data'] as $emailOwner) {
+        $ownerDocument = preg_replace('/\D+/', '', (string) ($emailOwner['parent_document'] ?? '')) ?? '';
+        if ($ownerDocument !== $cpfDigits) {
+            Helpers::json(['ok' => false, 'error' => 'Este e-mail já está cadastrado. Use "Já tem cadastro?" para entrar.'], 409);
+        }
     }
 }
 
-// Supabase Auth (OAuth Server) – criar ou atualizar usuário; só e-mail do SaaS
+$uuidBytes = random_bytes(16);
+$uuidBytes[6] = chr((ord($uuidBytes[6]) & 0x0f) | 0x40);
+$uuidBytes[8] = chr((ord($uuidBytes[8]) & 0x3f) | 0x80);
+$claimHex = bin2hex($uuidBytes);
+$claimId = sprintf(
+    '%s-%s-%s-%s-%s',
+    substr($claimHex, 0, 8),
+    substr($claimHex, 8, 4),
+    substr($claimHex, 12, 4),
+    substr($claimHex, 16, 4),
+    substr($claimHex, 20, 12)
+);
+
+$claimResult = $client->rpc('begin_first_access_claim', [
+    'p_guardian_id' => (string) ($guardian['id'] ?? ''),
+    'p_student_id' => $studentId,
+    'p_claim_id' => $claimId,
+]);
+$claimData = is_array($claimResult['data'] ?? null) ? $claimResult['data'] : [];
+if (!$claimResult['ok'] || !($claimData['ok'] ?? false)) {
+    $claimCode = (string) ($claimData['code'] ?? '');
+    $claimStatus = in_array($claimCode, ['FIRST_ACCESS_ALREADY_COMPLETED', 'FIRST_ACCESS_IN_PROGRESS', 'IDENTITY_CONFLICT'], true)
+        ? 409
+        : 422;
+    Helpers::json([
+        'ok' => false,
+        'code' => $claimCode !== '' ? $claimCode : 'FIRST_ACCESS_CLAIM_FAILED',
+        'error' => (string) ($claimData['error'] ?? 'Não foi possível iniciar o primeiro acesso. Tente novamente.'),
+    ], $claimStatus);
+}
+
+$cancelClaim = static function () use ($client, $claimId): void {
+    $cancel = $client->rpc('cancel_first_access_claim', ['p_claim_id' => $claimId]);
+    $cancelData = is_array($cancel['data'] ?? null) ? $cancel['data'] : [];
+    if (!$cancel['ok'] || !($cancelData['ok'] ?? false)) {
+        error_log('register-primeiro-acesso: falha ao cancelar claim ' . $claimId);
+    }
+};
+
+// Cria exclusivamente um usuário novo. Uma conta Auth preexistente nunca é alterada.
 $auth = new SupabaseAuth(new HttpClient());
 $createResult = $auth->createUser($email, $password, [
     'user_metadata' => ['cpf' => $cpfDigits],
 ]);
 
 if (!$createResult['ok']) {
+    $cancelClaim();
     $data = $createResult['data'] ?? [];
     $errorMsg = (string) ($createResult['error'] ?? '');
     if (is_array($data)) {
@@ -107,56 +152,83 @@ if (!$createResult['ok']) {
     }
     $errLower = strtolower($errorMsg);
 
-    // E-mail já existe no Supabase Auth – atualizar senha do usuário existente
     if (strpos($errLower, 'already') !== false || strpos($errLower, 'registered') !== false || strpos($errLower, 'exists') !== false) {
-        $listResult = $auth->listUsers(1, 1000);
-        $userId = null;
-        if ($listResult['ok'] && !empty($listResult['data']['users'])) {
-            foreach ($listResult['data']['users'] as $u) {
-                if (strtolower(trim($u['email'] ?? '')) === strtolower($email)) {
-                    $userId = $u['id'] ?? null;
-                    break;
-                }
-            }
-        }
-        if (!$userId) {
-            Helpers::json(['ok' => false, 'error' => 'E-mail já cadastrado. Use "Já tem cadastro?" para entrar ou recupere a senha.'], 409);
-        }
-        $updateResult = $auth->updateUser($userId, [
-            'password' => $password,
-            'email_confirm' => true,
-        ]);
-        if (!$updateResult['ok']) {
-            // Em alguns ambientes, a API de update pode falhar para usuários legados.
-            // Seguimos com atualização local (guardians) para não bloquear o primeiro acesso.
-            $upErr = $updateResult['data']['message'] ?? $updateResult['error'] ?? 'Falha ao atualizar senha no Auth.';
-            error_log('register-primeiro-acesso: updateUser falhou para email ' . $email . ' - ' . (string) $upErr);
-        }
-    } else {
-        Helpers::json(['ok' => false, 'error' => $errorMsg ?: 'Falha ao criar conta. Tente novamente.'], 500);
+        Helpers::json([
+            'ok' => false,
+            'code' => 'AUTH_USER_ALREADY_EXISTS',
+            'error' => 'E-mail já cadastrado. Entre com a senha existente ou recupere a senha.',
+        ], 409);
+    }
+    Helpers::json(['ok' => false, 'error' => 'Falha ao criar conta. Tente novamente.'], 500);
+}
+
+$createdAuthUserId = (string) (
+    ($createResult['data']['id'] ?? null)
+    ?? ($createResult['data']['user']['id'] ?? '')
+);
+if ($createdAuthUserId === '') {
+    $cancelClaim();
+    error_log('register-primeiro-acesso: criação Auth sem ID retornado; compensação automática indisponível');
+    Helpers::json(['ok' => false, 'error' => 'Falha ao confirmar a criação da conta. Procure a secretaria.'], 500);
+}
+
+$passwordHash = password_hash($password, PASSWORD_DEFAULT);
+if (!is_string($passwordHash) || $passwordHash === '') {
+    $auth->deleteUser($createdAuthUserId);
+    $cancelClaim();
+    Helpers::json(['ok' => false, 'error' => 'Falha ao proteger a senha. Tente novamente.'], 500);
+}
+
+$completeResult = $client->rpc('complete_first_access_claim', [
+    'p_claim_id' => $claimId,
+    'p_primary_guardian_id' => (string) ($guardian['id'] ?? ''),
+    'p_auth_user_id' => $createdAuthUserId,
+    'p_email' => strtolower($email),
+    'p_password_hash' => $passwordHash,
+]);
+$completeData = is_array($completeResult['data'] ?? null) ? $completeResult['data'] : [];
+$completionConfirmed = ($completeResult['ok'] ?? false) && ($completeData['ok'] ?? false);
+if (!$completionConfirmed && !($completeResult['ok'] ?? false)) {
+    // Uma falha de transporte pode ocorrer depois do commit remoto. Antes de
+    // compensar, confirme o estado para não excluir uma conta já vinculada.
+    $statusResult = $client->select(
+        'guardians',
+        'select=id,auth_user_id,first_access_completed_at,activation_claim_id'
+            . '&id=eq.' . rawurlencode((string) ($guardian['id'] ?? ''))
+            . '&limit=1'
+    );
+    $statusRow = (($statusResult['ok'] ?? false) && is_array($statusResult['data'][0] ?? null))
+        ? $statusResult['data'][0]
+        : null;
+    $completionConfirmed = is_array($statusRow)
+        && (string) ($statusRow['auth_user_id'] ?? '') === $createdAuthUserId
+        && !empty($statusRow['first_access_completed_at']);
+    $safeToCompensate = is_array($statusRow)
+        && empty($statusRow['auth_user_id'])
+        && empty($statusRow['first_access_completed_at'])
+        && (string) ($statusRow['activation_claim_id'] ?? '') === $claimId;
+
+    if (!$completionConfirmed && !$safeToCompensate) {
+        error_log('register-primeiro-acesso: estado incerto após conclusão do claim ' . $claimId);
+        Helpers::json([
+            'ok' => false,
+            'code' => 'FIRST_ACCESS_STATUS_UNKNOWN',
+            'error' => 'A confirmação pode ter sido concluída. Tente entrar antes de repetir o primeiro acesso.',
+        ], 503);
     }
 }
 
-// Atualiza guardians de todo o CPF (caso de responsável com mais de um aluno)
-$updateGuardian = $client->update(
-    'guardians',
-    'parent_document=eq.' . urlencode($cpfDigits),
-    [
-        'email' => $email,
-        'password_hash' => password_hash($password, PASSWORD_DEFAULT),
-        'verified_at' => date('c'),
-    ]
-);
-if (!$updateGuardian['ok']) {
-    $gData = $updateGuardian['data'] ?? [];
-    $gErr = $updateGuardian['error'] ?? '';
-    if (is_array($gData)) {
-        $gErr = $gData['message'] ?? $gData['details'] ?? $gErr;
+if (!$completionConfirmed) {
+    $deleteResult = $auth->deleteUser($createdAuthUserId);
+    if (!$deleteResult['ok']) {
+        error_log('register-primeiro-acesso: falha ao excluir usuário Auth recém-criado ' . $createdAuthUserId);
     }
-    if (stripos((string) $gErr, 'unique') !== false || stripos((string) $gErr, 'duplicate') !== false) {
-        Helpers::json(['ok' => false, 'error' => 'Este e-mail já está cadastrado. Use "Já tem cadastro?" para entrar.'], 409);
-    }
-    Helpers::json(['ok' => false, 'error' => $gErr ?: 'Falha ao atualizar cadastro.'], 500);
+    $cancelClaim();
+    Helpers::json([
+        'ok' => false,
+        'code' => (string) ($completeData['code'] ?? 'FIRST_ACCESS_COMPLETION_FAILED'),
+        'error' => 'Não foi possível concluir o cadastro. Nenhuma senha existente foi alterada.',
+    ], 500);
 }
 
 $template = <<<'HTML'

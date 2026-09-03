@@ -6,10 +6,7 @@ use App\SupabaseClient;
 
 $returnHtml = ($_GET['return'] ?? '') === 'html';
 
-$sessionOk = isset($_SESSION['admin_authenticated']) && $_SESSION['admin_authenticated'] === true;
-if (!$sessionOk) {
-    Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
-}
+Helpers::requireAdminRole(\App\AdminAuth::ROLE_ADMIN);
 
 Helpers::requirePost();
 

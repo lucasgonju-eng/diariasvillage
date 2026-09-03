@@ -40,12 +40,7 @@ function adminCreateStudentApiError(array $result, string $fallback): string
     return $parts ? implode(' | ', array_unique($parts)) : $fallback;
 }
 
-if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
-    Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
-}
-if (($_SESSION['admin_user'] ?? '') !== 'admin') {
-    Helpers::json(['ok' => false, 'error' => 'Recurso disponível apenas para o admin principal.'], 403);
-}
+Helpers::requireAdminRole(\App\AdminAuth::ROLE_ADMIN);
 
 Helpers::requirePost();
 

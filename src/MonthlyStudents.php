@@ -28,22 +28,19 @@ class MonthlyStudents
      */
     public static function load(): array
     {
-        $path = self::storagePath();
-        if (!is_file($path)) {
-            return [];
-        }
-
-        $raw = @file_get_contents($path);
-        if (!is_string($raw) || trim($raw) === '') {
-            return [];
-        }
-        $decoded = json_decode($raw, true);
-        if (!is_array($decoded)) {
-            return [];
+        $client = new SupabaseClient(new HttpClient());
+        $result = $client->select(
+            'monthly_student_plans',
+            'select=student_id,weekly_days,active,updated_at,updated_by,students(name,enrollment),admin_users:updated_by(username)'
+                . '&order=updated_at.desc'
+                . '&limit=10000'
+        );
+        if (!($result['ok'] ?? false) || !is_array($result['data'] ?? null)) {
+            throw new \RuntimeException('Não foi possível confirmar o cadastro de alunos mensalistas.');
         }
 
         $items = [];
-        foreach ($decoded as $row) {
+        foreach ($result['data'] as $row) {
             if (!is_array($row)) {
                 continue;
             }
@@ -55,15 +52,17 @@ class MonthlyStudents
             if (!in_array($weeklyDays, [2, 3, 4, 5], true)) {
                 continue;
             }
+            $student = is_array($row['students'] ?? null) ? $row['students'] : [];
+            $admin = is_array($row['admin_users'] ?? null) ? $row['admin_users'] : [];
 
             $items[] = [
                 'student_id' => $studentId,
-                'student_name' => trim((string) ($row['student_name'] ?? '')),
-                'enrollment' => trim((string) ($row['enrollment'] ?? '')),
+                'student_name' => trim((string) ($student['name'] ?? '')),
+                'enrollment' => trim((string) ($student['enrollment'] ?? '')),
                 'weekly_days' => $weeklyDays,
                 'active' => ($row['active'] ?? true) !== false,
                 'updated_at' => (string) ($row['updated_at'] ?? ''),
-                'updated_by' => trim((string) ($row['updated_by'] ?? '')),
+                'updated_by' => trim((string) ($admin['username'] ?? '')),
             ];
         }
 
@@ -168,10 +167,6 @@ class MonthlyStudents
         $id = trim((string) $studentId);
         if ($id !== '' && isset($plansById[$id])) {
             return $plansById[$id];
-        }
-        $nameKey = self::normalizeText((string) $studentName);
-        if ($nameKey !== '' && isset($plansByName[$nameKey])) {
-            return $plansByName[$nameKey];
         }
         return null;
     }

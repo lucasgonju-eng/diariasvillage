@@ -92,8 +92,6 @@ class Auth
         $attempts = [
             'parent_document=eq.' . urlencode($cpfDigits) . '&select=*',
             'parent_document=eq.' . urlencode($masked) . '&select=*',
-            // Fallback para bases antigas com formatação inesperada.
-            'parent_document=ilike.' . urlencode('*' . $cpfDigits . '*') . '&select=*',
         ];
 
         $last = ['ok' => false, 'data' => []];
@@ -115,7 +113,6 @@ class Auth
         $attempts = [
             'guardian_cpf=eq.' . urlencode($cpfDigits) . '&select=id,verified_at',
             'guardian_cpf=eq.' . urlencode($masked) . '&select=id,verified_at',
-            'guardian_cpf=ilike.' . urlencode('*' . $cpfDigits . '*') . '&select=id,verified_at',
         ];
 
         $last = ['ok' => false, 'data' => []];

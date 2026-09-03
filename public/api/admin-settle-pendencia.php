@@ -6,9 +6,7 @@ use App\HttpClient;
 use App\Mailer;
 use App\SupabaseClient;
 
-if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
-    Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
-}
+Helpers::requireAdminRole(\App\AdminAuth::ROLE_ADMIN);
 
 Helpers::requirePost();
 $payload = json_decode(file_get_contents('php://input'), true);

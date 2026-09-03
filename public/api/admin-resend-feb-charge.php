@@ -100,9 +100,7 @@ function asaasErrorMessage(array $response): string
     return 'Falha ao processar cobrança no Asaas.';
 }
 
-if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
-    \App\Helpers::json(array('ok' => false, 'error' => 'Não autorizado.'), 401);
-}
+\App\Helpers::requireAdminRole(\App\AdminAuth::ROLE_ADMIN);
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
     \App\Helpers::json(array('ok' => false, 'error' => 'Método inválido.'), 405);
@@ -155,6 +153,13 @@ try {
     $studentId = trim((string) ($paymentRow['student_id'] ?? ''));
     if ($guardianId === '' || $studentId === '') {
         \App\Helpers::json(array('ok' => false, 'error' => 'Cobrança sem vínculo válido de responsável/aluno.'), 422);
+    }
+    if ((new \App\Services\MonthlyWorkshopService($client))->getActivePlan($studentId) !== null) {
+        \App\Helpers::json(array(
+            'ok' => false,
+            'code' => 'MONTHLY_PLAN_NO_CHARGE',
+            'error' => 'Aluno mensalista não gera PIX.',
+        ), 409);
     }
 
     $guardianResult = $client->select(

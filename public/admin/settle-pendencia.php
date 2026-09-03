@@ -5,15 +5,7 @@ use App\Helpers;
 use App\HttpClient;
 use App\SupabaseClient;
 
-if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
-    header('Location: /admin/');
-    exit;
-}
-if (($_SESSION['admin_user'] ?? '') !== 'admin') {
-    http_response_code(403);
-    echo 'Acesso negado.';
-    exit;
-}
+Helpers::requireAdminRoleWeb(\App\AdminAuth::ROLE_ADMIN);
 
 $client = new SupabaseClient(new HttpClient());
 $result = $client->select(

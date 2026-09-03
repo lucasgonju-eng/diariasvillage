@@ -5,10 +5,7 @@ use App\Helpers;
 use App\HttpClient;
 use App\SupabaseClient;
 
-$isAdmin = isset($_SESSION['admin_authenticated']) && $_SESSION['admin_authenticated'] === true;
-if (!$isAdmin) {
-    Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
-}
+Helpers::requireAdminRole([\App\AdminAuth::ROLE_ADMIN, \App\AdminAuth::ROLE_SECRETARIA]);
 
 try {
     $client = new SupabaseClient(new HttpClient());

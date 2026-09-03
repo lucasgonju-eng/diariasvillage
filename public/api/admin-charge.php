@@ -79,9 +79,7 @@ function apiErrorMessage(array $response, string $fallback): string
     return $fallback;
 }
 
-if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
-    Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
-}
+Helpers::requireAdminRole(\App\AdminAuth::ROLE_ADMIN);
 
 try {
     Helpers::requirePost();
@@ -211,33 +209,19 @@ try {
         if (is_array($monthlyPlan)) {
             $weeklyDays = (int) ($monthlyPlan['weekly_days'] ?? 0);
             if (in_array($weeklyDays, [2, 3, 4, 5], true)) {
-                $existingResult = $client->select(
-                    'payments',
-                    'select=id,daily_type,payment_date,status&student_id=eq.'
-                        . urlencode((string) $studentRow['id'])
-                        . '&order=payment_date.asc&limit=5000'
-                );
-                $existingRows = ($existingResult['ok'] ?? false) ? ($existingResult['data'] ?? []) : [];
-                $usedByWeek = MonthlyStudents::collectUsedDatesByWeek($existingRows);
-                $split = MonthlyStudents::splitRequestedDatesByQuota($requestedDatesIso, $weeklyDays, $usedByWeek);
-                $monthlyCoveredDates = $split['covered'] ?? [];
-                $monthlyOverflowDates = $split['overflow'] ?? [];
-
-                if (empty($monthlyOverflowDates)) {
-                    $results[] = [
-                        'student_name' => $studentName,
-                        'ok' => true,
-                        'monthly_covered' => true,
-                        'monthly_days' => $weeklyDays,
-                        'covered_dates' => $monthlyCoveredDates,
-                        'overflow_dates' => [],
-                        'message' => sprintf(
-                            'Aluno mensalista (%d dias). Nenhuma cobrança gerada para as datas dentro da franquia semanal.',
-                            $weeklyDays
-                        ),
-                    ];
-                    continue;
-                }
+                $results[] = [
+                    'student_name' => $studentName,
+                    'ok' => true,
+                    'monthly_covered' => true,
+                    'monthly_days' => $weeklyDays,
+                    'covered_dates' => $requestedDatesIso,
+                    'overflow_dates' => [],
+                    'message' => sprintf(
+                        'Aluno mensalista (%d dias). Nenhuma cobrança é gerada para mensalistas.',
+                        $weeklyDays
+                    ),
+                ];
+                continue;
             }
         }
 

@@ -16,6 +16,7 @@ use App\AsaasCustomerIdentity;
 use App\Helpers;
 use App\HttpClient;
 use App\Mailer;
+use App\Services\MonthlyWorkshopService;
 use App\SupabaseClient;
 
 $extractAsaasError = static function (array $response): string {
@@ -93,6 +94,15 @@ if (!$diaria['ok'] || empty($diaria['data'])) {
 }
 
 $diariaRow = $diaria['data'][0];
+$diariaStudentId = trim((string) ($diariaRow['student_id'] ?? ''));
+if ($diariaStudentId !== '' && (new MonthlyWorkshopService($client))->getActivePlan($diariaStudentId) !== null) {
+    Helpers::json([
+        'ok' => false,
+        'code' => 'MONTHLY_PLAN_NO_CHARGE',
+        'error' => 'Aluno mensalista não gera PIX. Confirme as oficinas no fluxo mensal.',
+        'redirect_to' => '/monthly-workshops.php',
+    ], 409);
+}
 if (!($diariaRow['grade_oficina_modular_ok'] ?? false)) {
     Helpers::json([
         'ok' => false,
