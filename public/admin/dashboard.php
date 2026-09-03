@@ -681,12 +681,10 @@ if (!empty($exclusionsLog)) {
     .bulk-mail-compose{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
     .bulk-mail-editor{min-height:340px;resize:vertical}
     .bulk-mail-visual{
+      width:100%;
       min-height:340px;
-      max-height:680px;
-      overflow:auto;
       border:1px solid #CBD5E1;
       border-radius:10px;
-      padding:12px;
       background:#fff;
       color:#0F172A;
     }
@@ -2289,8 +2287,13 @@ if (!empty($exclusionsLog)) {
             <textarea id="bulk-mail-html" class="bulk-mail-editor" placeholder="Cole ou escreva o HTML completo do e-mail"></textarea>
           </div>
           <div class="form-group">
-            <label>Visão do usuário (editável)</label>
-            <div id="bulk-mail-visual" class="bulk-mail-visual" contenteditable="true"></div>
+            <label for="bulk-mail-visual">Visão do usuário (editável, sanitizada e isolada)</label>
+            <iframe
+              id="bulk-mail-visual"
+              class="bulk-mail-visual"
+              sandbox="allow-same-origin"
+              title="Prévia segura e editável do e-mail"
+            ></iframe>
           </div>
         </div>
 
@@ -2309,11 +2312,11 @@ if (!empty($exclusionsLog)) {
 
   <script>
     window.__adminDashboardBooted = false;
-    window.__adminStudents = <?php echo json_encode($studentsForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
-    window.__monthlyStudents = <?php echo json_encode($monthlyRowsForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
+    window.__adminStudents = <?php echo json_encode($studentsForJs, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+    window.__monthlyStudents = <?php echo json_encode($monthlyRowsForJs, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
     window.__adminCanApproveAttendance = <?php echo $canAttendanceApprove ? 'true' : 'false'; ?>;
   </script>
-  <script src="/assets/js/admin-dashboard.js?v=79"></script>
+  <script src="/assets/js/admin-dashboard.js?v=80"></script>
   <script>
     (function () {
       function activateTab(name) {

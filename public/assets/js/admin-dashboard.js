@@ -201,6 +201,7 @@ let bulkMailStudents = [];
 let bulkMailTemplates = [];
 const bulkMailSelectedIds = new Set();
 let bulkMailSyncingEditors = false;
+const bulkMailVisualBoundDocuments = new WeakSet();
 let adminDialogInstance = null;
 
 function ensureAdminDialog() {
@@ -830,6 +831,120 @@ function escapeHtml(value) {
     .replaceAll("'", '&#39;');
 }
 
+function safeAsaasHttpsUrl(value) {
+  try {
+    const parsed = new URL(String(value || '').trim());
+    const host = parsed.hostname.toLowerCase();
+    return (
+      parsed.protocol === 'https:'
+      && (host === 'asaas.com' || host.endsWith('.asaas.com'))
+    ) ? parsed.href : '';
+  } catch {
+    return '';
+  }
+}
+
+function safeSameOriginUrl(value, fallback = '/dashboard.php') {
+  try {
+    const parsed = new URL(String(value || '').trim(), window.location.origin);
+    if (!['http:', 'https:'].includes(parsed.protocol) || parsed.origin !== window.location.origin) {
+      return fallback;
+    }
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return fallback;
+  }
+}
+
+function isSafeBulkMailUrl(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return true;
+  if (/^\{\{(?:LINK_PAGAMENTO|LINK_SUPORTE|URL_MASCOTE)\}\}$/.test(raw)) return true;
+  if (raw.startsWith('#')) return true;
+  try {
+    const parsed = new URL(raw, window.location.origin);
+    return ['http:', 'https:', 'mailto:', 'tel:', 'cid:'].includes(parsed.protocol)
+      || /^data:image\/(?:png|gif|jpe?g|webp);base64,/i.test(raw);
+  } catch {
+    return false;
+  }
+}
+
+function sanitizeBulkMailHtml(value) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(String(value || ''), 'text/html');
+  const forbiddenElements = [
+    'script',
+    'iframe',
+    'object',
+    'embed',
+    'svg',
+    'math',
+    'form',
+    'input',
+    'button',
+    'textarea',
+    'select',
+    'option',
+    'base',
+    'meta[http-equiv]',
+    'link[rel="import"]',
+    'template',
+    'noscript',
+    'noembed',
+    'noframes',
+    'xmp',
+    'plaintext',
+  ];
+  doc.querySelectorAll(forbiddenElements.join(',')).forEach((node) => node.remove());
+  doc.querySelectorAll('*').forEach((node) => {
+    [...node.attributes].forEach((attribute) => {
+      const name = attribute.name.toLowerCase();
+      const attributeValue = attribute.value;
+      if (
+        name.startsWith('on')
+        || ['srcdoc', 'action', 'formaction'].includes(name)
+        || (
+          name === 'style'
+          && /(?:expression\s*\(|url\s*\(|@import|-moz-binding|behavior\s*:)/i.test(attributeValue)
+        )
+      ) {
+        node.removeAttribute(attribute.name);
+        return;
+      }
+      if (
+        ['href', 'src', 'background', 'poster', 'xlink:href'].includes(name)
+        && !isSafeBulkMailUrl(attributeValue)
+      ) {
+        node.removeAttribute(attribute.name);
+      }
+    });
+  });
+  return `<!doctype html>\n${doc.documentElement.outerHTML}`;
+}
+
+function buildBulkMailPreviewHtml(value) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(sanitizeBulkMailHtml(value), 'text/html');
+  const securityPolicy = doc.createElement('meta');
+  securityPolicy.setAttribute('http-equiv', 'Content-Security-Policy');
+  securityPolicy.setAttribute(
+    'content',
+    "default-src 'none'; img-src https: data:; style-src 'unsafe-inline'; font-src https: data:; form-action 'none'; base-uri 'none'",
+  );
+  securityPolicy.dataset.bulkMailPreviewSecurity = 'true';
+  doc.head.prepend(securityPolicy);
+  doc.body.contentEditable = 'true';
+  doc.body.spellcheck = true;
+  return `<!doctype html>\n${doc.documentElement.outerHTML}`;
+}
+
+function getBulkMailVisualDocument() {
+  return bulkMailVisualInput instanceof HTMLIFrameElement
+    ? bulkMailVisualInput.contentDocument
+    : null;
+}
+
 function normalizeSearchText(value) {
   return String(value || '')
     .normalize('NFD')
@@ -1057,7 +1172,7 @@ function renderCashflowRows(items) {
       return `
       <tr data-payment-id="${escapeHtml(item.id || '')}">
         <td>${escapeHtml(item.student_name || '-')}</td>
-        <td>${formatDateBR(item.date)}</td>
+        <td>${escapeHtml(formatDateBR(item.date))}</td>
         <td>${escapeHtml(item.day_use_type || '-')}</td>
         <td>${escapeHtml(item.enrollment || '-')}</td>
         <td>${formatCurrency(item.amount)}</td>
@@ -1101,8 +1216,8 @@ function renderCashflowSummary(totals, period, monthlyAdjustment = null) {
     ? `<span class="cashflow-pill">Subtraído mensalistas: ${formatCurrency(monthlyAmount)} (${monthlyCount} registro(s) • Aluno mensalista)</span>`
     : '';
   cashflowSummary.innerHTML = `
-    <span class="cashflow-pill">Período: ${formatDateBR(period?.from)} até ${formatDateBR(period?.to)}</span>
-    <span class="cashflow-pill">Registros: ${normalizedTotals.count || 0}</span>
+    <span class="cashflow-pill">Período: ${escapeHtml(formatDateBR(period?.from))} até ${escapeHtml(formatDateBR(period?.to))}</span>
+    <span class="cashflow-pill">Registros: ${Number(normalizedTotals.count || 0)}</span>
     <span class="cashflow-pill">Total geral: ${formatCurrency(normalizedTotals.amount || 0)}</span>
     <span class="cashflow-pill">Total pago: ${formatCurrency(normalizedTotals.paid_amount || 0)}</span>
     <span class="cashflow-pill">Conta Inter CI (PIX_MANUAL): ${formatCurrency(interManual)}</span>
@@ -1202,8 +1317,9 @@ function renderAsaasGroupRows(tbody, items) {
   }
   tbody.innerHTML = list
     .map((item) => {
-      const link = item.invoice_url
-        ? `<a href="${escapeHtml(item.invoice_url)}" target="_blank" rel="noopener">Abrir</a>`
+      const safeInvoiceUrl = safeAsaasHttpsUrl(item.invoice_url);
+      const link = safeInvoiceUrl
+        ? `<a href="${escapeHtml(safeInvoiceUrl)}" target="_blank" rel="noopener noreferrer">Abrir</a>`
         : '-';
       const customer = [item.student_name, item.customer_name, item.customer_id].filter(Boolean).join(' • ') || '-';
       const fee = Number(item.fee_value || 0);
@@ -1216,10 +1332,10 @@ function renderAsaasGroupRows(tbody, items) {
       <tr class="${rowClass}">
         <td>${escapeHtml(item.id || '-')}</td>
         <td>${escapeHtml(item.status || '-')}</td>
-        <td>${customer}</td>
+        <td>${escapeHtml(customer)}</td>
         <td>${escapeHtml(item.description || '-')}</td>
-        <td>${formatDateBR(dueDate)}</td>
-        <td>${formatDateTimeBR(paidAt)}</td>
+        <td>${escapeHtml(formatDateBR(dueDate))}</td>
+        <td>${escapeHtml(formatDateTimeBR(paidAt))}</td>
         <td>${escapeHtml(billingType)}</td>
         <td>${formatCurrency(item.value)}</td>
         <td>${formatCurrency(fee)}</td>
@@ -1339,14 +1455,14 @@ function renderAsaasSummary(groups, generatedAt, warnings) {
     ? 'Saldo disponível Asaas: n/d'
     : `Saldo disponível Asaas: ${formatCurrency(balanceAvailable)}`;
   asaasDataSummary.innerHTML = `
-    <span class="cashflow-pill">Atualizado em: ${formatDateTimeBR(generatedAt)}</span>
+    <span class="cashflow-pill">Atualizado em: ${escapeHtml(formatDateTimeBR(generatedAt))}</span>
     <span class="cashflow-pill">Créditos extrato: ${formatCurrency(creditsTotal)}</span>
     <span class="cashflow-pill">Realizações Inter CI: ${formatCurrency(realizationTotal)}</span>
     <span class="cashflow-pill">Outros débitos: ${formatCurrency(debitsTotal)}</span>
     <span class="cashflow-pill">Taxas no período: ${formatCurrency(feeTotal)}</span>
     <span class="cashflow-pill">Líquido do período: ${formatCurrency(netTotal)}</span>
     <span class="cashflow-pill">${balanceLabel}</span>
-    <span class="cashflow-pill">Itens de taxa/desconto: ${taxas.count || 0}</span>
+    <span class="cashflow-pill">Itens de taxa/desconto: ${Number(taxas.count || 0)}</span>
     <span class="cashflow-pill">Avisos: ${warnCount}</span>
   `;
 }
@@ -1554,7 +1670,7 @@ async function addChargeItem(studentRecord) {
   wrapper.dataset.guardianId = '';
   wrapper.innerHTML = `
     <div class="charge-header">
-      <strong>Aluno: ${studentName}</strong>
+      <strong>Aluno: ${escapeHtml(studentName)}</strong>
       <button class="btn btn-ghost btn-sm" type="button">Remover</button>
     </div>
     <div class="charge-fields">
@@ -2015,15 +2131,43 @@ function renderBulkMailRecipients() {
 function syncBulkMailVisualFromHtml() {
   if (!bulkMailHtmlInput || !bulkMailVisualInput || bulkMailSyncingEditors) return;
   bulkMailSyncingEditors = true;
-  bulkMailVisualInput.innerHTML = bulkMailHtmlInput.value || '';
+  bulkMailVisualInput.srcdoc = buildBulkMailPreviewHtml(bulkMailHtmlInput.value || '');
   bulkMailSyncingEditors = false;
 }
 
 function syncBulkMailHtmlFromVisual() {
   if (!bulkMailHtmlInput || !bulkMailVisualInput || bulkMailSyncingEditors) return;
+  const visualDocument = getBulkMailVisualDocument();
+  if (!visualDocument?.documentElement) return;
   bulkMailSyncingEditors = true;
-  bulkMailHtmlInput.value = bulkMailVisualInput.innerHTML || '';
+  const clone = visualDocument.documentElement.cloneNode(true);
+  clone.querySelector('meta[data-bulk-mail-preview-security="true"]')?.remove();
+  const body = clone.querySelector('body');
+  body?.removeAttribute('contenteditable');
+  body?.removeAttribute('spellcheck');
+  bulkMailHtmlInput.value = sanitizeBulkMailHtml(`<!doctype html>\n${clone.outerHTML}`);
   bulkMailSyncingEditors = false;
+}
+
+function bindBulkMailVisualEditor() {
+  const visualDocument = getBulkMailVisualDocument();
+  if (!visualDocument?.body || bulkMailVisualBoundDocuments.has(visualDocument)) return;
+  bulkMailVisualBoundDocuments.add(visualDocument);
+  visualDocument.body.addEventListener('paste', (event) => {
+    event.preventDefault();
+    const plainText = event.clipboardData?.getData('text/plain') || '';
+    visualDocument.execCommand('insertText', false, plainText);
+  });
+  visualDocument.body.addEventListener('drop', (event) => {
+    event.preventDefault();
+  });
+  visualDocument.body.addEventListener('input', () => {
+    syncBulkMailHtmlFromVisual();
+  });
+  visualDocument.body.addEventListener('blur', () => {
+    syncBulkMailHtmlFromVisual();
+    syncBulkMailVisualFromHtml();
+  });
 }
 
 async function loadBulkMailData(force = false) {
@@ -3150,9 +3294,7 @@ if (bulkMailHtmlInput) {
 }
 
 if (bulkMailVisualInput) {
-  bulkMailVisualInput.addEventListener('input', () => {
-    syncBulkMailHtmlFromVisual();
-  });
+  bulkMailVisualInput.addEventListener('load', bindBulkMailVisualEditor);
 }
 
 if (bulkMailTemplateLoadButton) {
@@ -5528,7 +5670,7 @@ if (viewUserButton && viewUserStudentInput) {
         await showAdminAlert(data.error || 'Falha ao abrir visão de usuário.');
         return;
       }
-      const url = data.url || '/dashboard.php';
+      const url = safeSameOriginUrl(data.url || '/dashboard.php');
       const win = window.open(url, '_blank', 'noopener');
       if (!win) {
         window.location.href = url;

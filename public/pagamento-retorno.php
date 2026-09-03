@@ -17,7 +17,19 @@ use App\SupabaseClient;
 
 $user = Helpers::requireAuthWeb();
 $diariaId = isset($_GET['diariaId']) ? trim((string) $_GET['diariaId']) : '';
-$invoiceUrl = isset($_GET['invoiceUrl']) ? trim((string) $_GET['invoiceUrl']) : '';
+$invoiceUrlCandidate = isset($_GET['invoiceUrl']) ? trim((string) $_GET['invoiceUrl']) : '';
+$invoiceUrl = '';
+if (filter_var($invoiceUrlCandidate, FILTER_VALIDATE_URL)) {
+    $invoiceParts = parse_url($invoiceUrlCandidate);
+    $invoiceScheme = strtolower((string) ($invoiceParts['scheme'] ?? ''));
+    $invoiceHost = strtolower((string) ($invoiceParts['host'] ?? ''));
+    if (
+        $invoiceScheme === 'https'
+        && ($invoiceHost === 'asaas.com' || str_ends_with($invoiceHost, '.asaas.com'))
+    ) {
+        $invoiceUrl = $invoiceUrlCandidate;
+    }
+}
 if ($diariaId === '') {
     header('Location: /dashboard.php');
     exit;

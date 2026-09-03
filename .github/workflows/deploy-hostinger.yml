@@ -51,6 +51,7 @@ jobs:
           php tests/authentication_security_test.php
           php tests/guardian_account_identity_test.php
           php tests/family_student_selection_test.php
+          php tests/xss_security_test.php
           php tests/monthly_workshop_security_test.php
           php tests/monthly_legacy_charge_audit_test.php
 

@@ -281,10 +281,10 @@ function persistTemplates(array $templates): bool
     ) !== false;
 }
 
-function replacePlaceholders(string $text, array $context): string
+function replacePlaceholders(string $text, array $context, bool $htmlContext = false): string
 {
     $studentName = (string) ($context['student_name'] ?? '');
-    return strtr($text, [
+    $replacements = [
         '{{NOME_ALUNO}}' => (string) ($context['student_name'] ?? ''),
         '{{NOME}}' => $studentName !== '' ? $studentName : (string) ($context['guardian_name'] ?? 'Responsável'),
         '{{MATRICULA}}' => (string) ($context['enrollment'] ?? ''),
@@ -292,7 +292,14 @@ function replacePlaceholders(string $text, array $context): string
         '{{LINK_PAGAMENTO}}' => (string) ($context['link_pagamento'] ?? '#'),
         '{{LINK_SUPORTE}}' => (string) ($context['link_suporte'] ?? '#'),
         '{{URL_MASCOTE}}' => (string) ($context['url_mascote'] ?? ''),
-    ]);
+    ];
+    if ($htmlContext) {
+        $replacements = array_map(
+            static fn(string $value): string => htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+            $replacements
+        );
+    }
+    return strtr($text, $replacements);
 }
 
 function extractValidEmails(string $raw): array
@@ -715,7 +722,7 @@ if ($action === 'send') {
                 'url_mascote' => $baseUrl . '/assets/img/mascote-village.png',
             ];
             $resolvedSubject = replacePlaceholders($subject, $context);
-            $resolvedHtml = replacePlaceholders($html, $context);
+            $resolvedHtml = replacePlaceholders($html, $context, true);
 
             $mailResult = $mailer->send($email, $resolvedSubject, $resolvedHtml);
             if ($mailResult['ok'] ?? false) {
@@ -809,7 +816,7 @@ if ($action === 'send_test') {
     ];
 
     $resolvedSubject = replacePlaceholders($subject, $context);
-    $resolvedHtml = replacePlaceholders($html, $context);
+    $resolvedHtml = replacePlaceholders($html, $context, true);
     $mailer = new Mailer();
     $result = $mailer->send('lucasgonju@gmail.com', $resolvedSubject, $resolvedHtml);
     if (!($result['ok'] ?? false)) {

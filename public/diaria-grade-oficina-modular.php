@@ -799,6 +799,34 @@ if (!empty($oficinasUi)) {
       return 'Desenvolvimento integral com foco em competências emocionais, cognitivas e práticas aplicadas ao contexto da oficina.';
     }
 
+    function safeSameOriginPath(value) {
+      try {
+        const parsed = new URL(String(value || ''), window.location.origin);
+        if (!['http:', 'https:'].includes(parsed.protocol) || parsed.origin !== window.location.origin) {
+          return '';
+        }
+        return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+      } catch (_) {
+        return '';
+      }
+    }
+
+    function safeAsaasInvoiceUrl(value) {
+      try {
+        const parsed = new URL(String(value || ''));
+        const host = parsed.hostname.toLowerCase();
+        if (
+          parsed.protocol !== 'https:'
+          || (host !== 'asaas.com' && !host.endsWith('.asaas.com'))
+        ) {
+          return '';
+        }
+        return parsed.href;
+      } catch (_) {
+        return '';
+      }
+    }
+
     function recalcStatuses() {
       state.oficinas = state.oficinas.map((of) => {
         if (!of.slot_id_dia) {
@@ -1197,7 +1225,8 @@ if (!empty($oficinasUi)) {
             return;
           }
           if (r.data.redirect_url) {
-            window.location.href = r.data.redirect_url;
+            const redirectPath = safeSameOriginPath(r.data.redirect_url);
+            if (redirectPath) window.location.href = redirectPath;
           }
         });
       });
@@ -1292,7 +1321,8 @@ if (!empty($oficinasUi)) {
         return;
       }
       if (r.data.redirect_url) {
-        window.location.href = r.data.redirect_url;
+        const redirectPath = safeSameOriginPath(r.data.redirect_url);
+        if (redirectPath) window.location.href = redirectPath;
       }
     }
 
@@ -1485,6 +1515,11 @@ if (!empty($oficinasUi)) {
         }
         checkoutMessage.textContent = 'Pagamento criado. Redirecionando...';
         if (r.data.invoice_url && r.data.invoice_url !== '#') {
+          const invoiceUrl = safeAsaasInvoiceUrl(r.data.invoice_url);
+          if (!invoiceUrl) {
+            checkoutMessage.textContent = 'Pagamento criado, mas o link retornado pelo Asaas é inválido.';
+            return;
+          }
           try {
             if (r.data.payment_id) {
               sessionStorage.setItem('pendingPaymentId', String(r.data.payment_id));
@@ -1493,7 +1528,7 @@ if (!empty($oficinasUi)) {
             // Segue normalmente mesmo sem storage.
           }
           // iPhone/Safari: mantém fluxo estável abrindo o Asaas na mesma aba.
-          window.location.href = r.data.invoice_url;
+          window.location.href = invoiceUrl;
           return;
         }
         checkoutMessage.textContent = 'Pagamento criado, mas não foi possível abrir o link do Asaas.';

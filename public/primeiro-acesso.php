@@ -189,6 +189,6 @@ foreach ($bootstrapCandidates as $bootstrapFile) {
     </div>
   </footer>
 
-  <script src="/assets/js/app.js?v=6"></script>
+  <script src="/assets/js/app.js?v=7"></script>
 </body>
 </html>

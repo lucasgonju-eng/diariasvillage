@@ -259,7 +259,7 @@ account_check(
     'auditoria STARTED deve anteceder a alteração remota'
 );
 account_check(str_contains($dashboard, 'id="reset-guardian"'), 'dashboard deve mostrar seleção explícita');
-account_check(str_contains($dashboard, 'admin-dashboard.js?v=79'), 'dashboard deve invalidar cache do JavaScript');
+account_check(str_contains($dashboard, 'admin-dashboard.js?v=80'), 'dashboard deve invalidar cache do JavaScript');
 account_check(
     str_contains($javascript, "action: 'lookup'") && str_contains($javascript, 'guardian_id: guardianId'),
     'frontend deve consultar identidade e enviar o guardian_id escolhido'

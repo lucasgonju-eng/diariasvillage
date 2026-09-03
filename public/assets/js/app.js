@@ -113,9 +113,13 @@ async function searchStudentsForFirstAccess() {
       return;
     }
     if (studentCandidateSelect) {
-      studentCandidateSelect.innerHTML = studentCandidates
-        .map((candidate, idx) => `<option value="${idx}">${candidateLabel(candidate)}</option>`)
-        .join('');
+      studentCandidateSelect.replaceChildren();
+      studentCandidates.forEach((candidate, idx) => {
+        const option = document.createElement('option');
+        option.value = String(idx);
+        option.textContent = candidateLabel(candidate);
+        studentCandidateSelect.appendChild(option);
+      });
       studentCandidateSelect.value = '0';
     }
     if (studentConfirmWrap) studentConfirmWrap.style.display = 'block';

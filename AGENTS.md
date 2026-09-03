@@ -363,6 +363,23 @@ SSRF/RCE no carregamento de arquivos enviados.
   Não remova a limpeza dos seis backups legados do servidor enquanto o deploy
   continuar sendo feito por sobreposição.
 
+## Saída HTML e navegação no navegador
+
+- Dados de aluno, responsável, cobrança ou Asaas nunca entram em `innerHTML`
+  sem `escapeHtml`; prefira `textContent` e criação explícita de elementos.
+- JSON emitido dentro de `<script>` deve usar `JSON_HEX_TAG`, `JSON_HEX_AMP`,
+  `JSON_HEX_APOS` e `JSON_HEX_QUOT`.
+- A prévia visual de e-mail sanitiza elementos executáveis, atributos `on*`,
+  estilos com URL e protocolos perigosos. Colagem rica não pode inserir HTML
+  diretamente.
+- Placeholders vindos do banco são escapados antes de entrar no corpo HTML de
+  e-mails. O assunto continua sendo tratado como texto.
+- URLs externas abertas pelo navegador exigem HTTPS. Links rotulados como
+  Asaas devem pertencer a `asaas.com` ou subdomínio; redirecionamentos internos
+  devem permanecer na mesma origem.
+- Mudanças nesses controles devem manter `tests/xss_security_test.php` e
+  avançar as versões de cache dos JavaScripts alterados.
+
 ## Limpeza executada
 
 - O responsável contaminado de Fernando
@@ -395,6 +412,7 @@ php tests/payment_lifecycle_behavior_test.php
 php tests/authentication_security_test.php
 php tests/guardian_account_identity_test.php
 php tests/family_student_selection_test.php
+php tests/xss_security_test.php
 php tests/monthly_workshop_security_test.php
 php tests/monthly_legacy_charge_audit_test.php
 php -l public/api/admin-charge.php
