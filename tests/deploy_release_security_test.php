@@ -32,6 +32,7 @@ $order = static function (string $label, string $content, string $first, string 
 
 $workflow = $read($root . '/.github/workflows/deploy-hostinger.yml');
 $dispatcher = $read($root . '/ops/hostinger-root.htaccess');
+$releaseHtaccess = $read($root . '/public/.htaccess');
 $health = $read($root . '/public/health.php');
 $bulkEmail = $read($root . '/public/api/admin-bulk-email.php');
 $bootstrap = $read($root . '/src/Bootstrap.php');
@@ -77,6 +78,16 @@ $contains(
 );
 $contains('dispatcher', $dispatcher, 'RewriteRule ^(.*)$ .releases/current/$1 [L]');
 $contains('dispatcher', $dispatcher, 'RewriteRule ^\.well-known(?:/|$) - [L]');
+$contains(
+    '.htaccess da release',
+    $releaseHtaccess,
+    'RewriteCond %{THE_REQUEST} "\s/+\.releases(?:[/\s?]|$)" [NC]'
+);
+$contains(
+    '.htaccess da release',
+    $releaseHtaccess,
+    'RewriteCond %{THE_REQUEST} "\s/+[^?\s]*%" [NC]'
+);
 
 $contains('health', $health, "'release_manifest_missing'");
 $contains('health', $health, "'release_incomplete'");

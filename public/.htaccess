@@ -9,6 +9,11 @@ Options -Indexes
 <IfModule mod_rewrite.c>
     RewriteEngine On
     RewriteBase /
+    # Defesa em profundidade para acesso que já entrou por .releases/current.
+    RewriteCond %{THE_REQUEST} "\s/+[^?\s]*%" [NC]
+    RewriteRule ^ - [F,L]
+    RewriteCond %{THE_REQUEST} "\s/+\.releases(?:[/\s?]|$)" [NC]
+    RewriteRule ^ - [F,L]
     RewriteRule ^(?:storage|\.releases|\.legacy-root|\.trash)(?:/|$) - [F,L,NC]
     # Redirecionamento temporário do domínio antigo para o novo.
     RewriteCond %{HTTP_HOST} ^(www\.)?village\.einsteinhub\.co$ [NC]
