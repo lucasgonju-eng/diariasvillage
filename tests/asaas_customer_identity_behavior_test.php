@@ -109,6 +109,42 @@ check_identity_behavior(
     'sincronização deve transportar a identidade completa'
 );
 
+$readOnlyAsaas = new FakeIdentityAsaasClient();
+$readOnlyAsaas->remoteCustomer = [
+    'id' => 'cus_family',
+    'name' => 'Maria da Silva',
+    'email' => 'maria@example.com',
+    'cpfCnpj' => '52998224725',
+    'deleted' => false,
+];
+$readOnlyDatabase = new FakeIdentitySupabaseClient();
+$readOnlyValidation = (new AsaasCustomerIdentity($readOnlyAsaas, $readOnlyDatabase))
+    ->validateExisting(guardian_fixture(), 'cus_family');
+check_identity_behavior(
+    ($readOnlyValidation['ok'] ?? false) === true
+        && array_column($readOnlyAsaas->calls, 'method') === ['getCustomer'],
+    'validação administrativa deve consultar o cliente sem sincronizá-lo'
+);
+check_identity_behavior(
+    $readOnlyDatabase->updates === [],
+    'validação administrativa não pode alterar vínculo local'
+);
+check_identity_behavior(
+    ($readOnlyValidation['identity_fingerprint'] ?? '')
+        === AsaasCustomerIdentity::identityFingerprint(guardian_fixture())
+        && preg_match('/^[a-f0-9]{64}$/', (string) ($readOnlyValidation['identity_fingerprint'] ?? '')) === 1,
+    'validação deve transportar fingerprint SHA-256 da identidade observada'
+);
+
+$readOnlyAsaas->calls = [];
+$readOnlyAsaas->remoteCustomer['email'] = 'outra@example.com';
+$readOnlyConflict = (new AsaasCustomerIdentity($readOnlyAsaas, $readOnlyDatabase))
+    ->validateExisting(guardian_fixture(), 'cus_family');
+check_identity_behavior(
+    ($readOnlyConflict['code'] ?? '') === 'ASAAS_CUSTOMER_IDENTITY_CONFLICT',
+    'validação administrativa deve bloquear identidade remota divergente'
+);
+
 [$localConflict, $localConflictAsaas] = resolve_with_remote(
     [
         'id' => 'cus_family',

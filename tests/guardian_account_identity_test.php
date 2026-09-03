@@ -157,8 +157,45 @@ $mixedLinks = $familyRows;
 $mixedLinks[1]['auth_user_id'] = null;
 $mixedAnalysis = GuardianAccountIdentity::analyze($mixedLinks);
 account_check(
-    ($mixedAnalysis['code'] ?? '') === 'GUARDIAN_AUTH_LINK_INCOMPLETE',
-    'vínculo Auth parcial deve bloquear'
+    ($mixedAnalysis['code'] ?? '') === 'GUARDIAN_UNLINKED_EMAIL_CONFLICT',
+    'vínculo legado com outro e-mail real deve bloquear'
+);
+
+$legacySibling = account_guardian(
+    '10000000-0000-4000-8000-000000000002',
+    'sem-email-40094@diariasvillage.local'
+);
+$isolatedAccount = GuardianAccountIdentity::analyze([$familyRows[0], $legacySibling]);
+account_check(
+    ($isolatedAccount['ok'] ?? false) === true
+        && ($isolatedAccount['mode'] ?? '') === 'supabase_auth',
+    'conta ativada deve poder entrar sem herdar irmão legado com e-mail placeholder'
+);
+account_check(
+    count($isolatedAccount['guardians'] ?? []) === 1
+        && ($isolatedAccount['unlinked_guardian_count'] ?? 0) === 1,
+    'irmão legado deve permanecer fora da conta até aprovação humana'
+);
+
+$activatedLegacySibling = $legacySibling;
+$activatedLegacySibling['first_access_completed_at'] = '2026-09-01T12:00:00Z';
+$activatedLegacySiblingAnalysis = GuardianAccountIdentity::analyze([$familyRows[0], $activatedLegacySibling]);
+account_check(
+    ($activatedLegacySiblingAnalysis['code'] ?? '') === 'GUARDIAN_AUTH_LINK_INCOMPLETE',
+    'vínculo legado já ativado sem UUID Auth deve continuar bloqueado'
+);
+
+$linkedWithCustomer = $familyRows[0];
+$linkedWithCustomer['asaas_customer_id'] = 'cus_linked';
+$legacySiblingWithOtherCustomer = $legacySibling;
+$legacySiblingWithOtherCustomer['asaas_customer_id'] = 'cus_other';
+$asaasConflictAnalysis = GuardianAccountIdentity::analyze([
+    $linkedWithCustomer,
+    $legacySiblingWithOtherCustomer,
+]);
+account_check(
+    ($asaasConflictAnalysis['code'] ?? '') === 'GUARDIAN_ASAAS_LINK_CONFLICT',
+    'filhos com clientes Asaas diferentes devem bloquear antes do login'
 );
 
 $multipleAccounts = $familyRows;
@@ -196,6 +233,20 @@ $authClient->responses['maria@example.com'] = [
 ];
 $authLogin = (new Auth($authDatabase, $authClient))->login('52998224725', 'senha-nova');
 account_check(($authLogin['ok'] ?? false) === true, 'login Auth deve aceitar somente o UUID vinculado');
+
+$isolatedDatabase = new AccountIdentityFakeDatabase();
+$isolatedDatabase->cpfRows = [$familyRows[0], $legacySibling];
+$isolatedDatabase->accountRows = [$familyRows[0]];
+$isolatedAuthClient = new AccountIdentityFakeAuth();
+$isolatedAuthClient->responses['maria@example.com'] = [
+    'ok' => true,
+    'data' => ['user' => ['id' => $sharedAuthId]],
+];
+$isolatedLogin = (new Auth($isolatedDatabase, $isolatedAuthClient))->login('52998224725', 'senha-nova');
+account_check(
+    ($isolatedLogin['ok'] ?? false) === true,
+    'login deve liberar apenas o filho vinculado quando existir irmão legado seguro'
+);
 
 $wrongAuthDatabase = new AccountIdentityFakeDatabase();
 $wrongAuthDatabase->cpfRows = $familyRows;

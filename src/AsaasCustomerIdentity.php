@@ -141,6 +141,65 @@ final class AsaasCustomerIdentity
         ];
     }
 
+    public function validateExisting(array $guardian, string $customerId): array
+    {
+        $customerId = trim($customerId);
+        $name = trim((string) ($guardian['parent_name'] ?? ''));
+        $email = strtolower(trim((string) ($guardian['email'] ?? '')));
+        $document = self::normalizeDocument((string) ($guardian['parent_document'] ?? ''));
+        if (
+            $customerId === ''
+            || $name === ''
+            || !GuardianAccountIdentity::isUsableEmail($email)
+            || !self::isValidCpfOrCnpj($document)
+        ) {
+            return self::failure(
+                'GUARDIAN_IDENTITY_INCOMPLETE',
+                'A identidade do responsável está incompleta para validar o cliente Asaas.',
+                422
+            );
+        }
+
+        $remote = $this->asaas->getCustomer($customerId);
+        if (!($remote['ok'] ?? false) || !is_array($remote['data'] ?? null)) {
+            return self::failure(
+                'ASAAS_CUSTOMER_LOOKUP_FAILED',
+                'Não foi possível conferir o cliente vinculado no Asaas.',
+                (int) ($remote['status'] ?? 0) === 404 ? 409 : 502
+            );
+        }
+
+        $remoteCustomer = $remote['data'];
+        $remoteId = trim((string) ($remoteCustomer['id'] ?? ''));
+        if (
+            $remoteId === ''
+            || !hash_equals($customerId, $remoteId)
+            || (bool) ($remoteCustomer['deleted'] ?? false)
+            || !self::matchesRemoteCustomer($remoteCustomer, $name, $email, $document)
+        ) {
+            return self::failure(
+                'ASAAS_CUSTOMER_IDENTITY_CONFLICT',
+                'O cliente Asaas vinculado diverge da identidade do responsável.',
+                409
+            );
+        }
+
+        return [
+            'ok' => true,
+            'customer_id' => $customerId,
+            'document' => $document,
+            'identity_fingerprint' => self::identityFingerprint($guardian),
+        ];
+    }
+
+    public static function identityFingerprint(array $guardian): string
+    {
+        $name = mb_strtolower(trim((string) ($guardian['parent_name'] ?? '')), 'UTF-8');
+        $email = strtolower(trim((string) ($guardian['email'] ?? '')));
+        $document = self::normalizeDocument((string) ($guardian['parent_document'] ?? ''));
+        return hash('sha256', $name . "\n" . $email . "\n" . $document);
+    }
+
     public static function normalizeDocument(string $value): string
     {
         return preg_replace('/\D+/', '', $value) ?? '';

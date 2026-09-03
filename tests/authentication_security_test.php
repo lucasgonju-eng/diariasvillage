@@ -187,6 +187,11 @@ $assertOrder('Auth antes da conclusão', $register, '$auth->createUser(', "rpc('
 $assertNotContains('primeiro acesso não redefine Auth', $register, '$auth->updateUser(');
 $assertNotContains('primeiro acesso não procura usuário para redefinir', $register, '$auth->listUsers(');
 $assertNotContains('primeiro acesso não atualiza guardians fora da RPC', $register, "\$client->update(\n    'guardians'");
+$assertContains(
+    'primeiro acesso deve rejeitar e-mail sintético',
+    $register,
+    'GuardianAccountIdentity::isUsableEmail($email)'
+);
 $assertContains('cadastro legado responde 404', $legacyRegister, 'http_response_code(404)');
 $assertContains('cadastro legado impede cache', $legacyRegister, "header('Cache-Control: no-store')");
 $assertNotContains('cadastro legado não acessa responsáveis', $legacyRegister, 'SupabaseClient');

@@ -245,6 +245,15 @@ CPF e aluno e usa as RPCs `begin_first_access_claim`,
   em `family_link_requests` e não concede acesso. Secretaria ou admin precisam
   aprovar nominalmente na aba Famílias; a RPC `review_family_link_request`
   revalida conta, aluno, identidade composta e cliente Asaas em transação.
+- Um irmão legado com o mesmo CPF e nome, sem conta Auth e com e-mail sintético,
+  não é herdado no primeiro acesso nem bloqueia o login do filho já ativado. Ele
+  permanece fora da sessão até a solicitação e a aprovação humana. A aprovação
+  pode substituir somente e-mails terminados em `@placeholder.local` ou
+  `@diariasvillage.local`; e-mail real divergente, nome divergente, vínculo Auth
+  parcial ou cliente Asaas conflitante continuam bloqueando.
+- E-mails `@placeholder.local` e `@diariasvillage.local` nunca representam
+  identidade válida e não podem ser usados para criar uma conta no primeiro
+  acesso.
 - Não infira irmãos por sobrenome, telefone, e-mail ou semelhança. Em 03/09/2026
   as 27 contas Auth existentes tinham um aluno cada; vínculos anteriores só
   podem ser ampliados por solicitação e aprovação humana.

@@ -35,8 +35,13 @@ final class GuardianAccountIdentity
         $documents = [];
         $names = [];
         $authUserIds = [];
+        $asaasCustomerIds = [];
         $rowsWithoutAuth = 0;
         $emails = [];
+        $linkedEmails = [];
+        $unlinkedUsableEmails = [];
+        $linkedGuardians = [];
+        $unlinkedGuardians = [];
         $hasIncompleteDocument = false;
         $hasIncompleteName = false;
         $hasCompletedFirstAccess = false;
@@ -61,13 +66,24 @@ final class GuardianAccountIdentity
             $authUserId = trim((string) ($guardian['auth_user_id'] ?? ''));
             if ($authUserId === '') {
                 $rowsWithoutAuth++;
+                $unlinkedGuardians[] = $guardian;
             } else {
                 $authUserIds[$authUserId] = true;
+                $linkedGuardians[] = $guardian;
             }
 
             $email = strtolower(trim((string) ($guardian['email'] ?? '')));
             if (self::isUsableEmail($email)) {
                 $emails[$email] = true;
+                if ($authUserId === '') {
+                    $unlinkedUsableEmails[$email] = true;
+                } else {
+                    $linkedEmails[$email] = true;
+                }
+            }
+            $asaasCustomerId = trim((string) ($guardian['asaas_customer_id'] ?? ''));
+            if ($asaasCustomerId !== '') {
+                $asaasCustomerIds[$asaasCustomerId] = true;
             }
             if (!empty($guardian['first_access_completed_at'])) {
                 $hasCompletedFirstAccess = true;
@@ -87,8 +103,43 @@ final class GuardianAccountIdentity
         if (count($authUserIds) > 1) {
             return self::failure('GUARDIAN_AUTH_ACCOUNT_CONFLICT');
         }
+        if (count($asaasCustomerIds) > 1) {
+            return self::failure('GUARDIAN_ASAAS_LINK_CONFLICT');
+        }
         if (count($authUserIds) === 1 && $rowsWithoutAuth > 0) {
-            return self::failure('GUARDIAN_AUTH_LINK_INCOMPLETE');
+            $expectedAuthUserId = (string) array_key_first($authUserIds);
+            foreach ($unlinkedGuardians as $unlinkedGuardian) {
+                if (!empty($unlinkedGuardian['first_access_completed_at'])) {
+                    return self::failure('GUARDIAN_AUTH_LINK_INCOMPLETE');
+                }
+            }
+            foreach (array_keys($unlinkedUsableEmails) as $unlinkedEmail) {
+                if (!isset($linkedEmails[$unlinkedEmail])) {
+                    return self::failure('GUARDIAN_UNLINKED_EMAIL_CONFLICT');
+                }
+            }
+            if ($linkedEmails === []) {
+                return self::failure('GUARDIAN_AUTH_EMAIL_MISSING');
+            }
+            if (
+                is_array($selected)
+                && !hash_equals(
+                    $expectedAuthUserId,
+                    trim((string) ($selected['auth_user_id'] ?? ''))
+                )
+            ) {
+                return self::failure('GUARDIAN_SELECTION_MISMATCH');
+            }
+            return [
+                'ok' => true,
+                'mode' => 'supabase_auth',
+                'auth_user_id' => $expectedAuthUserId,
+                'document' => (string) array_key_first($documents),
+                'emails' => array_keys($linkedEmails),
+                'guardians' => $linkedGuardians,
+                'selected' => $selected,
+                'unlinked_guardian_count' => count($unlinkedGuardians),
+            ];
         }
 
         if (count($authUserIds) === 1) {
@@ -128,7 +179,8 @@ final class GuardianAccountIdentity
     {
         $normalized = strtolower(trim($email));
         return filter_var($normalized, FILTER_VALIDATE_EMAIL) !== false
-            && !str_contains($normalized, '@placeholder.');
+            && !str_contains($normalized, '@placeholder.')
+            && !str_ends_with($normalized, '@diariasvillage.local');
     }
 
     /**

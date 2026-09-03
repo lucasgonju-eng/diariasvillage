@@ -14,6 +14,7 @@ use App\Helpers;
 use App\HttpClient;
 use App\Mailer;
 use App\AsaasCustomerIdentity;
+use App\GuardianAccountIdentity;
 use App\SupabaseAuth;
 use App\SupabaseClient;
 
@@ -30,7 +31,7 @@ if ($cpf === '' || $studentIdInput === '' || $email === '' || $password === '') 
     Helpers::json(['ok' => false, 'error' => 'Preencha CPF, aluno(a), e-mail e senha.'], 422);
 }
 
-if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+if (!GuardianAccountIdentity::isUsableEmail($email)) {
     Helpers::json(['ok' => false, 'error' => 'E-mail inválido.'], 422);
 }
 

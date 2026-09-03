@@ -51,7 +51,8 @@ $profilePage = $read($root . '/public/profile.php');
 $profileApi = $read($root . '/public/api/profile.php');
 $profileAddGuardianApi = $read($root . '/public/api/profile-add-guardian.php');
 $profileGuardiansApi = $read($root . '/public/api/profile-guardians.php');
-$migration = $read($root . '/supabase/migrations/20260903051032_secure_family_link_requests.sql');
+$migration = $read($root . '/supabase/migrations/20260903051032_secure_family_link_requests.sql')
+    . $read($root . '/supabase/migrations/20260903181139_allow_reviewed_legacy_family_links.sql');
 
 $contains(
     'login deve carregar todos os vínculos pelo auth_user_id',
@@ -167,6 +168,17 @@ $contains('secretaria deve poder revisar vínculo', $reviewApi, 'AdminAuth::ROLE
 $contains('admin deve poder revisar vínculo', $reviewApi, 'AdminAuth::ROLE_ADMIN');
 $contains('revisão administrativa deve validar CSRF', $reviewApi, 'hash_equals($expectedCsrfToken, $csrfToken)');
 $contains('revisão deve ocorrer em RPC transacional', $reviewApi, "rpc('review_family_link_request'");
+$contains('aprovação deve validar cliente Asaas sem mutação', $reviewApi, '->validateExisting(');
+$contains(
+    'RPC deve receber o cliente Asaas validado',
+    $reviewApi,
+    "'p_validated_asaas_customer_id' => \$validatedAsaasCustomerId"
+);
+$contains(
+    'RPC deve receber fingerprint da identidade validada',
+    $reviewApi,
+    "'p_validated_identity_fingerprint' => \$validatedIdentityFingerprint"
+);
 $notContains('endpoint de revisão não cria guardian fora da RPC', $reviewApi, "insert('guardians'");
 $contains('dashboard admin deve ter aba Famílias', $adminDashboardDefinition, "'familias' =>");
 $contains('dashboard deve mostrar aluno de origem', $adminDashboard, 'Aluno já vinculado');
@@ -195,6 +207,42 @@ $contains('RPC deve bloquear conflito Asaas', $migration, 'TARGET_GUARDIAN_ASAAS
 $notContains('RPC não deve propagar cliente Asaas sem validação remota', $migration, 'asaas_customer_id = coalesce');
 $contains('RPC deve auditar aprovação', $migration, 'FAMILY_LINK_REQUEST_APPROVED');
 $contains('primeiro acesso não deve agrupar irmãos automaticamente', $migration, "'related_guardians_updated', 0");
+$contains('migration deve reconhecer somente e-mail sintético conhecido', $migration, 'is_guardian_placeholder_email');
+$contains(
+    'ativação isolada deve exigir conta Auth e primeiro acesso concluído',
+    $migration,
+    'new.auth_user_id is not null'
+);
+$contains(
+    'aprovação humana pode substituir placeholder do vínculo alvo',
+    $migration,
+    'and not public.is_guardian_placeholder_email(v_target.email)'
+);
+$contains(
+    'migration deve exigir o mesmo cliente validado na origem',
+    $migration,
+    'v_validated_customer_id is distinct from v_customer_id'
+);
+$contains(
+    'alvo com cliente não validado deve bloquear',
+    $migration,
+    'v_target_customer_id <> v_validated_customer_id'
+);
+$contains(
+    'trigger deve cobrir alterações futuras do cliente Asaas',
+    $migration,
+    'update of parent_document, parent_name, email, auth_user_id, asaas_customer_id'
+);
+$contains(
+    'RPC deve recalcular fingerprint sob trava',
+    $migration,
+    "extensions.digest(v_name || E'\\n' || v_email || E'\\n' || v_document, 'sha256')"
+);
+$contains(
+    'RPC deve bloquear identidade alterada após validação',
+    $migration,
+    'REQUESTER_IDENTITY_CHANGED_AFTER_VALIDATION'
+);
 
 $notContains('perfil não pode expandir família por CPF parcial', $profilePage, 'parent_document=ilike.');
 $notContains('perfil não pode expandir família por e-mail', $profilePage, 'guardiansByEmail');
