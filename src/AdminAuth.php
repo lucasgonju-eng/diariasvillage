@@ -24,7 +24,6 @@ class AdminAuth
     public function bootstrapFromEnvironment(): void
     {
         $this->ensureConfiguredUser('admin', self::ROLE_ADMIN, (string) Env::get('ADMIN_SECRET', ''));
-        $this->ensureConfiguredUser('secretaria', self::ROLE_SECRETARIA, (string) Env::get('SECRETARIA_SECRET', ''));
     }
 
     public function login(string $username, string $password): array
@@ -40,17 +39,27 @@ class AdminAuth
         $expectedRole = $username === 'admin' ? self::ROLE_ADMIN : self::ROLE_SECRETARIA;
         $configuredSecret = $username === 'admin'
             ? (string) Env::get('ADMIN_SECRET', '')
-            : (string) Env::get('SECRETARIA_SECRET', '');
+            : '';
+        $lookup = $this->findByUsernameResult($username);
+        if (!($lookup['ok'] ?? false)) {
+            $this->audit(null, $username, $expectedRole, 'login', false, [
+                'reason' => 'identity_lookup_failed',
+            ]);
+            return ['ok' => false, 'error' => 'Não foi possível validar o acesso agora.'];
+        }
+        $user = is_array($lookup['user'] ?? null) ? $lookup['user'] : null;
         $legacySecretariaAllowed = $username === 'secretaria'
+            && $user === null
             && $configuredSecret === ''
             && hash_equals(self::LEGACY_SECRETARIA_PASSWORD, $password);
+        $legacyBridgeAuthenticated = false;
 
-        $user = $this->findByUsername($username);
         if ($user === null && $configuredSecret !== '' && hash_equals($configuredSecret, $password)) {
             $user = $this->createUser($username, $expectedRole, $password);
         } elseif ($user === null && $legacySecretariaAllowed) {
             $this->logLegacySecretariaWarning();
-            $user = $this->createUser($username, $expectedRole, $password);
+            $user = $this->claimLegacySecretariaBridge();
+            $legacyBridgeAuthenticated = $user !== null;
         }
 
         if ($user === null || !($user['active'] ?? false)) {
@@ -65,16 +74,13 @@ class AdminAuth
             return ['ok' => false, 'error' => 'Usuário ou senha inválidos.'];
         }
 
-        $passwordValid = password_verify($password, (string) ($user['password_hash'] ?? ''));
+        $passwordValid = $legacyBridgeAuthenticated || (
+            !($user['requires_password_setup'] ?? false)
+            && password_verify($password, (string) ($user['password_hash'] ?? ''))
+        );
         if (!$passwordValid && $configuredSecret !== '' && hash_equals($configuredSecret, $password)) {
             $user = $this->migratePassword($user, $password);
             $passwordValid = $user !== null;
-        } elseif (!$passwordValid && $legacySecretariaAllowed) {
-            $this->logLegacySecretariaWarning();
-            $user = $this->migratePassword($user, $password);
-            $passwordValid = $user !== null;
-        } elseif ($passwordValid && $legacySecretariaAllowed) {
-            $this->logLegacySecretariaWarning();
         }
 
         if (!$passwordValid || $user === null) {
@@ -103,6 +109,11 @@ class AdminAuth
         $_SESSION['admin_session_version'] = (int) ($user['session_version'] ?? 1);
         $_SESSION['admin_issued_at'] = $now;
         $_SESSION['admin_expires_at'] = $now + $ttl;
+        if ($legacyBridgeAuthenticated) {
+            $_SESSION['admin_legacy_bridge_claimed'] = true;
+        } else {
+            unset($_SESSION['admin_legacy_bridge_claimed']);
+        }
 
         // Compatibilidade temporária até todos os endpoints adotarem os helpers centrais.
         $_SESSION['admin_authenticated'] = true;
@@ -116,6 +127,62 @@ class AdminAuth
         $this->audit((string) $user['id'], $username, $role, 'login', true);
 
         return ['ok' => true, 'admin' => $this->sessionPayload($user)];
+    }
+
+    /**
+     * Define a credencial operacional da secretaria sem persistir a senha em
+     * código, ambiente, sessão ou auditoria.
+     *
+     * @return array{ok: bool, error?: string, created?: bool, session_version?: int}
+     */
+    public function configureSecretariaPassword(array $actor, string $password): array
+    {
+        $actorId = trim((string) ($actor['id'] ?? ''));
+        $actorUsername = trim((string) ($actor['username'] ?? ''));
+        $actorRole = trim((string) ($actor['role'] ?? ''));
+        if (
+            $actorId === ''
+            || $actorUsername === ''
+            || $actorRole !== self::ROLE_ADMIN
+        ) {
+            return ['ok' => false, 'error' => 'Acesso negado.'];
+        }
+
+        $passwordLength = function_exists('mb_strlen') ? mb_strlen($password) : strlen($password);
+        $strongEnough = $passwordLength >= 12
+            && $passwordLength <= 128
+            && preg_match('/[a-z]/', $password) === 1
+            && preg_match('/[A-Z]/', $password) === 1
+            && preg_match('/[0-9]/', $password) === 1
+            && preg_match('/[^a-zA-Z0-9]/', $password) === 1
+            && !hash_equals(self::LEGACY_SECRETARIA_PASSWORD, $password);
+        if (!$strongEnough) {
+            return [
+                'ok' => false,
+                'error' => 'Use ao menos 12 caracteres, com maiúscula, minúscula, número e símbolo.',
+            ];
+        }
+
+        $hash = password_hash($password, PASSWORD_DEFAULT);
+        if (!is_string($hash) || $hash === '') {
+            return ['ok' => false, 'error' => 'Não foi possível proteger a nova senha.'];
+        }
+
+        $result = $this->db->rpc('configure_secretaria_credentials', [
+            'p_actor_id' => $actorId,
+            'p_actor_session_version' => (int) ($actor['session_version'] ?? 0),
+            'p_password_hash' => $hash,
+        ]);
+        $data = is_array($result['data'] ?? null) ? $result['data'] : [];
+        if (!($result['ok'] ?? false) || !($data['ok'] ?? false)) {
+            return ['ok' => false, 'error' => 'Não foi possível salvar o acesso da secretaria.'];
+        }
+
+        return [
+            'ok' => true,
+            'created' => (bool) ($data['created'] ?? false),
+            'session_version' => (int) ($data['user']['session_version'] ?? 1),
+        ];
     }
 
     public function currentSession(): ?array
@@ -136,11 +203,14 @@ class AdminAuth
         }
 
         $user = $this->findById($adminId);
+        $pendingPasswordSetupAllowed = $role === self::ROLE_SECRETARIA
+            && !empty($_SESSION['admin_legacy_bridge_claimed']);
         if (
             $user === null
             || !($user['active'] ?? false)
             || (string) ($user['role'] ?? '') !== $role
             || (int) ($user['session_version'] ?? 0) !== $sessionVersion
+            || (($user['requires_password_setup'] ?? false) && !$pendingPasswordSetupAllowed)
         ) {
             $this->clearSession();
             return null;
@@ -231,20 +301,37 @@ class AdminAuth
 
     private function findByUsername(string $username): ?array
     {
+        $result = $this->findByUsernameResult($username);
+        return ($result['ok'] ?? false) && is_array($result['user'] ?? null)
+            ? $result['user']
+            : null;
+    }
+
+    /**
+     * @return array{ok: bool, user: array<string, mixed>|null}
+     */
+    private function findByUsernameResult(string $username): array
+    {
         $result = $this->db->select(
             'admin_users',
-            'select=id,username,password_hash,role,active,session_version'
+            'select=id,username,password_hash,role,active,session_version,requires_password_setup'
                 . '&username=eq.' . urlencode($username)
                 . '&limit=1'
         );
-        return $result['ok'] && !empty($result['data'][0]) ? $result['data'][0] : null;
+        if (!($result['ok'] ?? false) || !is_array($result['data'] ?? null)) {
+            return ['ok' => false, 'user' => null];
+        }
+        return [
+            'ok' => true,
+            'user' => is_array($result['data'][0] ?? null) ? $result['data'][0] : null,
+        ];
     }
 
     private function findById(string $id): ?array
     {
         $result = $this->db->select(
             'admin_users',
-            'select=id,username,password_hash,role,active,session_version'
+            'select=id,username,password_hash,role,active,session_version,requires_password_setup'
                 . '&id=eq.' . urlencode($id)
                 . '&limit=1'
         );
@@ -276,6 +363,7 @@ class AdminAuth
             'admin_session_version',
             'admin_issued_at',
             'admin_expires_at',
+            'admin_legacy_bridge_claimed',
             'admin_authenticated',
             'admin_user',
         ] as $key) {
@@ -286,8 +374,28 @@ class AdminAuth
     private function logLegacySecretariaWarning(): void
     {
         error_log(
-            'AVISO DE SEGURANÇA: SECRETARIA_SECRET não configurado; '
+            'AVISO DE SEGURANÇA: conta secretaria ainda não configurada pelo painel; '
             . 'autenticação legada temporária da secretaria foi utilizada.'
         );
+    }
+
+    private function claimLegacySecretariaBridge(): ?array
+    {
+        $randomPassword = bin2hex(random_bytes(32));
+        $hash = password_hash($randomPassword, PASSWORD_DEFAULT);
+        unset($randomPassword);
+        if (!is_string($hash) || $hash === '') {
+            return null;
+        }
+
+        $result = $this->db->rpc('claim_legacy_secretaria_bridge', [
+            'p_password_hash' => $hash,
+        ]);
+        $data = is_array($result['data'] ?? null) ? $result['data'] : [];
+        return ($result['ok'] ?? false)
+            && ($data['ok'] ?? false)
+            && is_array($data['user'] ?? null)
+            ? $data['user']
+            : null;
     }
 }

@@ -171,7 +171,7 @@ $contains('dashboard deve mostrar aluno de origem', $adminDashboard, 'Aluno já 
 $contains('dashboard deve mostrar aluno solicitado', $adminDashboard, 'Aluno solicitado');
 $contains('aprovação deve exigir digitação explícita', $adminDashboardJs, 'Digite ${confirmationWord}');
 $contains('revisão deve enviar CSRF', $adminDashboardJs, 'csrf_token: adminCsrfToken');
-$contains('cache administrativo deve avançar', $adminDashboard, 'admin-dashboard.js?v=81');
+$contains('cache administrativo deve avançar', $adminDashboard, 'admin-dashboard.js?v=82');
 
 $contains('migration deve remover unicidade de e-mail por linha', $migration, 'drop constraint if exists guardians_email_key');
 $contains('migration deve proteger identidade de e-mail', $migration, 'trg_guardians_email_identity');

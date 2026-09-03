@@ -44,7 +44,7 @@ xss_contains('cache do primeiro acesso avançou', $firstAccessPage, '/assets/js/
 foreach (['JSON_HEX_TAG', 'JSON_HEX_AMP', 'JSON_HEX_APOS', 'JSON_HEX_QUOT'] as $flag) {
     xss_contains('bootstrap JSON administrativo seguro', $adminDashboard, $flag, $failures);
 }
-xss_contains('cache administrativo avançou', $adminDashboard, '/assets/js/admin-dashboard.js?v=81', $failures);
+xss_contains('cache administrativo avançou', $adminDashboard, '/assets/js/admin-dashboard.js?v=82', $failures);
 
 xss_contains('painel sanitiza HTML de e-mail', $adminJs, 'function sanitizeBulkMailHtml(value)', $failures);
 xss_contains('painel remove manipuladores inline', $adminJs, "name.startsWith('on')", $failures);

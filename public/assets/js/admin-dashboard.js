@@ -27,6 +27,7 @@ const tabMensalistas = document.querySelector('#tab-mensalistas');
 const tabOficinasModulares = document.querySelector('#tab-oficinas-modulares');
 const tabExclusoes = document.querySelector('#tab-exclusoes');
 const tabResetSenha = document.querySelector('#tab-reset-senha');
+const tabAcessoSecretaria = document.querySelector('#tab-acesso-secretaria');
 const tabFluxoCaixa = document.querySelector('#tab-fluxo-caixa');
 const tabDadosAsaas = document.querySelector('#tab-dados-asaas');
 const tabEmailMassa = document.querySelector('#tab-email-massa');
@@ -149,6 +150,7 @@ function setActiveTab(name) {
   if (tabOficinasModulares) tabOficinasModulares.classList.toggle('hidden', name !== 'oficinas-modulares');
   if (tabExclusoes) tabExclusoes.classList.toggle('hidden', name !== 'exclusoes');
   if (tabResetSenha) tabResetSenha.classList.toggle('hidden', name !== 'reset-senha');
+  if (tabAcessoSecretaria) tabAcessoSecretaria.classList.toggle('hidden', name !== 'acesso-secretaria');
   if (tabFluxoCaixa) tabFluxoCaixa.classList.toggle('hidden', name !== 'fluxo-caixa');
   if (tabDadosAsaas) tabDadosAsaas.classList.toggle('hidden', name !== 'dados-asaas');
   if (tabEmailMassa) tabEmailMassa.classList.toggle('hidden', name !== 'email-massa');
@@ -5429,6 +5431,83 @@ if (
       if (resetGuardianSelect.value) {
         resetSenhaBtn.removeAttribute('disabled');
       }
+    }
+  });
+}
+
+const secretariaPasswordInput = document.querySelector('#secretaria-password');
+const secretariaPasswordConfirmInput = document.querySelector('#secretaria-password-confirm');
+const secretariaPasswordSaveButton = document.querySelector('#secretaria-password-save');
+const secretariaPasswordMessage = document.querySelector('#secretaria-password-message');
+
+if (
+  secretariaPasswordInput &&
+  secretariaPasswordConfirmInput &&
+  secretariaPasswordSaveButton
+) {
+  secretariaPasswordSaveButton.addEventListener('click', async () => {
+    const password = String(secretariaPasswordInput.value || '');
+    const confirmation = String(secretariaPasswordConfirmInput.value || '');
+    const strongEnough =
+      password.length >= 12 &&
+      password.length <= 128 &&
+      /[a-z]/.test(password) &&
+      /[A-Z]/.test(password) &&
+      /[0-9]/.test(password) &&
+      /[^a-zA-Z0-9]/.test(password);
+
+    if (!strongEnough) {
+      if (secretariaPasswordMessage) {
+        secretariaPasswordMessage.textContent =
+          'Use ao menos 12 caracteres, com maiúscula, minúscula, número e símbolo.';
+        secretariaPasswordMessage.className = 'charge-message error';
+      }
+      return;
+    }
+    if (password !== confirmation) {
+      if (secretariaPasswordMessage) {
+        secretariaPasswordMessage.textContent = 'As senhas não conferem.';
+        secretariaPasswordMessage.className = 'charge-message error';
+      }
+      return;
+    }
+
+    secretariaPasswordSaveButton.setAttribute('disabled', 'disabled');
+    if (secretariaPasswordMessage) {
+      secretariaPasswordMessage.textContent = 'Protegendo e salvando o novo acesso...';
+      secretariaPasswordMessage.className = 'charge-message';
+    }
+
+    try {
+      const response = await fetch('/api/admin-secretaria-access.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          password,
+          password_confirmation: confirmation,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || 'Falha ao salvar o acesso da secretaria.');
+      }
+
+      secretariaPasswordInput.value = '';
+      secretariaPasswordConfirmInput.value = '';
+      if (secretariaPasswordMessage) {
+        secretariaPasswordMessage.textContent = data.message;
+        secretariaPasswordMessage.className = 'charge-message success';
+      }
+    } catch (error) {
+      if (secretariaPasswordMessage) {
+        secretariaPasswordMessage.textContent =
+          error instanceof Error ? error.message : 'Falha ao salvar o acesso da secretaria.';
+        secretariaPasswordMessage.className = 'charge-message error';
+      }
+    } finally {
+      secretariaPasswordInput.value = '';
+      secretariaPasswordConfirmInput.value = '';
+      secretariaPasswordSaveButton.removeAttribute('disabled');
     }
   });
 }

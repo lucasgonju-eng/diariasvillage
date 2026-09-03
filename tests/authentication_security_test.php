@@ -12,6 +12,7 @@ final class InMemoryAdminSupabaseClient extends SupabaseClient
     public array $users = [];
     /** @var array<int, array<string, mixed>> */
     public array $audit = [];
+    public bool $failNextSelect = false;
 
     public function __construct()
     {
@@ -19,6 +20,10 @@ final class InMemoryAdminSupabaseClient extends SupabaseClient
 
     public function select(string $table, string $query = ''): array
     {
+        if ($this->failNextSelect) {
+            $this->failNextSelect = false;
+            return ['ok' => false, 'data' => []];
+        }
         if ($table !== 'admin_users') {
             return ['ok' => true, 'data' => []];
         }
@@ -64,6 +69,86 @@ final class InMemoryAdminSupabaseClient extends SupabaseClient
         }
         return ['ok' => false, 'data' => []];
     }
+
+    public function rpc(string $functionName, array $payload = []): array
+    {
+        if ($functionName === 'claim_legacy_secretaria_bridge') {
+            if (isset($this->users['secretaria'])) {
+                return [
+                    'ok' => true,
+                    'data' => ['ok' => false, 'code' => 'SECRETARIA_ALREADY_EXISTS'],
+                ];
+            }
+            $user = [
+                'id' => sprintf('00000000-0000-4000-8000-%012d', count($this->users) + 1),
+                'username' => 'secretaria',
+                'password_hash' => (string) ($payload['p_password_hash'] ?? ''),
+                'role' => AdminAuth::ROLE_SECRETARIA,
+                'active' => true,
+                'session_version' => 1,
+                'requires_password_setup' => true,
+            ];
+            $this->users['secretaria'] = $user;
+            $this->audit[] = [
+                'action' => 'legacy_secretaria_bridge_claimed',
+                'details' => ['requires_password_setup' => true],
+            ];
+            $publicUser = $user;
+            unset($publicUser['password_hash']);
+            return ['ok' => true, 'data' => ['ok' => true, 'user' => $publicUser]];
+        }
+
+        if ($functionName === 'configure_secretaria_credentials') {
+            $actor = null;
+            foreach ($this->users as $candidate) {
+                if ((string) ($candidate['id'] ?? '') === (string) ($payload['p_actor_id'] ?? '')) {
+                    $actor = $candidate;
+                    break;
+                }
+            }
+            if (
+                !is_array($actor)
+                || ($actor['role'] ?? '') !== AdminAuth::ROLE_ADMIN
+                || !($actor['active'] ?? false)
+                || (int) ($actor['session_version'] ?? 0)
+                    !== (int) ($payload['p_actor_session_version'] ?? 0)
+            ) {
+                return ['ok' => true, 'data' => ['ok' => false, 'code' => 'ADMIN_NOT_AUTHORIZED']];
+            }
+
+            $existing = $this->users['secretaria'] ?? null;
+            $created = !is_array($existing);
+            $user = is_array($existing) ? $existing : [
+                'id' => sprintf('00000000-0000-4000-8000-%012d', count($this->users) + 1),
+                'username' => 'secretaria',
+                'session_version' => 0,
+            ];
+            $user = array_merge($user, [
+                'password_hash' => (string) ($payload['p_password_hash'] ?? ''),
+                'role' => AdminAuth::ROLE_SECRETARIA,
+                'active' => true,
+                'session_version' => $created ? 1 : ((int) $user['session_version'] + 1),
+                'requires_password_setup' => false,
+            ]);
+            $this->users['secretaria'] = $user;
+            $this->audit[] = [
+                'admin_user_id' => $actor['id'],
+                'username' => $actor['username'],
+                'role' => $actor['role'],
+                'action' => 'configure_secretaria_access',
+                'success' => true,
+                'details' => ['created' => $created],
+            ];
+            $publicUser = $user;
+            unset($publicUser['password_hash']);
+            return [
+                'ok' => true,
+                'data' => ['ok' => true, 'created' => $created, 'user' => $publicUser],
+            ];
+        }
+
+        return ['ok' => false, 'data' => []];
+    }
 }
 
 $root = dirname(__DIR__);
@@ -107,6 +192,12 @@ $familyLinkMigration = $read($root . '/supabase/migrations/20260903051032_secure
 $selectStudent = $read($root . '/public/api/select-student.php');
 $userDashboard = $read($root . '/public/dashboard.php');
 $attendance = $read($root . '/public/api/admin-attendance.php');
+$secretariaAccess = $read($root . '/public/api/admin-secretaria-access.php');
+$adminDashboard = $read($root . '/public/admin/dashboard.php');
+$adminDashboardJs = $read($root . '/public/assets/js/admin-dashboard.js');
+$secretariaMigration = $read(
+    $root . '/supabase/migrations/20260903143844_secure_secretaria_credential_setup.sql'
+);
 
 $assertContains('primeiro acesso inicia claim', $register, "rpc('begin_first_access_claim'");
 $assertContains('primeiro acesso conclui claim', $register, "rpc('complete_first_access_claim'");
@@ -131,6 +222,77 @@ $assertContains('Admin valida password_hash', $adminAuthSource, 'password_verify
 $assertContains('Admin regenera sessão', $adminAuthSource, 'session_regenerate_id(true)');
 $assertContains('Admin valida versão de sessão', $adminAuthSource, "['admin_session_version']");
 $assertContains('Admin registra auditoria', $adminAuthSource, "'admin_audit_log'");
+$assertContains('Admin configura secretaria sem ambiente', $adminAuthSource, 'function configureSecretariaPassword(');
+$assertNotContains(
+    'bootstrap não usa mais segredo da secretaria no ambiente',
+    $adminAuthSource,
+    "ensureConfiguredUser('secretaria'"
+);
+$assertContains(
+    'fallback só pode iniciar conta ausente',
+    $adminAuthSource,
+    '&& $user === null'
+);
+$assertContains(
+    'fallback não usa segredo de ambiente',
+    $adminAuthSource,
+    "&& \$configuredSecret === ''"
+);
+$assertContains(
+    'fallback usa claim atômico de uso único',
+    $adminAuthSource,
+    "rpc('claim_legacy_secretaria_bridge'"
+);
+$assertContains(
+    'configuração usa RPC atômica',
+    $adminAuthSource,
+    "rpc('configure_secretaria_credentials'"
+);
+$assertContains(
+    'conta pendente não aceita senha persistida',
+    $adminAuthSource,
+    "!(\$user['requires_password_setup'] ?? false)"
+);
+$assertContains(
+    'migration marca ponte pendente',
+    $secretariaMigration,
+    'requires_password_setup boolean not null default false'
+);
+$assertContains(
+    'migration serializa credencial',
+    $secretariaMigration,
+    "pg_advisory_xact_lock(hashtextextended('admin_users:secretaria', 0))"
+);
+$assertContains(
+    'RPC valida versão do admin',
+    $secretariaMigration,
+    'and session_version = p_actor_session_version'
+);
+$assertContains(
+    'trigger protege rollout com código antigo',
+    $secretariaMigration,
+    'create trigger trg_secretaria_password_setup_origin'
+);
+$assertContains(
+    'linha legada anterior ao lock também é bloqueada',
+    $secretariaMigration,
+    "where username = 'secretaria';"
+);
+$assertContains(
+    'RPC marca criação segura explicitamente',
+    $secretariaMigration,
+    "set_config('app.secretaria_secure_setup', 'confirmed', true)"
+);
+$assertContains(
+    'sessão da ponte é marcada explicitamente',
+    $adminAuthSource,
+    "\$_SESSION['admin_legacy_bridge_claimed'] = true"
+);
+$assertContains(
+    'sessão antiga sem marca é revogada',
+    $adminAuthSource,
+    "(\$user['requires_password_setup'] ?? false) && !\$pendingPasswordSetupAllowed"
+);
 $assertContains('Helper central exige admin', $helpers, 'function requireAdmin(');
 $assertContains('Helper central exige role', $helpers, 'function requireAdminRole(');
 $assertContains('Sessão usa strict mode', $bootstrap, "ini_set('session.use_strict_mode', '1')");
@@ -194,6 +356,7 @@ $adminOnlyEndpoints = [
     'admin-sync-recebidas.php',
     'admin-sync-charges-payments.php',
     'admin-view-as-user.php',
+    'admin-secretaria-access.php',
 ];
 foreach ($adminOnlyEndpoints as $endpoint) {
     $source = $read($root . '/public/api/' . $endpoint);
@@ -203,6 +366,21 @@ foreach ($adminOnlyEndpoints as $endpoint) {
         'AdminAuth::ROLE_ADMIN'
     );
 }
+
+$assertContains('endpoint da secretaria exige POST', $secretariaAccess, 'Helpers::requirePost()');
+$assertContains(
+    'endpoint da secretaria exige confirmação',
+    $secretariaAccess,
+    'hash_equals($password, $confirmation)'
+);
+$assertNotContains('endpoint não registra senha', $secretariaAccess, 'error_log(');
+$assertContains('painel mostra acesso da secretaria', $adminDashboard, 'tab-acesso-secretaria');
+$assertContains('painel limita acesso ao admin principal', $adminDashboard, '<?php if ($isAdminPrincipal): ?>');
+$assertContains(
+    'JavaScript envia senha somente por POST',
+    $adminDashboardJs,
+    "fetch('/api/admin-secretaria-access.php'"
+);
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
@@ -216,8 +394,8 @@ $fakeDb = new InMemoryAdminSupabaseClient();
 $adminAuth = new AdminAuth($fakeDb);
 $adminAuth->bootstrapFromEnvironment();
 
-if (!isset($fakeDb->users['admin'], $fakeDb->users['secretaria'])) {
-    $failures[] = 'Bootstrap deveria criar as duas contas configuradas.';
+if (!isset($fakeDb->users['admin']) || isset($fakeDb->users['secretaria'])) {
+    $failures[] = 'Bootstrap deve criar somente o admin; secretaria é configurada pelo painel.';
 }
 if (($fakeDb->users['admin']['password_hash'] ?? '') === $_ENV['ADMIN_SECRET']) {
     $failures[] = 'Senha administrativa não pode ser armazenada em texto puro.';
@@ -238,6 +416,121 @@ if ($adminAuth->currentSession() === null) {
     $failures[] = 'Sessão administrativa válida deveria ser aceita.';
 }
 
+$adminActor = $login['admin'] ?? [];
+$weakSecretaria = $adminAuth->configureSecretariaPassword($adminActor, 'senha-fraca');
+if ($weakSecretaria['ok'] ?? false) {
+    $failures[] = 'Senha fraca da secretaria deveria ser recusada.';
+}
+$unauthorizedSecretaria = $adminAuth->configureSecretariaPassword([
+    'id' => '00000000-0000-4000-8000-000000000099',
+    'username' => 'secretaria',
+    'role' => AdminAuth::ROLE_SECRETARIA,
+], 'Secretaria#2026Nova');
+if ($unauthorizedSecretaria['ok'] ?? false) {
+    $failures[] = 'Secretaria não pode configurar a própria credencial administrativa.';
+}
+
+$secretariaPassword = 'Secretaria#2026Nova';
+$configuredSecretaria = $adminAuth->configureSecretariaPassword($adminActor, $secretariaPassword);
+if (!($configuredSecretaria['ok'] ?? false) || !isset($fakeDb->users['secretaria'])) {
+    $failures[] = 'Admin principal deveria criar a conta da secretaria.';
+} elseif (
+    ($fakeDb->users['secretaria']['password_hash'] ?? '') === $secretariaPassword
+    || !password_verify($secretariaPassword, (string) $fakeDb->users['secretaria']['password_hash'])
+) {
+    $failures[] = 'Senha da secretaria deve existir somente como hash verificável.';
+}
+
+$secretariaLogin = $adminAuth->login('secretaria', $secretariaPassword);
+if (!($secretariaLogin['ok'] ?? false)) {
+    $failures[] = 'Nova credencial da secretaria deveria autenticar.';
+}
+$_SESSION = [];
+$legacyLoginAfterConfiguration = $adminAuth->login('secretaria', 'Ei32743176');
+if ($legacyLoginAfterConfiguration['ok'] ?? false) {
+    $failures[] = 'Senha legada deve falhar depois da configuração segura.';
+}
+
+$versionBeforeRotation = (int) ($fakeDb->users['secretaria']['session_version'] ?? 0);
+$rotatedSecretaria = $adminAuth->configureSecretariaPassword($adminActor, 'Secretaria#2026Rotacionada');
+if (
+    !($rotatedSecretaria['ok'] ?? false)
+    || (int) ($fakeDb->users['secretaria']['session_version'] ?? 0) <= $versionBeforeRotation
+) {
+    $failures[] = 'Troca da senha da secretaria deveria revogar sessões anteriores.';
+}
+if (
+    !array_filter(
+        $fakeDb->audit,
+        static fn(array $entry): bool => ($entry['action'] ?? '') === 'configure_secretaria_access'
+    )
+) {
+    $failures[] = 'Configuração da secretaria deveria gerar auditoria.';
+}
+if (str_contains(json_encode($fakeDb->audit) ?: '', $secretariaPassword)) {
+    $failures[] = 'Auditoria não pode conter a senha da secretaria.';
+}
+
+$bridgeDb = new InMemoryAdminSupabaseClient();
+$bridgeAuth = new AdminAuth($bridgeDb);
+$_SESSION = [];
+$firstLegacyLogin = $bridgeAuth->login('secretaria', 'Ei32743176');
+if (!($firstLegacyLogin['ok'] ?? false)) {
+    $failures[] = 'Ponte legada deveria permitir no máximo o primeiro login.';
+}
+$bridgeUser = $bridgeDb->users['secretaria'] ?? [];
+if (
+    !($bridgeUser['requires_password_setup'] ?? false)
+    || password_verify('Ei32743176', (string) ($bridgeUser['password_hash'] ?? ''))
+) {
+    $failures[] = 'Ponte legada deve persistir hash aleatório e exigir nova senha.';
+}
+if ($bridgeAuth->currentSession() === null) {
+    $failures[] = 'Sessão explicitamente criada pela ponte deveria permanecer válida.';
+}
+$_SESSION = [];
+$secondLegacyLogin = $bridgeAuth->login('secretaria', 'Ei32743176');
+if ($secondLegacyLogin['ok'] ?? false) {
+    $failures[] = 'Ponte legada não pode aceitar um segundo login.';
+}
+
+$bridgeUserId = (string) ($bridgeUser['id'] ?? '');
+$_SESSION = [
+    'admin_id' => $bridgeUserId,
+    'admin_role' => AdminAuth::ROLE_SECRETARIA,
+    'admin_session_version' => 1,
+    'admin_issued_at' => time(),
+    'admin_expires_at' => time() + 600,
+    'admin_authenticated' => true,
+];
+if ($bridgeAuth->currentSession() !== null || isset($_SESSION['admin_authenticated'])) {
+    $failures[] = 'Sessão criada pelo código antigo durante rollout deve ser revogada.';
+}
+
+$safeHash = password_hash('Secretaria#Segura2026', PASSWORD_DEFAULT);
+$readFailureDb = new InMemoryAdminSupabaseClient();
+$readFailureDb->users['secretaria'] = [
+    'id' => '00000000-0000-4000-8000-000000000777',
+    'username' => 'secretaria',
+    'password_hash' => $safeHash,
+    'role' => AdminAuth::ROLE_SECRETARIA,
+    'active' => true,
+    'session_version' => 4,
+    'requires_password_setup' => false,
+];
+$readFailureDb->failNextSelect = true;
+$readFailureAuth = new AdminAuth($readFailureDb);
+$_SESSION = [];
+$legacyDuringReadFailure = $readFailureAuth->login('secretaria', 'Ei32743176');
+if (
+    ($legacyDuringReadFailure['ok'] ?? false)
+    || ($readFailureDb->users['secretaria']['password_hash'] ?? '') !== $safeHash
+    || (int) ($readFailureDb->users['secretaria']['session_version'] ?? 0) !== 4
+) {
+    $failures[] = 'Falha de leitura deve bloquear login sem alterar credencial segura.';
+}
+
+$_SESSION = [];
 $_SESSION['admin_expires_at'] = time() - 1;
 if ($adminAuth->currentSession() !== null || isset($_SESSION['admin_authenticated'])) {
     $failures[] = 'Sessão administrativa expirada deveria ser removida.';

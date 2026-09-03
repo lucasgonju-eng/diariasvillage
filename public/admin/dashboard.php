@@ -120,7 +120,7 @@ $canAttendanceApprove = $isAdminPrincipal;
 $canManageModularOffices = $isAdminPrincipal;
 
 $allowedTabs = $isAdminPrincipal
-    ? ['charges', 'chamada', 'familias', 'inadimplentes', 'recebidas', 'sem-whatsapp', 'pendencias', 'mensalistas', 'exclusoes', 'reset-senha', 'fluxo-caixa', 'dados-asaas', 'email-massa', 'entries']
+    ? ['charges', 'chamada', 'familias', 'inadimplentes', 'recebidas', 'sem-whatsapp', 'pendencias', 'mensalistas', 'exclusoes', 'reset-senha', 'acesso-secretaria', 'fluxo-caixa', 'dados-asaas', 'email-massa', 'entries']
     : ['chamada', 'familias', 'sem-whatsapp', 'mensalistas', 'entries'];
 if ($canMergeDuplicates) {
     $allowedTabs[] = 'duplicados';
@@ -135,6 +135,17 @@ if (!in_array($activeTab, $allowedTabs, true)) {
 }
 
 $client = new SupabaseClient(new HttpClient());
+$secretariaAccount = null;
+if ($isAdminPrincipal) {
+    $secretariaResult = $client->select(
+        'admin_users',
+        'select=id,active,session_version,requires_password_setup,last_login_at'
+            . '&username=eq.secretaria&limit=1'
+    );
+    if (($secretariaResult['ok'] ?? false) && is_array($secretariaResult['data'][0] ?? null)) {
+        $secretariaAccount = $secretariaResult['data'][0];
+    }
+}
 $paymentsResult = $client->select(
     'payments',
     'select=*,students(name,enrollment),guardians(parent_name,email)&status=eq.paid&order=paid_at.desc&limit=200'
@@ -800,8 +811,9 @@ if (!empty($exclusionsLog)) {
         <?php if ($canMergeDuplicates): ?>
           <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=duplicados" data-tab="duplicados">Duplicados</a>
         <?php endif; ?>
-        <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=reset-senha" data-tab="reset-senha">Resetar senha</a>
         <?php if ($isAdminPrincipal): ?>
+          <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=reset-senha" data-tab="reset-senha">Resetar senha</a>
+          <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=acesso-secretaria" data-tab="acesso-secretaria">Acesso da Secretaria</a>
           <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=fluxo-caixa" data-tab="fluxo-caixa">Fluxo de Caixa</a>
           <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=dados-asaas" data-tab="dados-asaas">Dados do Asaas</a>
           <a class="btn btn-primary btn-sm" href="/admin/dashboard.php?tab=email-massa" data-tab="email-massa">Enviar E-mails em Massa</a>
@@ -1972,6 +1984,7 @@ if (!empty($exclusionsLog)) {
       </section>
       <?php endif; ?>
 
+      <?php if ($isAdminPrincipal): ?>
       <section id="tab-reset-senha" class="<?php echo $activeTab === 'reset-senha' ? '' : 'hidden'; ?>">
         <h2>Resetar senha do usuário</h2>
         <p class="muted">Busque o CPF, confira explicitamente o responsável e o aluno, e só então defina a nova senha. CPFs com identidade ou conta divergente ficam bloqueados para revisão.</p>
@@ -2004,6 +2017,55 @@ if (!empty($exclusionsLog)) {
         </div>
         <div id="reset-senha-message" class="charge-message"></div>
       </section>
+
+      <section id="tab-acesso-secretaria" class="<?php echo $activeTab === 'acesso-secretaria' ? '' : 'hidden'; ?>">
+        <h2>Acesso da Secretaria</h2>
+        <p class="muted">
+          Crie ou troque a senha operacional da secretaria. A senha não é exibida nem registrada em logs.
+          Ao salvar, qualquer sessão anterior da secretaria será encerrada.
+        </p>
+        <div class="info-note" style="margin-bottom:14px;">
+          <?php if ($secretariaAccount === null || ($secretariaAccount['requires_password_setup'] ?? false)): ?>
+            <strong>Ação necessária:</strong> a nova senha segura ainda não foi configurada. Até a primeira configuração,
+            o acesso legado funciona no máximo uma vez e exige que o admin defina a nova senha.
+          <?php elseif (!($secretariaAccount['active'] ?? false)): ?>
+            <strong>Conta desativada.</strong> Salvar uma nova senha reativará o acesso da secretaria.
+          <?php else: ?>
+            <strong>Conta segura configurada.</strong> Salvar novamente troca a senha e revoga sessões anteriores.
+          <?php endif; ?>
+        </div>
+        <div class="charge-fields" style="margin-bottom:12px;">
+          <div class="form-group">
+            <label>Nova senha da secretaria</label>
+            <input
+              id="secretaria-password"
+              type="password"
+              minlength="12"
+              maxlength="128"
+              autocomplete="new-password"
+              placeholder="12+ caracteres, maiúscula, minúscula, número e símbolo"
+            />
+          </div>
+          <div class="form-group">
+            <label>Confirmar nova senha</label>
+            <input
+              id="secretaria-password-confirm"
+              type="password"
+              minlength="12"
+              maxlength="128"
+              autocomplete="new-password"
+              placeholder="Repita a nova senha"
+            />
+          </div>
+          <div class="form-group" style="display:flex;align-items:flex-end;">
+            <button id="secretaria-password-save" class="btn btn-danger btn-sm" type="button">
+              Salvar acesso da secretaria
+            </button>
+          </div>
+        </div>
+        <div id="secretaria-password-message" class="charge-message" aria-live="polite"></div>
+      </section>
+      <?php endif; ?>
 
       <section id="tab-fluxo-caixa" class="<?php echo $activeTab === 'fluxo-caixa' ? '' : 'hidden'; ?>">
         <h2>Fluxo de Caixa</h2>
@@ -2316,7 +2378,7 @@ if (!empty($exclusionsLog)) {
     window.__monthlyStudents = <?php echo json_encode($monthlyRowsForJs, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
     window.__adminCanApproveAttendance = <?php echo $canAttendanceApprove ? 'true' : 'false'; ?>;
   </script>
-  <script src="/assets/js/admin-dashboard.js?v=81"></script>
+  <script src="/assets/js/admin-dashboard.js?v=82"></script>
   <script>
     (function () {
       function activateTab(name) {
@@ -2333,6 +2395,7 @@ if (!empty($exclusionsLog)) {
           exclusoes: 'tab-exclusoes',
           duplicados: 'tab-duplicados',
           'reset-senha': 'tab-reset-senha',
+          'acesso-secretaria': 'tab-acesso-secretaria',
           'fluxo-caixa': 'tab-fluxo-caixa',
           'dados-asaas': 'tab-dados-asaas',
           'email-massa': 'tab-email-massa'

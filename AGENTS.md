@@ -240,9 +240,14 @@ somente flags antigas da sessão. A secretaria pode operar chamada, mensalistas,
 entradas e responsáveis sem WhatsApp. Dados financeiros, Asaas, importação,
 baixas, reset de senha e mutações sensíveis são exclusivos do admin principal.
 
-`SECRETARIA_SECRET` deve ser configurado no ambiente. Até isso ocorrer, existe
-um fallback legado temporário e auditado. Remova o fallback assim que o segredo
-for configurado.
+A credencial da secretaria é criada e rotacionada exclusivamente pelo admin
+principal na aba **Acesso da Secretaria**. A senha entra somente no `POST`
+protegido por CSRF, é persistida como hash e nunca vai para ambiente, sessão ou
+auditoria. Cada troca incrementa `session_version` e encerra sessões anteriores.
+Enquanto ainda não existir uma linha `secretaria` em `admin_users`, o fallback
+legado permanece temporariamente disponível e auditado. Depois da primeira
+configuração pelo painel, a existência da conta desativa esse fallback; remova
+também a constante legada do código assim que a configuração for confirmada.
 
 Toda mutação administrativa autenticada exige CSRF no helper central. O
 financeiro do responsável mostra e opera somente cobranças que correspondam
