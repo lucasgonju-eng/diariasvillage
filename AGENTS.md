@@ -140,6 +140,9 @@ O primeiro acesso do responsável continua público e simples, mas é estritamen
 CPF e aluno e usa as RPCs `begin_first_access_claim`,
 `complete_first_access_claim` e `cancel_first_access_claim`.
 
+- `public/api/register.php` é uma tombstone 404 permanente. Não restaure o
+  cadastro legado por nome do aluno nem permita criar responsável com dados
+  fornecidos pelo solicitante sem validar o vínculo existente.
 - Nunca redefina um usuário existente do Supabase Auth no primeiro acesso.
 - Uma criação Auth sem conclusão local deve ser compensada com exclusão imediata.
 - O e-mail novo é salvo apenas no vínculo principal porque `guardians.email` é

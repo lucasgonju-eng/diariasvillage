@@ -96,6 +96,7 @@ $assertOrder = static function (string $label, string $content, string $first, s
 };
 
 $register = $read($root . '/public/api/register-primeiro-acesso.php');
+$legacyRegister = $read($root . '/public/api/register.php');
 $supabaseAuth = $read($root . '/src/SupabaseAuth.php');
 $adminAuthSource = $read($root . '/src/AdminAuth.php');
 $helpers = $read($root . '/src/Helpers.php');
@@ -116,6 +117,11 @@ $assertOrder('Auth antes da conclusão', $register, '$auth->createUser(', "rpc('
 $assertNotContains('primeiro acesso não redefine Auth', $register, '$auth->updateUser(');
 $assertNotContains('primeiro acesso não procura usuário para redefinir', $register, '$auth->listUsers(');
 $assertNotContains('primeiro acesso não atualiza guardians fora da RPC', $register, "\$client->update(\n    'guardians'");
+$assertContains('cadastro legado responde 404', $legacyRegister, 'http_response_code(404)');
+$assertContains('cadastro legado impede cache', $legacyRegister, "header('Cache-Control: no-store')");
+$assertNotContains('cadastro legado não acessa responsáveis', $legacyRegister, 'SupabaseClient');
+$assertNotContains('cadastro legado não aceita nome de aluno', $legacyRegister, 'student_name');
+$assertNotContains('cadastro legado não cria vínculo', $legacyRegister, "insert('guardians'");
 $assertContains('Supabase Auth permite compensação', $supabaseAuth, 'function deleteUser(');
 
 $assertContains('Admin usa password_hash', $adminAuthSource, 'password_hash(');
