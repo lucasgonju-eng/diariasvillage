@@ -64,15 +64,19 @@ $order(
     'mv -Tf "$NEXT_LINK" "$CURRENT"'
 );
 
-$contains('dispatcher', $dispatcher, 'RewriteCond %{ENV:REDIRECT_DV_INTERNAL_RELEASE} !=1');
+$contains('dispatcher', $dispatcher, 'RewriteCond %{THE_REQUEST} "\s/+[^?\s]*%" [NC]');
 $contains(
     'dispatcher',
     $dispatcher,
-    'RewriteRule ^(?:\.releases|\.legacy-root|\.trash|storage)(?:/|$) - [F,L,NC]'
+    'RewriteCond %{THE_REQUEST} "\s/+\.releases(?:[/\s?]|$)" [NC,OR]'
 );
-$contains('dispatcher', $dispatcher, 'RewriteRule ^(.*)$ .releases/current/$1 [L,E=DV_INTERNAL_RELEASE:1]');
+$contains(
+    'dispatcher',
+    $dispatcher,
+    'RewriteCond %{THE_REQUEST} "\s/+storage(?:[/\s?]|$)" [NC]'
+);
+$contains('dispatcher', $dispatcher, 'RewriteRule ^(.*)$ .releases/current/$1 [L]');
 $contains('dispatcher', $dispatcher, 'RewriteRule ^\.well-known(?:/|$) - [L]');
-$notContains('dispatcher', $dispatcher, '%{THE_REQUEST}');
 
 $contains('health', $health, "'release_manifest_missing'");
 $contains('health', $health, "'release_incomplete'");

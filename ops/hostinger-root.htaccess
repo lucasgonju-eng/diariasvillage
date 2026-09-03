@@ -9,11 +9,15 @@ Options -Indexes
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
-    # RewriteRule recebe o caminho decodificado. Isso bloqueia também tentativas
-    # percent-encoded, mas permite apenas o passe interno marcado pelo dispatcher.
-    RewriteCond %{ENV:DV_INTERNAL_RELEASE} !=1
-    RewriteCond %{ENV:REDIRECT_DV_INTERNAL_RELEASE} !=1
-    RewriteRule ^(?:\.releases|\.legacy-root|\.trash|storage)(?:/|$) - [F,L,NC]
+    # THE_REQUEST não muda durante o rewrite interno. Bloqueamos qualquer escape
+    # percent-encoded no caminho e, depois, os diretórios privados em forma literal.
+    RewriteCond %{THE_REQUEST} "\s/+[^?\s]*%" [NC]
+    RewriteRule ^ - [F,L]
+    RewriteCond %{THE_REQUEST} "\s/+\.releases(?:[/\s?]|$)" [NC,OR]
+    RewriteCond %{THE_REQUEST} "\s/+\.legacy-root(?:[/\s?]|$)" [NC,OR]
+    RewriteCond %{THE_REQUEST} "\s/+\.trash(?:[/\s?]|$)" [NC,OR]
+    RewriteCond %{THE_REQUEST} "\s/+storage(?:[/\s?]|$)" [NC]
+    RewriteRule ^ - [F,L]
 
     # A Hostinger precisa alcançar desafios de renovação de certificado.
     RewriteRule ^\.well-known(?:/|$) - [L]
@@ -25,7 +29,7 @@ Options -Indexes
 
     # Evita recursão no segundo passe interno do mod_rewrite.
     RewriteRule ^\.releases/current(?:/|$) - [L]
-    RewriteRule ^(.*)$ .releases/current/$1 [L,E=DV_INTERNAL_RELEASE:1]
+    RewriteRule ^(.*)$ .releases/current/$1 [L]
 </IfModule>
 
 DirectoryIndex index.php
