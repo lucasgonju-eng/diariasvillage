@@ -240,6 +240,7 @@ $loginEndpoint = file_get_contents(dirname(__DIR__) . '/public/api/login.php') ?
 $supabaseClient = file_get_contents(dirname(__DIR__) . '/src/SupabaseClient.php') ?: '';
 
 foreach ([
+    "__DIR__ . '/../src/Bootstrap.php'" => 'reset deve carregar bootstrap na estrutura pública',
     'GuardianAccountIdentity::analyze(' => 'reset deve analisar a conta composta',
     "if (\$action === 'lookup')" => 'reset deve possuir etapa de consulta',
     "'guardian_id'" => 'reset deve exigir guardian_id explícito',
