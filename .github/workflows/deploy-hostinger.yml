@@ -144,12 +144,14 @@ jobs:
             TARGET="${TARGET%/}"
             RELEASE_ID="${{ env.RELEASE_ID }}"
 
-            case "$TARGET" in
-              ""|"/") echo "SSH_TARGET_DIR inseguro."; exit 1 ;;
-            esac
-            case "$RELEASE_ID" in
-              *[!0-9a-f-]*) echo "RELEASE_ID inválido."; exit 1 ;;
-            esac
+            if [ -z "$TARGET" ] || [ "$TARGET" = "/" ]; then
+              echo "SSH_TARGET_DIR inseguro."
+              exit 1
+            fi
+            if ! printf '%s' "$RELEASE_ID" | grep -Eq '^[0-9a-f]+-[0-9]+-[0-9]+$'; then
+              echo "RELEASE_ID inválido."
+              exit 1
+            fi
 
             RELEASES="$TARGET/.releases"
             RELEASE="$RELEASES/$RELEASE_ID"
