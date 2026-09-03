@@ -105,6 +105,7 @@ $mobile = $read($root . '/public/mobile/index.php');
 $firstAccessEmailFix = $read($root . '/supabase/migrations/20260903002233_fix_first_access_email_uniqueness.sql');
 $selectStudent = $read($root . '/public/api/select-student.php');
 $userDashboard = $read($root . '/public/dashboard.php');
+$attendance = $read($root . '/public/api/admin-attendance.php');
 
 $assertContains('primeiro acesso inicia claim', $register, "rpc('begin_first_access_claim'");
 $assertContains('primeiro acesso conclui claim', $register, "rpc('complete_first_access_claim'");
@@ -143,6 +144,45 @@ $assertContains('troca de filho exige a mesma conta Auth', $selectStudent, '&aut
 $assertContains('troca de filho exige vínculo com aluno', $selectStudent, '&student_id=eq.');
 $assertNotContains('troca de filho não usa CPF como autorização', $selectStudent, 'parent_document');
 $assertContains('dashboard lista filhos pela conta Auth', $userDashboard, '&auth_user_id=eq.');
+
+$closeDayStart = strpos($attendance, "if (\$action === 'close_day')");
+$editStart = strpos($attendance, "if (\$action === 'edit')");
+$closeDayBlock = (
+    $closeDayStart !== false
+    && $editStart !== false
+    && $editStart > $closeDayStart
+) ? substr($attendance, $closeDayStart, $editStart - $closeDayStart) : '';
+$assertContains(
+    'chamada permite secretaria e admin',
+    $attendance,
+    'Helpers::requireAdminRole([\App\AdminAuth::ROLE_ADMIN, \App\AdminAuth::ROLE_SECRETARIA])'
+);
+$assertContains(
+    'presença da secretaria fica em revisão',
+    $closeDayBlock,
+    "'status' => AttendanceCalls::STATUS_EM_REVISAO"
+);
+$assertNotContains(
+    'fechamento da chamada não cria cobrança',
+    $closeDayBlock,
+    '$asaas->createPayment('
+);
+$assertOrder(
+    'aprovação humana antecede criação da cobrança',
+    $attendance,
+    'Apenas admin pode autorizar chamada.',
+    '$asaas->createPayment('
+);
+$assertContains(
+    'somente admin rejeita chamada',
+    $attendance,
+    "Helpers::json(['ok' => false, 'error' => 'Apenas admin pode rejeitar chamada.'], 403)"
+);
+$assertContains(
+    'mensalista permanece sem cobrança na chamada',
+    $attendance,
+    "'blocked_reason' => 'monthly_covered'"
+);
 
 $adminOnlyEndpoints = [
     'admin-charge.php',

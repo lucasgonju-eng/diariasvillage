@@ -163,6 +163,25 @@ baixas, reset de senha e mutações sensíveis são exclusivos do admin principa
 um fallback legado temporário e auditado. Remova o fallback assim que o segredo
 for configurado.
 
+## Chamada presencial e aprovação humana
+
+A chamada presencial é o motor operacional do SaaS e depende de duas pessoas
+com papéis distintos:
+
+1. A `secretaria` registra a presença real no dashboard, mesmo quando o aluno
+   chegou ao day-use sem diária, PIX ou cobrança previamente criada.
+2. O lançamento fica `EM_REVISAO`; registrar presença nunca autoriza nem cria
+   cobrança automaticamente.
+3. Somente o `admin_principal` pode aceitar ou rejeitar o lançamento.
+4. Apenas a aceitação explícita do admin inicia a validação de identidade,
+   idempotência e eventual criação da cobrança Asaas.
+5. A rejeição preserva o histórico e não gera cobrança. Mensalistas permanecem
+   cobertos pelo plano e também não geram cobrança.
+
+Nunca exija cobrança prévia para a secretaria registrar presença, nunca remova
+essa revisão humana e nunca transforme o fechamento da chamada em emissão
+automática. Correções financeiras devem preservar integralmente esse fluxo.
+
 ## Autorização da grade de oficinas
 
 Seleção e remoção de Oficina Modular são sempre vinculadas ao responsável da
