@@ -5,6 +5,7 @@ use App\AsaasClient;
 use App\Helpers;
 use App\HttpClient;
 use App\Mailer;
+use App\Services\MonthlyWorkshopService;
 use App\SupabaseClient;
 
 $token = trim($_GET['token'] ?? '');
@@ -45,6 +46,11 @@ $guardianEmail = $pendencia['guardian_email'] ?? '';
 $guardianName = $pendencia['guardian_name'] ?? 'Responsável';
 $guardianCpf = $pendencia['guardian_cpf'] ?? '';
 $studentName = $pendencia['student_name'] ?? 'Aluno';
+$pendenciaStudentId = trim((string) ($pendencia['student_id'] ?? ''));
+if ($pendenciaStudentId !== '' && (new MonthlyWorkshopService($client))->getActivePlan($pendenciaStudentId) !== null) {
+    echo 'Aluno mensalista: nenhuma cobrança PIX é necessária. As oficinas devem ser confirmadas após o primeiro acesso.';
+    exit;
+}
 
 $invoiceUrl = $pendencia['asaas_invoice_url'] ?? '';
 $today = date('Y-m-d');

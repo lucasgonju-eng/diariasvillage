@@ -24,12 +24,7 @@ function append_payment_settlement_log(array $entry): void
     @file_put_contents($path, $line . PHP_EOL, FILE_APPEND);
 }
 
-if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
-    Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
-}
-if (($_SESSION['admin_user'] ?? '') !== 'admin') {
-    Helpers::json(['ok' => false, 'error' => 'Recurso disponível apenas para o admin principal.'], 403);
-}
+$adminSession = Helpers::requireAdminRole(\App\AdminAuth::ROLE_ADMIN);
 
 Helpers::requirePost();
 $payload = json_decode(file_get_contents('php://input'), true);
@@ -102,7 +97,7 @@ append_payment_settlement_log([
     'billing_type' => (string) ($payment['billing_type'] ?? ''),
     'asaas_payment_id' => (string) ($payment['asaas_payment_id'] ?? ''),
     'note' => $note,
-    'settled_by' => (string) ($_SESSION['admin_user'] ?? ''),
+    'settled_by' => (string) ($adminSession['username'] ?? 'admin'),
     'source' => 'admin_cashflow',
 ]);
 

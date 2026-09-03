@@ -1,30 +1,35 @@
 <?php
-require_once __DIR__ . '/../src/Bootstrap.php';
+$bootstrapCandidates = [
+    __DIR__ . '/../src/Bootstrap.php',
+    dirname(__DIR__, 2) . '/src/Bootstrap.php',
+];
+foreach ($bootstrapCandidates as $bootstrapFile) {
+    if (is_file($bootstrapFile)) {
+        require_once $bootstrapFile;
+        break;
+    }
+}
 
-use App\Env;
+use App\AdminAuth;
 
 $error = '';
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 header('Expires: 0');
 
+$adminAuth = new AdminAuth();
+$adminAuth->bootstrapFromEnvironment();
+$currentAdmin = $adminAuth->currentSession();
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $usernameInput = (string) ($_POST['admin_login_user'] ?? ($_POST['username'] ?? ''));
     $passwordInput = (string) ($_POST['admin_login_pass'] ?? ($_POST['password'] ?? ''));
-    $username = strtolower(trim($usernameInput));
-    $password = trim($passwordInput);
-    $adminSecret = Env::get('ADMIN_SECRET', '');
-
-    $isAdmin = $username === 'admin' && $password !== '' && $password === $adminSecret;
-    $isSecretaria = $username === 'secretaria' && $password === 'Ei32743176';
-
-    if ($isAdmin || $isSecretaria) {
-        $_SESSION['admin_authenticated'] = true;
-        $_SESSION['admin_user'] = $username;
+    $login = $adminAuth->login($usernameInput, $passwordInput);
+    if ($login['ok']) {
         header('Location: /admin/dashboard.php?tab=entries');
         exit;
     }
-    $error = 'Usuário ou senha inválidos.';
+    $error = (string) ($login['error'] ?? 'Usuário ou senha inválidos.');
 }
 ?>
 <!DOCTYPE html>
@@ -43,11 +48,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <div class="card">
       <h2>Painel administrativo</h2>
-      <?php if (isset($_SESSION['admin_authenticated']) && $_SESSION['admin_authenticated'] === true): ?>
+      <?php if ($currentAdmin !== null): ?>
         <p class="subtitle">Escolha uma opção abaixo.</p>
         <div class="nav">
           <a class="button" href="/admin/dashboard.php?tab=entries">Entradas confirmadas</a>
-          <a class="button secondary" href="/admin/import.php">Importar alunos</a>
+          <?php if (($currentAdmin['role'] ?? '') === AdminAuth::ROLE_ADMIN): ?>
+            <a class="button secondary" href="/admin/import.php">Importar alunos</a>
+          <?php endif; ?>
         </div>
       <?php else: ?>
         <p class="subtitle">Informe usuário e senha para continuar.</p>

@@ -65,6 +65,16 @@ class SupabaseAuth
         );
     }
 
+    /** Exclui um usuário pela Admin API. Use apenas para compensar criação recém-realizada. */
+    public function deleteUser(string $userId): array
+    {
+        return $this->http->request(
+            'DELETE',
+            $this->url . '/auth/v1/admin/users/' . rawurlencode($userId),
+            $this->headers()
+        );
+    }
+
     public function signIn(string $email, string $password): array
     {
         $payload = [

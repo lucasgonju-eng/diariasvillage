@@ -77,12 +77,7 @@ function voucher_label_from_billing_type(string $billingType): string
     return '';
 }
 
-if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
-    Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
-}
-if (($_SESSION['admin_user'] ?? '') !== 'admin') {
-    Helpers::json(['ok' => false, 'error' => 'Recurso disponível apenas para o admin principal.'], 403);
-}
+Helpers::requireAdminRole(\App\AdminAuth::ROLE_ADMIN);
 
 Helpers::requirePost();
 $payload = json_decode(file_get_contents('php://input'), true);

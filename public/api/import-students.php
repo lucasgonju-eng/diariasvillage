@@ -5,12 +5,7 @@ use App\HttpClient;
 use App\SupabaseClient;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
-$sessionOk = isset($_SESSION['admin_authenticated']) && $_SESSION['admin_authenticated'] === true;
-if (!$sessionOk) {
-    http_response_code(403);
-    echo 'Acesso negado.';
-    exit;
-}
+Helpers::requireAdminRole(\App\AdminAuth::ROLE_ADMIN);
 
 if (empty($_FILES['file']['tmp_name'])) {
     echo 'Arquivo não enviado.';

@@ -180,9 +180,7 @@ function resolveQueuedChargeRule(array $paymentRow, string $today): array
     ];
 }
 
-if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
-    \App\Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
-}
+\App\Helpers::requireAdminRole(\App\AdminAuth::ROLE_ADMIN);
 
 try {
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
@@ -233,6 +231,16 @@ try {
 
             $studentId = trim((string) ($paymentRow['student_id'] ?? ''));
             $guardianId = trim((string) ($paymentRow['guardian_id'] ?? ''));
+            if ($studentId !== '' && (new \App\Services\MonthlyWorkshopService($client))->getActivePlan($studentId) !== null) {
+                $client->update('payments', 'id=eq.' . urlencode($paymentId), ['status' => 'canceled']);
+                $results[] = [
+                    'id' => $paymentId,
+                    'ok' => true,
+                    'monthly_covered' => true,
+                    'message' => 'Cobrança cancelada: aluno mensalista não gera PIX.',
+                ];
+                continue;
+            }
             $possibleDuplicatesQuery = 'select=id,status,billing_type,daily_type,payment_date,paid_at,asaas_payment_id'
                 . '&guardian_id=eq.' . urlencode($guardianId)
                 . '&limit=200';

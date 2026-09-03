@@ -13,6 +13,7 @@ date_default_timezone_set('America/Sao_Paulo');
 
 use App\Helpers;
 use App\HttpClient;
+use App\Services\MonthlyWorkshopService;
 use App\SupabaseClient;
 
 $user = Helpers::requireAuthWeb();
@@ -22,13 +23,13 @@ $sessionStudentId = trim((string) ($user['student_id'] ?? ''));
 if ($sessionStudentId !== '') {
     $studentIdsScope[$sessionStudentId] = true;
 }
-$documentDigits = preg_replace('/\D+/', '', (string) ($user['parent_document'] ?? '')) ?? '';
+$authUserId = trim((string) ($user['auth_user_id'] ?? ''));
 
 $userId = trim((string) ($user['id'] ?? ''));
 if ($userId !== '') {
     $guardianCurrent = $client->select(
         'guardians',
-        'select=student_id,parent_document&id=eq.' . urlencode($userId) . '&limit=1'
+        'select=student_id,auth_user_id&id=eq.' . urlencode($userId) . '&limit=1'
     );
     if (($guardianCurrent['ok'] ?? false) && !empty($guardianCurrent['data'][0])) {
         $current = $guardianCurrent['data'][0];
@@ -36,49 +37,19 @@ if ($userId !== '') {
         if ($sid !== '') {
             $studentIdsScope[$sid] = true;
         }
-        if ($documentDigits === '') {
-            $documentDigits = preg_replace('/\D+/', '', (string) ($current['parent_document'] ?? '')) ?? '';
+        if ($authUserId === '') {
+            $authUserId = trim((string) ($current['auth_user_id'] ?? ''));
         }
     }
 }
 
-$userEmail = trim((string) ($user['email'] ?? ''));
-if ($userEmail !== '') {
-    $guardiansByEmail = $client->select(
+if ($authUserId !== '') {
+    $guardiansByAccount = $client->select(
         'guardians',
-        'select=student_id&email=eq.' . urlencode($userEmail) . '&limit=200'
+        'select=student_id&auth_user_id=eq.' . urlencode($authUserId) . '&limit=200'
     );
-    if (($guardiansByEmail['ok'] ?? false) && !empty($guardiansByEmail['data'])) {
-        foreach ($guardiansByEmail['data'] as $row) {
-            $sid = trim((string) ($row['student_id'] ?? ''));
-            if ($sid !== '') {
-                $studentIdsScope[$sid] = true;
-            }
-        }
-    }
-}
-
-if ($documentDigits !== '') {
-    $maskCpf = static function (string $digits): string {
-        if (strlen($digits) !== 11) {
-            return $digits;
-        }
-        return substr($digits, 0, 3) . '.'
-            . substr($digits, 3, 3) . '.'
-            . substr($digits, 6, 3) . '-'
-            . substr($digits, 9, 2);
-    };
-    $cpfAttempts = [
-        'parent_document=eq.' . urlencode($documentDigits) . '&select=student_id&limit=500',
-        'parent_document=eq.' . urlencode($maskCpf($documentDigits)) . '&select=student_id&limit=500',
-        'parent_document=ilike.' . urlencode('*' . $documentDigits . '*') . '&select=student_id&limit=500',
-    ];
-    foreach ($cpfAttempts as $query) {
-        $guardiansByCpf = $client->select('guardians', $query);
-        if (!($guardiansByCpf['ok'] ?? false) || empty($guardiansByCpf['data'])) {
-            continue;
-        }
-        foreach ($guardiansByCpf['data'] as $row) {
+    if (($guardiansByAccount['ok'] ?? false) && !empty($guardiansByAccount['data'])) {
+        foreach ($guardiansByAccount['data'] as $row) {
             $sid = trim((string) ($row['student_id'] ?? ''));
             if ($sid !== '') {
                 $studentIdsScope[$sid] = true;
@@ -122,6 +93,11 @@ if (!empty($studentRows)) {
     }
 }
 $studentName = trim((string) ($studentRow['name'] ?? 'aluno(a)'));
+$monthlyPlan = null;
+$dashboardStudentId = trim((string) ($studentRow['id'] ?? ''));
+if ($dashboardStudentId !== '') {
+    $monthlyPlan = (new MonthlyWorkshopService($client))->getActivePlan($dashboardStudentId);
+}
 $nowDt = new DateTimeImmutable('now', new DateTimeZone('America/Sao_Paulo'));
 $nextBusinessDay = static function (DateTimeImmutable $date): DateTimeImmutable {
     $candidate = $date;
@@ -174,37 +150,71 @@ unset($_SESSION['dashboard_error']);
           <p class="lead" style="margin-top:-6px;font-weight:700;color:#FFE7A6;">
             Pode entrar, <?php echo htmlspecialchars($studentName, ENT_QUOTES, 'UTF-8'); ?>, a casa é sua!
           </p>
+          <?php if (count($studentRows) > 1): ?>
+            <form method="post" action="/api/select-student.php" style="max-width:360px;margin:10px 0;">
+              <label for="family-student" style="display:block;font-weight:700;margin-bottom:4px;">Aluno desta conta</label>
+              <select id="family-student" name="student_id" onchange="this.form.submit()" style="width:100%;">
+                <?php foreach ($studentRows as $familyStudent): ?>
+                  <?php $familyStudentId = trim((string) ($familyStudent['id'] ?? '')); ?>
+                  <option value="<?php echo htmlspecialchars($familyStudentId, ENT_QUOTES, 'UTF-8'); ?>" <?php echo $familyStudentId === $dashboardStudentId ? 'selected' : ''; ?>>
+                    <?php echo htmlspecialchars(
+                        trim((string) ($familyStudent['name'] ?? 'Aluno(a)'))
+                            . (!empty($familyStudent['enrollment']) ? ' • ' . (string) $familyStudent['enrollment'] : ''),
+                        ENT_QUOTES,
+                        'UTF-8'
+                    ); ?>
+                  </option>
+                <?php endforeach; ?>
+              </select>
+            </form>
+          <?php endif; ?>
           <p class="lead">Escolha a diária do dia com praticidade.</p>
 
           <div class="microchips" role="list">
-            <span class="microchip" role="listitem">Pagamento via PIX</span>
-            <span class="microchip" role="listitem">Liberação automática</span>
-            <span class="microchip" role="listitem">Confirmação por e-mail</span>
+            <?php if (is_array($monthlyPlan)): ?>
+              <span class="microchip" role="listitem">Plano mensalista</span>
+              <span class="microchip" role="listitem">Sem PIX</span>
+              <span class="microchip" role="listitem">Oficinas recorrentes</span>
+            <?php else: ?>
+              <span class="microchip" role="listitem">Pagamento via PIX</span>
+              <span class="microchip" role="listitem">Liberação automática</span>
+              <span class="microchip" role="listitem">Confirmação por e-mail</span>
+            <?php endif; ?>
           </div>
         </div>
 
         <aside class="hero-card" aria-label="Formulário de início da diária">
-          <h3>Montar grade da diária</h3>
-          <p class="muted">Escolha a data e siga para a etapa de Grade de Oficina Modular.</p>
-          <div class="info-note" id="planned-countdown" data-now="<?php echo date('c'); ?>">
-            Carregando contagem regressiva da diária planejada...
-          </div>
-
-          <form id="payment-form" method="get" action="/api/diaria-iniciar.php">
-            <div class="grid-2">
-              <div class="form-group">
-                <label>Data</label>
-                <input type="text" id="payment-date-br" value="<?php echo htmlspecialchars($minDateBr, ENT_QUOTES, 'UTF-8'); ?>" inputmode="numeric" autocomplete="off" placeholder="dd/mm/aaaa" required />
-                <input type="hidden" id="payment-date" name="date" value="<?php echo $minDate; ?>" data-min-iso="<?php echo $minDate; ?>" />
-                <div class="small">Após 16h, somente datas futuras.</div>
-              </div>
+          <?php if (is_array($monthlyPlan)): ?>
+            <h3>Oficinas do mês</h3>
+            <p class="muted">
+              Seu plano inclui <?php echo (int) ($monthlyPlan['required_slots'] ?? 0); ?> encontros
+              em <?php echo (int) ($monthlyPlan['weekly_days'] ?? 0); ?> dias por semana.
+            </p>
+            <div class="info-note">Confirme as oficinas recorrentes do mês. Nenhuma cobrança PIX será criada.</div>
+            <a class="btn btn-primary btn-block" href="/monthly-workshops.php">Escolher ou consultar oficinas</a>
+          <?php else: ?>
+            <h3>Montar grade da diária</h3>
+            <p class="muted">Escolha a data e siga para a etapa de Grade de Oficina Modular.</p>
+            <div class="info-note" id="planned-countdown" data-now="<?php echo date('c'); ?>">
+              Carregando contagem regressiva da diária planejada...
             </div>
-            <button class="btn btn-primary btn-block" type="submit">Ir para Grade de Oficina Modular</button>
-            <div id="payment-message"></div>
-            <?php if ($dashboardError !== ''): ?>
-              <div class="error" style="margin-top:8px;"><?php echo htmlspecialchars($dashboardError, ENT_QUOTES, 'UTF-8'); ?></div>
-            <?php endif; ?>
-          </form>
+
+            <form id="payment-form" method="get" action="/api/diaria-iniciar.php">
+              <div class="grid-2">
+                <div class="form-group">
+                  <label>Data</label>
+                  <input type="text" id="payment-date-br" value="<?php echo htmlspecialchars($minDateBr, ENT_QUOTES, 'UTF-8'); ?>" inputmode="numeric" autocomplete="off" placeholder="dd/mm/aaaa" required />
+                  <input type="hidden" id="payment-date" name="date" value="<?php echo $minDate; ?>" data-min-iso="<?php echo $minDate; ?>" />
+                  <div class="small">Após 16h, somente datas futuras.</div>
+                </div>
+              </div>
+              <button class="btn btn-primary btn-block" type="submit">Ir para Grade de Oficina Modular</button>
+              <div id="payment-message"></div>
+              <?php if ($dashboardError !== ''): ?>
+                <div class="error" style="margin-top:8px;"><?php echo htmlspecialchars($dashboardError, ENT_QUOTES, 'UTF-8'); ?></div>
+              <?php endif; ?>
+            </form>
+          <?php endif; ?>
         </aside>
       </div>
     </div>

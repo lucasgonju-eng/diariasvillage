@@ -16,9 +16,7 @@ use App\HttpClient;
 use App\MonthlyStudents;
 use App\SupabaseClient;
 
-if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
-    Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
-}
+Helpers::requireAdminRole(\App\AdminAuth::ROLE_ADMIN);
 
 function normalize_date(string $raw): ?string
 {

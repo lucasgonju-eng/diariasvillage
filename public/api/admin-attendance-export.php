@@ -12,13 +12,9 @@ foreach ($bootstrapCandidates as $bootstrapFile) {
 date_default_timezone_set('America/Sao_Paulo');
 
 use App\AttendanceCalls;
+use App\Helpers;
 
-if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
-    http_response_code(401);
-    header('Content-Type: text/plain; charset=UTF-8');
-    echo 'Não autorizado.';
-    exit;
-}
+Helpers::requireAdminRole([\App\AdminAuth::ROLE_ADMIN, \App\AdminAuth::ROLE_SECRETARIA]);
 
 function parseDateFilter(string $raw): ?string
 {

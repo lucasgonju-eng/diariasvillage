@@ -82,9 +82,7 @@ function find_customers_by_exact_identity(
     return $matches;
 }
 
-if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
-    Helpers::json(['ok' => false, 'error' => 'Não autorizado.'], 401);
-}
+Helpers::requireAdminRole(\App\AdminAuth::ROLE_ADMIN);
 
 Helpers::requirePost();
 

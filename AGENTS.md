@@ -108,6 +108,62 @@ Estados considerados abertos:
 Prefira falso negativo seguro: deixar uma conciliação para revisão é melhor que
 atribuir pagamento à família errada.
 
+## Primeiro acesso e autenticação administrativa
+
+O primeiro acesso do responsável continua público e simples, mas é estritamente
+único. `register-primeiro-acesso.php` exige `student_id`, valida o vínculo entre
+CPF e aluno e usa as RPCs `begin_first_access_claim`,
+`complete_first_access_claim` e `cancel_first_access_claim`.
+
+- Nunca redefina um usuário existente do Supabase Auth no primeiro acesso.
+- Uma criação Auth sem conclusão local deve ser compensada com exclusão imediata.
+- O e-mail novo é salvo apenas no vínculo principal porque `guardians.email` é
+  único. Os demais filhos da mesma identidade recebem o mesmo `auth_user_id`.
+- A troca de filho no dashboard usa `auth_user_id` e valida o vínculo-aluno;
+  CPF, nome ou e-mail isolados não autorizam ampliar a sessão.
+- Claims concorrentes ou já concluídos devem bloquear o cadastro.
+- Login e expansão familiar não podem usar busca parcial de CPF.
+
+Administradores usam `src/AdminAuth.php`, a tabela `admin_users`, hashes de
+senha, roles (`admin_principal` e `secretaria`), sessão versionada e
+`admin_audit_log`. Endpoints devem usar `Helpers::requireAdminRole`; não valide
+somente flags antigas da sessão. A secretaria pode operar chamada, mensalistas,
+entradas e responsáveis sem WhatsApp. Dados financeiros, Asaas, importação,
+baixas, reset de senha e mutações sensíveis são exclusivos do admin principal.
+
+`SECRETARIA_SECRET` deve ser configurado no ambiente. Até isso ocorrer, existe
+um fallback legado temporário e auditado. Remova o fallback assim que o segredo
+for configurado.
+
+## Alunos mensalistas
+
+A fonte histórica é a aba **Mensalistas** do admin. Em 02/09/2026, os 60 planos
+ativos dessa aba foram migrados para `monthly_student_plans`: 8 de dois dias,
+4 de três dias, 2 de quatro dias e 46 de cinco dias.
+
+- Mensalista nunca gera PIX de diária.
+- A franquia é exatamente `2 × weekly_days` encontros por semana.
+- A seleção deve ocupar exatamente `weekly_days` dias, com dois horários em cada
+  dia; os dias são determinados pelas oficinas escolhidas.
+- Oficinas `ALL_MEETINGS` ocupam todos os encontros cadastrados.
+- Trilhas do Conhecimento é `SINGLE_MEETING` e ocupa somente o horário escolhido.
+- Escolha pela Orientadora ocupa um encontro e fica registrada.
+- A confirmação cria entradas recorrentes para todas as datas correspondentes
+  da competência.
+- Uma confirmação ativa é imutável. Alteração de franquia ou desativação exige
+  desbloqueio administrativo prévio, que cancela as entradas anteriores.
+- Sempre identifique plano por `student_id`; nome não é fallback.
+
+As tabelas `monthly_student_plans`, `monthly_workshop_submissions`,
+`monthly_workshop_slots` e `monthly_workshop_entries` têm RLS e acesso
+service-only. As RPCs `confirm_monthly_workshops` e
+`unlock_monthly_workshops` fazem as mutações transacionais.
+
+Existem 50 cobranças Asaas abertas anteriores a setembro vinculadas aos atuais
+mensalistas, além de duas filas locais antigas. Não cancele esses registros em
+lote: audite identidade, competência e situação remota individualmente e
+cancele no Asaas antes de reconciliar localmente.
+
 ## Banco e RLS
 
 A migration `20260901135800_lock_down_public_data_api.sql`:
@@ -153,6 +209,8 @@ Execute antes de publicar:
 php tests/asaas_identity_safety_test.php
 php tests/admin_settle_payment_security_test.php
 php tests/oficina_modular_validity_date_test.php
+php tests/authentication_security_test.php
+php tests/monthly_workshop_security_test.php
 php -l public/api/admin-charge.php
 php -l public/api/admin-sync-recebidas.php
 php -l public/api/admin-sync-charges-payments.php

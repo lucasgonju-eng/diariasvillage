@@ -200,9 +200,7 @@ function parseOptionalDiscountAmount($raw)
     return array('ok' => true, 'amount' => $amount);
 }
 
-if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
-    \App\Helpers::json(array('ok' => false, 'error' => 'Não autorizado.'), 401);
-}
+$adminSession = \App\Helpers::requireAdminRole(\App\AdminAuth::ROLE_ADMIN);
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
     \App\Helpers::json(array('ok' => false, 'error' => 'Método inválido.'), 405);
@@ -237,9 +235,6 @@ try {
         \App\Helpers::json(array('ok' => false, 'error' => (string) ($discountResult['error'] ?? 'Desconto inválido.')), 422);
     }
     $discountAmount = (float) ($discountResult['amount'] ?? 0.0);
-    if ($discountAmount > 0 && (($_SESSION['admin_user'] ?? '') !== 'admin')) {
-        \App\Helpers::json(array('ok' => false, 'error' => 'Apenas admin pode aplicar desconto.'), 403);
-    }
 
     $asaas = new \App\AsaasClient(new \App\HttpClient());
     $client = new \App\SupabaseClient(new \App\HttpClient());
@@ -269,6 +264,16 @@ try {
             $signature = (string) $chargeRule['signature'];
             $guardianId = trim((string) ($paymentRow['guardian_id'] ?? ''));
             $studentId = trim((string) ($paymentRow['student_id'] ?? ''));
+            if ($studentId !== '' && (new \App\Services\MonthlyWorkshopService($client))->getActivePlan($studentId) !== null) {
+                $client->update('payments', 'id=eq.' . urlencode($paymentId), array('status' => 'canceled'));
+                $results[] = array(
+                    'id' => $paymentId,
+                    'ok' => true,
+                    'monthly_covered' => true,
+                    'message' => 'Cobrança cancelada: aluno mensalista não gera PIX.',
+                );
+                continue;
+            }
             $dupQuery = 'select=id,status,billing_type,daily_type,payment_date,paid_at,asaas_payment_id'
                 . '&guardian_id=eq.' . urlencode($guardianId)
                 . '&limit=200';

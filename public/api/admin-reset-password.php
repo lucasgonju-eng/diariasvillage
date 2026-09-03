@@ -7,10 +7,7 @@ use App\SupabaseAuth;
 use App\SupabaseClient;
 
 Helpers::requirePost();
-
-if (!isset($_SESSION['admin_authenticated']) || $_SESSION['admin_authenticated'] !== true) {
-    Helpers::json(['ok' => false, 'error' => 'Acesso negado.'], 403);
-}
+Helpers::requireAdminRole(\App\AdminAuth::ROLE_ADMIN);
 
 $payload = json_decode(file_get_contents('php://input'), true);
 $cpf = trim($payload['cpf'] ?? '');

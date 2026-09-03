@@ -1,7 +1,5 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+require_once dirname(__DIR__, 2) . '/src/Bootstrap.php';
 
 $isLoggedIn = !empty($_SESSION['user']);
 
@@ -16,6 +14,12 @@ $appRoutes = [
 ];
 
 $r = $_GET['r'] ?? null;
+
+// O primeiro acesso canônico exige busca e confirmação explícita do student_id.
+if ($r === 'primeiro-acesso') {
+    header('Location: /primeiro-acesso.php?origem=mobile');
+    exit;
+}
 
 // Auto-redirect: /mobile/ with no params → login or grade
 if ($r === null && !isset($_GET['page'])) {

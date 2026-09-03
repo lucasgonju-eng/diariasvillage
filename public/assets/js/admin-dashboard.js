@@ -3460,6 +3460,50 @@ if (monthlyRemoveButton) {
   });
 }
 
+document.querySelectorAll('.monthly-unlock-btn').forEach((button) => {
+  button.addEventListener('click', async () => {
+    const submissionId = String(button.getAttribute('data-submission-id') || '').trim();
+    if (!submissionId) return;
+    const confirmed = await showAdminConfirm(
+      'Desbloquear esta confirmação? As entradas recorrentes do mês serão canceladas até o responsável confirmar novamente.',
+      { title: 'Desbloquear oficinas mensalistas', confirmText: 'Desbloquear', cancelText: 'Cancelar' },
+    );
+    if (!confirmed) return;
+
+    const message = document.querySelector('#monthly-confirmations-message');
+    const original = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Desbloqueando...';
+    if (message) {
+      message.textContent = '';
+      message.className = 'charge-message';
+    }
+    try {
+      const response = await fetch('/api/admin-monthly-workshops.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'unlock', submission_id: submissionId }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || 'Não foi possível desbloquear a confirmação.');
+      }
+      if (message) {
+        message.textContent = 'Confirmação desbloqueada. Atualizando a lista...';
+        message.className = 'charge-message success';
+      }
+      window.location.reload();
+    } catch (error) {
+      if (message) {
+        message.textContent = error instanceof Error ? error.message : 'Não foi possível desbloquear a confirmação.';
+        message.className = 'charge-message error';
+      }
+      button.disabled = false;
+      button.textContent = original;
+    }
+  });
+});
+
 if (sendChargesButton) {
   sendChargesButton.addEventListener('click', async () => {
     const charges = collectCharges();

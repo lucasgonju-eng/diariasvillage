@@ -48,9 +48,8 @@ $cashflow = read_test_file($files['cashflow'], $failures);
 $dashboardJs = read_test_file($files['dashboard_js'], $failures);
 $dashboardPhp = read_test_file($files['dashboard_php'], $failures);
 
-assert_contains('endpoint autenticação admin', $endpoint, 'admin_authenticated', $failures);
-assert_contains('endpoint admin principal', $endpoint, 'admin_user', $failures);
-assert_contains('endpoint bloqueio não admin', $endpoint, 'Recurso disponível apenas para o admin principal.', $failures);
+assert_contains('endpoint autenticação admin', $endpoint, 'Helpers::requireAdminRole(', $failures);
+assert_contains('endpoint admin principal', $endpoint, 'AdminAuth::ROLE_ADMIN', $failures);
 assert_contains('endpoint exige POST', $endpoint, 'Helpers::requirePost();', $failures);
 assert_contains('endpoint exige id', $endpoint, 'ID da cobrança inválido.', $failures);
 assert_contains('endpoint exige observação', $endpoint, 'Informe a observação/motivo da baixa.', $failures);
@@ -64,7 +63,7 @@ assert_contains('endpoint registra paid_at', $endpoint, "'paid_at' => \$settledA
 assert_contains('endpoint auditoria log', $endpoint, 'append_payment_settlement_log', $failures);
 assert_contains('endpoint auditoria observação', $endpoint, "'note' => \$note", $failures);
 assert_contains('endpoint auditoria usuário', $endpoint, "'settled_by' =>", $failures);
-assert_order('endpoint ordem auth/post', $endpoint, 'admin_authenticated', 'Helpers::requirePost();', $failures);
+assert_order('endpoint ordem auth/post', $endpoint, 'Helpers::requireAdminRole(', 'Helpers::requirePost();', $failures);
 assert_order('endpoint ordem validação/update', $endpoint, "in_array(\$billingType, ['PIX', 'PIX_MANUAL'], true)", "\$client->update('payments'", $failures);
 
 assert_contains('cashflow habilita ação explicitamente', $cashflow, "'can_manual_settle' =>", $failures);
@@ -79,7 +78,7 @@ assert_contains('js endpoint baixa manual', $dashboardJs, '/api/admin-settle-pay
 assert_contains('js envia observação', $dashboardJs, 'note: noteResult.value', $failures);
 
 assert_contains('dashboard coluna ação', $dashboardPhp, '<th>Ação</th>', $failures);
-assert_contains('dashboard cache bust js', $dashboardPhp, '/assets/js/admin-dashboard.js?v=75', $failures);
+assert_contains('dashboard cache bust js', $dashboardPhp, '/assets/js/admin-dashboard.js?v=76', $failures);
 
 if ($failures !== []) {
     fwrite(STDERR, "Falhas no teste de segurança da baixa manual:\n");
