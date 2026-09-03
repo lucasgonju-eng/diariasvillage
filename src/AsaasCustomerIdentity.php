@@ -19,10 +19,10 @@ final class AsaasCustomerIdentity
         $storedDocument = self::normalizeDocument((string) ($guardian['parent_document'] ?? ''));
         $submitted = self::normalizeDocument((string) ($submittedDocument ?? ''));
 
-        if ($guardianId === '' || $name === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        if ($guardianId === '' || $name === '') {
             return self::failure(
                 'GUARDIAN_IDENTITY_INCOMPLETE',
-                'O cadastro do responsável está incompleto. Atualize nome e e-mail antes de gerar a cobrança.',
+                'O cadastro do responsável está incompleto. Atualize o responsável antes de gerar a cobrança.',
                 422
             );
         }
@@ -44,36 +44,33 @@ final class AsaasCustomerIdentity
             );
         }
 
-        $conflict = $this->findLocalDocumentConflict($guardianId, $name, $document);
-        if (!($conflict['ok'] ?? false)) {
-            return $conflict;
+        $localIdentity = $this->resolveLocalIdentity($guardian, $document);
+        if (!($localIdentity['ok'] ?? false)) {
+            return $localIdentity;
         }
 
-        $customerId = trim((string) ($guardian['asaas_customer_id'] ?? ''));
+        $name = (string) $localIdentity['name'];
+        $email = (string) $localIdentity['email'];
+        $phone = (string) $localIdentity['phone'];
+        $customerId = (string) $localIdentity['customer_id'];
         if ($customerId !== '') {
             $remote = $this->asaas->getCustomer($customerId);
             if (($remote['ok'] ?? false) && is_array($remote['data'] ?? null)) {
                 $remoteData = $remote['data'];
                 if (!((bool) ($remoteData['deleted'] ?? false))) {
                     $remoteDocument = self::normalizeDocument((string) ($remoteData['cpfCnpj'] ?? ''));
-                    if ($remoteDocument !== '' && $remoteDocument !== $document) {
+                    if ($remoteDocument !== $document) {
                         return self::failure(
                             'ASAAS_CUSTOMER_DOCUMENT_CONFLICT',
-                            'O cliente Asaas vinculado possui outro CPF/CNPJ. A cobrança foi bloqueada para revisão.',
+                            'O cliente Asaas vinculado não possui o mesmo CPF/CNPJ. A cobrança foi bloqueada para revisão.',
                             409
                         );
                     }
 
-                    $remoteName = self::normalizeName((string) ($remoteData['name'] ?? ''));
-                    $remoteEmail = strtolower(trim((string) ($remoteData['email'] ?? '')));
-                    if (
-                        $remoteDocument === ''
-                        && $remoteName !== self::normalizeName($name)
-                        && $remoteEmail !== $email
-                    ) {
+                    if (!self::matchesRemoteCustomer($remoteData, $name, $email, $document)) {
                         return self::failure(
                             'ASAAS_CUSTOMER_IDENTITY_CONFLICT',
-                            'O cliente Asaas vinculado pertence a outra identidade. A cobrança foi bloqueada para revisão.',
+                            'Nome ou e-mail do cliente Asaas divergem do responsável. A cobrança foi bloqueada para revisão.',
                             409
                         );
                     }
@@ -195,11 +192,12 @@ final class AsaasCustomerIdentity
                 === self::normalizeDocument($document);
     }
 
-    private function findLocalDocumentConflict(string $guardianId, string $name, string $document): array
+    private function resolveLocalIdentity(array $guardian, string $document): array
     {
+        $guardianId = trim((string) ($guardian['id'] ?? ''));
         $result = $this->database->select(
             'guardians',
-            'select=id,parent_name,parent_document&parent_document=not.is.null&limit=10000'
+            'select=id,parent_name,email,parent_phone,parent_document,asaas_customer_id,auth_user_id,password_hash,verified_at&limit=10000'
         );
         if (!($result['ok'] ?? false) || !is_array($result['data'] ?? null)) {
             return self::failure(
@@ -209,27 +207,72 @@ final class AsaasCustomerIdentity
             );
         }
 
-        $normalizedName = self::normalizeName($name);
-        foreach ($result['data'] as $otherGuardian) {
-            if (!is_array($otherGuardian)) {
-                continue;
+        $rows = array_values(array_filter($result['data'], 'is_array'));
+        $current = null;
+        foreach ($rows as $row) {
+            if (trim((string) ($row['id'] ?? '')) === $guardianId) {
+                $current = $row;
+                break;
             }
-            if ((string) ($otherGuardian['id'] ?? '') === $guardianId) {
+        }
+        if (!is_array($current)) {
+            return self::failure(
+                'GUARDIAN_IDENTITY_NOT_FOUND',
+                'O responsável selecionado não foi encontrado para validar a identidade.',
+                404
+            );
+        }
+
+        $name = trim((string) ($current['parent_name'] ?? ''));
+        $normalizedName = self::normalizeName($name);
+        $storedDocument = self::normalizeDocument((string) ($current['parent_document'] ?? ''));
+        if ($normalizedName === '' || ($storedDocument !== '' && $storedDocument !== $document)) {
+            return self::failure(
+                'GUARDIAN_IDENTITY_CONFLICT',
+                'Os dados atuais do responsável divergem da cobrança. A operação foi bloqueada para revisão.',
+                409
+            );
+        }
+
+        $email = strtolower(trim((string) ($current['email'] ?? '')));
+        $phone = self::normalizeDocument((string) ($current['parent_phone'] ?? ''));
+        $customerId = trim((string) ($current['asaas_customer_id'] ?? ''));
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return self::failure(
+                'GUARDIAN_IDENTITY_INCOMPLETE',
+                'O cadastro do responsável não possui um e-mail válido para cobrança.',
+                422
+            );
+        }
+
+        foreach ($rows as $otherGuardian) {
+            $otherId = trim((string) ($otherGuardian['id'] ?? ''));
+            if ($otherId === $guardianId) {
                 continue;
             }
             if (self::normalizeDocument((string) ($otherGuardian['parent_document'] ?? '')) !== $document) {
                 continue;
             }
-            if (self::normalizeName((string) ($otherGuardian['parent_name'] ?? '')) !== $normalizedName) {
+            $otherEmail = strtolower(trim((string) ($otherGuardian['email'] ?? '')));
+            $nameDiffers = self::normalizeName((string) ($otherGuardian['parent_name'] ?? '')) !== $normalizedName;
+            $emailDiffers = $otherEmail !== $email;
+            if ($nameDiffers || $emailDiffers) {
                 return self::failure(
                     'GUARDIAN_DOCUMENT_CONFLICT',
-                    'Este CPF/CNPJ já está associado a outro responsável. A cobrança foi bloqueada para revisão.',
+                    'Este CPF/CNPJ aparece com outra identidade local. A cobrança foi bloqueada para revisão.',
                     409
                 );
             }
         }
 
-        return ['ok' => true];
+        return [
+            'ok' => true,
+            'name' => $name,
+            'email' => $email,
+            'phone' => $phone,
+            'customer_id' => $customerId,
+        ];
     }
 
     private function persistGuardianIdentity(string $guardianId, string $customerId, string $document): array

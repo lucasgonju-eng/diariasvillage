@@ -330,6 +330,7 @@ Execute antes de publicar:
 php tests/upload_security_test.php
 php tests/asaas_webhook_security_test.php
 php tests/asaas_identity_safety_test.php
+php tests/asaas_customer_identity_behavior_test.php
 php tests/admin_settle_payment_security_test.php
 php tests/oficina_modular_validity_date_test.php
 php tests/oficina_modular_authorization_test.php
