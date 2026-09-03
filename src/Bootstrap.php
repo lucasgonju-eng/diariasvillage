@@ -15,7 +15,7 @@ if (is_file($parentDir . DIRECTORY_SEPARATOR . '.env')) {
 ini_set('log_errors', '1');
 ini_set('error_log', dirname(__DIR__) . DIRECTORY_SEPARATOR . 'error_log_custom.txt');
 
-if (session_status() === PHP_SESSION_NONE) {
+if (!defined('APP_HEALTH_CHECK') && session_status() === PHP_SESSION_NONE) {
     ini_set('session.use_strict_mode', '1');
     ini_set('session.use_only_cookies', '1');
     ini_set('session.cookie_secure', '1');
@@ -31,7 +31,7 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-if (!empty($_SESSION['admin_authenticated'])) {
+if (!defined('APP_HEALTH_CHECK') && !empty($_SESSION['admin_authenticated'])) {
     $hasVersionedAdminSession = !empty($_SESSION['admin_id'])
         && !empty($_SESSION['admin_role'])
         && (int) ($_SESSION['admin_session_version'] ?? 0) > 0;
@@ -51,7 +51,7 @@ if (!empty($_SESSION['admin_authenticated'])) {
     }
 }
 
-if (isset($_SESSION['user'])) {
+if (!defined('APP_HEALTH_CHECK') && isset($_SESSION['user'])) {
     $userSessionExpired = (
         (int) ($_SESSION['user_session_expires_at'] ?? PHP_INT_MAX) <= time()
         || (int) ($_SESSION['user_session_idle_expires_at'] ?? PHP_INT_MAX) <= time()

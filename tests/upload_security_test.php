@@ -98,7 +98,8 @@ $files = new RecursiveIteratorIterator(
     new RecursiveDirectoryIterator($publicRoot, FilesystemIterator::SKIP_DOTS)
 );
 foreach ($files as $file) {
-    if ($file->isFile() && in_array(strtolower($file->getExtension()), $blockedExtensions, true)) {
+    $blockedPattern = '/\.(' . implode('|', $blockedExtensions) . ')(\.|$)/i';
+    if ($file->isFile() && preg_match($blockedPattern, $file->getFilename()) === 1) {
         $publishedBackups[] = $file->getPathname();
     }
 }
@@ -108,7 +109,8 @@ check_upload(
     'public não deve conter backups ou arquivos de dados publicáveis'
 );
 check_upload(
-    is_string($htaccess) && str_contains($htaccess, '\.(bak|bkp|old|orig|save|swp|sql|zip|tar|gz|7z)$'),
+    is_string($htaccess)
+        && str_contains($htaccess, '\.(bak|bkp|old|orig|save|swp|sql|zip|tar|gz|7z)(\.|$)'),
     '.htaccess deve negar extensões de backup e dados'
 );
 check_upload(

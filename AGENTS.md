@@ -377,7 +377,31 @@ SSRF/RCE no carregamento de arquivos enviados.
   `.old`, `.orig`, `.save`, `.swp`, `.sql`, `.zip`, `.tar`, `.gz` ou `.7z`.
 - O `.htaccess` nega essas extensões e o workflow deve rejeitá-las no pacote.
   Não remova a limpeza dos seis backups legados do servidor enquanto o deploy
-  continuar sendo feito por sobreposição.
+ legado ainda permanecer no document root.
+
+## Deploy atômico e rollback
+
+O deploy da Hostinger usa releases imutáveis em
+`$SSH_TARGET_DIR/.releases/<commit>-<run_id>`. O document root mantém um
+dispatcher estável e a ativação troca atomicamente apenas o symlink
+`.releases/current`.
+
+- Nunca volte a copiar o pacote diretamente sobre `$SSH_TARGET_DIR`.
+- A release deve ser validada por PHP CLI antes da troca e por
+  `https://diarias.village.einsteinhub.co/health.php` depois dela.
+- Falha após o início da ativação restaura o symlink anterior; na primeira
+  migração, restaura o `.htaccess` do deploy legado.
+- `.env` permanece fora do document root e entra na release por symlink.
+- `storage` permanece no document root como estado persistente e entra na
+  release por symlink; não copie nem apague esse diretório em uma publicação.
+- Acesso HTTP direto a `.releases`, `storage`, `.trash` e `.legacy-root` é
+  bloqueado pelo dispatcher antes do rewrite interno.
+- O workflow mantém cinco releases e usa concorrência serializada, sem cancelar
+  uma publicação já em andamento.
+- O deploy manual separado foi removido; `workflow_dispatch` usa exatamente o
+  mesmo pipeline testado do push em `main`.
+- `public/health.php` é somente leitura, não inicia probes em disco e retorna o
+  identificador presente em `release-manifest.json`.
 
 ## Saída HTML e navegação no navegador
 
@@ -432,6 +456,7 @@ php tests/login_session_security_test.php
 php tests/xss_security_test.php
 php tests/monthly_workshop_security_test.php
 php tests/monthly_legacy_charge_audit_test.php
+php tests/deploy_release_security_test.php
 php -l public/api/admin-charge.php
 php -l public/api/admin-sync-recebidas.php
 php -l public/api/admin-sync-charges-payments.php

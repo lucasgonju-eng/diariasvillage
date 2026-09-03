@@ -206,7 +206,7 @@ function defaultTemplate(): array
 
 function templatesFilePath(): string
 {
-    return dirname(__DIR__, 2) . '/storage/admin_bulk_email_templates.json';
+    return dirname(__DIR__) . '/storage/admin_bulk_email_templates.json';
 }
 
 function loadTemplates(): array

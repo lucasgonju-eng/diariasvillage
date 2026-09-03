@@ -1,12 +1,24 @@
-name: Deploy para Hostinger
+name: Deploy atômico para Hostinger
 
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hostinger-production
+  cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RELEASE_ID: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+
     steps:
       - name: Validar secrets de SSH
         env:
@@ -55,8 +67,51 @@ jobs:
           php tests/xss_security_test.php
           php tests/monthly_workshop_security_test.php
           php tests/monthly_legacy_charge_audit_test.php
+          php tests/deploy_release_security_test.php
 
-      - name: Diagnóstico SSH (pré-check)
+      - name: Montar release imutável
+        run: |
+          rm -rf deploy
+          mkdir -p deploy
+          cp -a public/. deploy/
+          cp -a src deploy/
+          cp -a vendor deploy/
+          cp ops/hostinger-root.htaccess deploy/.release-root.htaccess
+
+          printf '{"release":"%s","commit":"%s","run_id":"%s","built_at":"%s"}\n' \
+            "$RELEASE_ID" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$(date -u +%FT%TZ)" \
+            > deploy/release-manifest.json
+
+          if [ -e deploy/.env ] || [ -e deploy/.env.example ] || [ -e deploy/storage ]; then
+            echo "ERRO: release contém segredo ou estado persistente."
+            exit 1
+          fi
+
+          mapfile -t BLOCKED_ARTIFACTS < <(
+            find deploy -type f \( \
+              -name '*.bak' -o -name '*.bak.*' -o \
+              -name '*.bkp' -o -name '*.bkp.*' -o \
+              -name '*.old' -o -name '*.old.*' -o \
+              -name '*.orig' -o -name '*.orig.*' -o \
+              -name '*.save' -o -name '*.save.*' -o \
+              -name '*.swp' -o -name '*.swp.*' -o \
+              -name '*.sql' -o -name '*.sql.*' -o \
+              -name '*.zip' -o -name '*.zip.*' -o \
+              -name '*.tar' -o -name '*.tar.*' -o \
+              -name '*.gz' -o -name '*.gz.*' -o \
+              -name '*.7z' -o -name '*.7z.*' \
+            \) -print
+          )
+          if [ "${#BLOCKED_ARTIFACTS[@]}" -gt 0 ]; then
+            echo "ERRO: artefatos proibidos no pacote de deploy:"
+            printf '%s\n' "${BLOCKED_ARTIFACTS[@]}"
+            exit 1
+          fi
+
+          php -l deploy/health.php
+          php -l deploy/src/Bootstrap.php
+
+      - name: Diagnóstico SSH
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT || 22 }}
@@ -67,68 +122,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y sshpass
 
-          set +e
-          OUT=$(sshpass -p "$SSH_PASSWORD" ssh \
+          sshpass -p "$SSH_PASSWORD" ssh \
             -p "$SSH_PORT" \
             -o StrictHostKeyChecking=no \
             -o UserKnownHostsFile=/dev/null \
             -o ConnectTimeout=10 \
             "$SSH_USERNAME@$SSH_HOST" \
-            "echo SSH_OK && ls -ld \"$SSH_TARGET_DIR\"" 2>&1)
-          CODE=$?
-          set -e
+            "test -d \"$SSH_TARGET_DIR\" && test -w \"$SSH_TARGET_DIR\""
 
-          if [ "$CODE" -eq 0 ]; then
-            echo "Diagnóstico SSH: conexão e autenticação OK."
-            echo "$OUT"
-            exit 0
-          fi
-
-          echo "Diagnóstico SSH falhou (exit $CODE)."
-          echo "$OUT"
-          if echo "$OUT" | grep -qi "Permission denied"; then
-            echo "Causa provável: usuário/senha SSH inválidos (ou senha SSH desatualizada)."
-          elif echo "$OUT" | grep -qi "Connection refused"; then
-            echo "Causa provável: porta SSH incorreta ou SSH desabilitado no servidor."
-          elif echo "$OUT" | grep -qi "timed out\|No route to host\|Name or service not known"; then
-            echo "Causa provável: host/IP incorreto ou bloqueio de rede/firewall."
-          elif echo "$OUT" | grep -qi "No such file or directory"; then
-            echo "Causa provável: SSH_TARGET_DIR inválido."
-          else
-            echo "Causa não classificada. Verifique host, porta, usuário, senha e target_dir."
-          fi
-          exit 1
-
-      - name: Preparar estrutura de deploy
-        run: |
-          mkdir -p deploy
-          shopt -s dotglob
-          cp -r public/* deploy/
-          # Garante envio de dotfiles críticos (ex.: .htaccess)
-          cp -f public/.htaccess deploy/.htaccess
-          cp -r src deploy/
-          cp -r vendor deploy/
-          cp .env.example deploy/
-          shopt -s globstar nullglob
-          BLOCKED_ARTIFACTS=(
-            deploy/**/*.bak deploy/**/*.bkp deploy/**/*.old deploy/**/*.orig
-            deploy/**/*.save deploy/**/*.swp deploy/**/*.sql deploy/**/*.zip
-            deploy/**/*.tar deploy/**/*.gz deploy/**/*.7z
-          )
-          if [ "${#BLOCKED_ARTIFACTS[@]}" -gt 0 ]; then
-            echo "ERRO: artefatos proibidos no pacote de deploy:"
-            printf '%s\n' "${BLOCKED_ARTIFACTS[@]}"
-            exit 1
-          fi
-
-      - name: Preparar server-dir
-        id: serverdir
-        run: |
-          DIR="${{ secrets.FTP_SERVER_DIR || '/' }}"
-          DIR="${DIR%/}/"
-          echo "dir=$DIR" >> $GITHUB_OUTPUT
-
-      - name: Verificar pasta remota (SSH)
+      - name: Preparar diretório remoto da release
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -137,17 +139,44 @@ jobs:
           port: ${{ secrets.SSH_PORT || 22 }}
           script_stop: true
           script: |
-            TARGET_DIR="${{ secrets.SSH_TARGET_DIR }}"
-            TARGET_DIR="${TARGET_DIR%/}"
-            if [ -z "$TARGET_DIR" ]; then
-              echo "SSH_TARGET_DIR vazio no workflow."
-              exit 1
-            fi
-            pwd
-            ls -la
-            ls -la "$TARGET_DIR"
+            set -eu
+            TARGET="${{ secrets.SSH_TARGET_DIR }}"
+            TARGET="${TARGET%/}"
+            RELEASE_ID="${{ env.RELEASE_ID }}"
 
-      - name: Deploy via SFTP (SSH)
+            case "$TARGET" in
+              ""|"/") echo "SSH_TARGET_DIR inseguro."; exit 1 ;;
+            esac
+            case "$RELEASE_ID" in
+              *[!0-9a-f-]*) echo "RELEASE_ID inválido."; exit 1 ;;
+            esac
+
+            RELEASES="$TARGET/.releases"
+            RELEASE="$RELEASES/$RELEASE_ID"
+            PARENT="$(dirname "$TARGET")"
+            test -d "$TARGET"
+            test -w "$TARGET"
+            test -f "$PARENT/.env" || {
+              echo "ERRO: .env persistente não encontrado fora do document root."
+              exit 1
+            }
+
+            mkdir -p "$RELEASES"
+            test ! -e "$RELEASE" || {
+              echo "ERRO: release imutável já existe: $RELEASE_ID"
+              exit 1
+            }
+            mkdir "$RELEASE"
+
+            PROBE_FILE="$RELEASES/.symlink-probe-target-${{ github.run_id }}-${{ github.run_attempt }}"
+            PROBE_LINK="$RELEASES/.symlink-probe-link-${{ github.run_id }}-${{ github.run_attempt }}"
+            rm -f "$PROBE_LINK" "$PROBE_FILE"
+            printf 'ok' > "$PROBE_FILE"
+            ln -s "$(basename "$PROBE_FILE")" "$PROBE_LINK"
+            test "$(cat "$PROBE_LINK")" = "ok"
+            rm -f "$PROBE_LINK" "$PROBE_FILE"
+
+      - name: Enviar release para staging
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -155,10 +184,10 @@ jobs:
           password: ${{ secrets.SSH_PASSWORD }}
           port: ${{ secrets.SSH_PORT || 22 }}
           source: "deploy"
-          target: ${{ secrets.SSH_TARGET_DIR }}
+          target: "${{ secrets.SSH_TARGET_DIR }}/.releases/${{ env.RELEASE_ID }}"
           strip_components: 1
 
-      - name: Remover backups legados do servidor
+      - name: Validar e ativar release atomicamente
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -167,79 +196,174 @@ jobs:
           port: ${{ secrets.SSH_PORT || 22 }}
           script_stop: true
           script: |
+            set -eu
             TARGET="${{ secrets.SSH_TARGET_DIR }}"
             TARGET="${TARGET%/}"
-            if [ -z "$TARGET" ]; then
-              echo "SSH_TARGET_DIR vazio no workflow."
+            RELEASE_ID="${{ env.RELEASE_ID }}"
+            RELEASES="$TARGET/.releases"
+            RELEASE="$RELEASES/$RELEASE_ID"
+            CURRENT="$RELEASES/current"
+            PARENT="$(dirname "$TARGET")"
+
+            test -f "$RELEASE/release-manifest.json"
+            grep -Fq "\"release\":\"$RELEASE_ID\"" "$RELEASE/release-manifest.json"
+            test -f "$RELEASE/.htaccess"
+            test -f "$RELEASE/.release-root.htaccess"
+            test -f "$RELEASE/admin/dashboard.php"
+            test -f "$RELEASE/vendor/autoload.php"
+            test ! -e "$RELEASE/storage"
+            test ! -e "$RELEASE/.env"
+
+            mkdir -p "$TARGET/storage"
+            ln -s "../../storage" "$RELEASE/storage"
+            ln -s "../../../.env" "$RELEASE/.env"
+            test -d "$RELEASE/storage"
+            test -f "$RELEASE/.env"
+
+            php -l "$RELEASE/health.php"
+            php -l "$RELEASE/src/Bootstrap.php"
+            php -l "$RELEASE/admin/dashboard.php"
+            php -l "$RELEASE/api/login.php"
+            HEALTH_OUTPUT="$(php "$RELEASE/health.php")"
+            echo "$HEALTH_OUTPUT"
+            echo "$HEALTH_OUTPUT" | grep -Fq "\"release\":\"$RELEASE_ID\""
+
+            PREVIOUS=""
+            if [ -L "$CURRENT" ]; then
+              PREVIOUS="$(readlink "$CURRENT")"
+              test -d "$RELEASES/$PREVIOUS"
+            elif [ -e "$CURRENT" ]; then
+              echo "ERRO: .releases/current existe, mas não é symlink."
               exit 1
             fi
+
+            printf '%s\n' "$PREVIOUS" > "$RELEASE/.previous-release"
+            if [ -f "$TARGET/.htaccess" ]; then
+              cp "$TARGET/.htaccess" "$RELEASE/.previous-root-htaccess"
+            else
+              touch "$RELEASE/.previous-root-htaccess-absent"
+            fi
+            touch "$RELEASE/.activation-started"
+
+            NEXT_LINK="$RELEASES/.current-next-${{ github.run_id }}"
+            rm -f "$NEXT_LINK"
+            ln -s "$RELEASE_ID" "$NEXT_LINK"
+            mv -Tf "$NEXT_LINK" "$CURRENT"
+
+            cp "$RELEASE/.release-root.htaccess" "$TARGET/.htaccess.next"
+            mv -f "$TARGET/.htaccess.next" "$TARGET/.htaccess"
+            rm -f "$RELEASE/.release-root.htaccess"
+            touch "$RELEASE/.activated"
+
+      - name: Verificar produção pela Internet
+        env:
+          HEALTH_URL: https://diarias.village.einsteinhub.co/health.php
+        run: |
+          HEALTH_OUTPUT="$(curl --fail --silent --show-error \
+            --retry 5 --retry-delay 2 --retry-all-errors \
+            "$HEALTH_URL?release=$RELEASE_ID")"
+          echo "$HEALTH_OUTPUT"
+          echo "$HEALTH_OUTPUT" | grep -Fq "\"release\":\"$RELEASE_ID\""
+
+          curl --fail --silent --show-error --location \
+            --retry 3 --retry-delay 2 --retry-all-errors \
+            --output /dev/null \
+            https://diarias.village.einsteinhub.co/
+
+      - name: Reverter ativação após falha
+        if: ${{ failure() }}
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script_stop: true
+          script: |
+            set -eu
+            TARGET="${{ secrets.SSH_TARGET_DIR }}"
+            TARGET="${TARGET%/}"
+            RELEASE_ID="${{ env.RELEASE_ID }}"
+            RELEASES="$TARGET/.releases"
+            RELEASE="$RELEASES/$RELEASE_ID"
+            CURRENT="$RELEASES/current"
+
+            if [ ! -f "$RELEASE/.activation-started" ]; then
+              echo "Nenhuma ativação iniciada; rollback desnecessário."
+              exit 0
+            fi
+
+            PREVIOUS="$(cat "$RELEASE/.previous-release" 2>/dev/null || true)"
+            if [ -n "$PREVIOUS" ]; then
+              test -d "$RELEASES/$PREVIOUS"
+              ROLLBACK_LINK="$RELEASES/.current-rollback-${{ github.run_id }}"
+              rm -f "$ROLLBACK_LINK"
+              ln -s "$PREVIOUS" "$ROLLBACK_LINK"
+              mv -Tf "$ROLLBACK_LINK" "$CURRENT"
+            else
+              rm -f "$CURRENT"
+            fi
+
+            if [ -f "$RELEASE/.previous-root-htaccess" ]; then
+              cp "$RELEASE/.previous-root-htaccess" "$TARGET/.htaccess.rollback"
+              mv -f "$TARGET/.htaccess.rollback" "$TARGET/.htaccess"
+            elif [ -f "$RELEASE/.previous-root-htaccess-absent" ]; then
+              rm -f "$TARGET/.htaccess"
+            else
+              echo "ERRO: estado anterior do dispatcher não foi preservado."
+              exit 1
+            fi
+
+            if [ -n "$PREVIOUS" ]; then
+              echo "Rollback concluído para $PREVIOUS, incluindo o dispatcher."
+            else
+              echo "Primeira ativação revertida para o deploy legado."
+            fi
+
+            touch "$RELEASE/.rolled-back"
+
+      - name: Remover backups legados do servidor e releases antigas
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script_stop: true
+          script: |
+            set -eu
+            TARGET="${{ secrets.SSH_TARGET_DIR }}"
+            TARGET="${TARGET%/}"
+            RELEASES="$TARGET/.releases"
+            CURRENT_TARGET="$(readlink "$RELEASES/current")"
 
             LEGACY_BACKUPS="
             $TARGET/dashboard.php.bkp
             $TARGET/index.php.bkp
+            $TARGET/index.bak.php
             $TARGET/login.php.bkp
             $TARGET/primeiro-acesso.php.bkp
             $TARGET/profile.php.bkp
+            $TARGET/default.php.old.php
             $TARGET/assets/style.css.bkp
             "
-
             for FILE in $LEGACY_BACKUPS; do
               rm -f -- "$FILE"
-              if [ -e "$FILE" ]; then
-                echo "ERRO: backup legado permaneceu no servidor: $FILE"
-                exit 1
+            done
+
+            KEPT=0
+            for DIR in $(ls -1dt "$RELEASES"/[0-9a-f]*-* 2>/dev/null || true); do
+              NAME="$(basename "$DIR")"
+              if [ "$NAME" = "$CURRENT_TARGET" ]; then
+                KEPT=$((KEPT + 1))
+                continue
+              fi
+              KEPT=$((KEPT + 1))
+              if [ "$KEPT" -gt 5 ]; then
+                rm -rf -- "$DIR"
               fi
             done
 
-      - name: Validar arquivo deployado (admin dashboard)
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USERNAME }}
-          password: ${{ secrets.SSH_PASSWORD }}
-          port: ${{ secrets.SSH_PORT || 22 }}
-          script_stop: true
-          script: |
-            TARGET="${{ secrets.SSH_TARGET_DIR }}"
-            TARGET="${TARGET%/}"
-            DASH="$TARGET/admin/dashboard.php"
-
-            echo "Validando dashboard em: $DASH"
-            if [ ! -f "$DASH" ]; then
-              echo "ERRO: dashboard.php não encontrado no TARGET."
-              echo "Possível causa: SSH_TARGET_DIR aponta para pasta errada."
-              ls -la "$TARGET" || true
-              exit 1
-            fi
-
-            if grep -q 'data-tab="fluxo-caixa"' "$DASH"; then
-              echo "OK: botão/aba Fluxo de Caixa presente no arquivo deployado."
-            else
-              echo "ERRO: arquivo deployado não contém fluxo-caixa."
-              echo "Possível causa: deploy em pasta errada ou conteúdo antigo."
-              exit 1
-            fi
-
-      - name: Mover .env para fora da raiz web (SSH)
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USERNAME }}
-          password: ${{ secrets.SSH_PASSWORD }}
-          port: ${{ secrets.SSH_PORT || 22 }}
-          script_stop: true
-          script: |
-            TARGET="${{ secrets.SSH_TARGET_DIR }}"
-            TARGET="${TARGET%/}"
-            if [ -z "$TARGET" ]; then
-              echo "SSH_TARGET_DIR vazio no workflow."
-              exit 1
-            fi
-            PARENT="$(dirname "$TARGET")"
-            if [ -f "$TARGET/.env" ]; then
-              cp -f "$TARGET/.env" "$PARENT/.env"
-            fi
-            if [ -f "$PARENT/.env" ]; then
-              chmod 600 "$PARENT/.env" || true
-              rm -f "$TARGET/.env"
-            fi
+            test -L "$RELEASES/current"
+            test -f "$RELEASES/current/release-manifest.json"
+            echo "Release ativa: $CURRENT_TARGET"

@@ -2,13 +2,14 @@
 Options -Indexes
 
 # Bloqueia arquivos sensíveis, backups e arquivos que nunca devem ser publicados.
-<FilesMatch "(^\.env($|\.))|(^\.git)|(^composer\.(json|lock)$)|(^error_log_custom\.txt$)|\.(bak|bkp|old|orig|save|swp|sql|zip|tar|gz|7z)$">
+<FilesMatch "(^\.env($|\.))|(^\.git)|(^composer\.(json|lock)$)|(^error_log_custom\.txt$)|\.(bak|bkp|old|orig|save|swp|sql|zip|tar|gz|7z)(\.|$)">
     Require all denied
 </FilesMatch>
 
 <IfModule mod_rewrite.c>
     RewriteEngine On
     RewriteBase /
+    RewriteRule ^(?:storage|\.releases|\.legacy-root|\.trash)(?:/|$) - [F,L,NC]
     # Redirecionamento temporário do domínio antigo para o novo.
     RewriteCond %{HTTP_HOST} ^(www\.)?village\.einsteinhub\.co$ [NC]
     RewriteRule ^ https://diarias.village.einsteinhub.co%{REQUEST_URI} [L,R=302]
