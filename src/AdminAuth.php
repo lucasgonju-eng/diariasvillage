@@ -7,7 +7,6 @@ class AdminAuth
     public const ROLE_ADMIN = 'admin_principal';
     public const ROLE_SECRETARIA = 'secretaria';
 
-    private const LEGACY_SECRETARIA_PASSWORD = 'Ei32743176';
     private const DEFAULT_SESSION_TTL = 28800;
 
     private SupabaseClient $db;
@@ -18,7 +17,7 @@ class AdminAuth
     }
 
     /**
-     * Cria as contas administrativas iniciais a partir dos segredos configurados.
+     * Cria a conta inicial do admin principal a partir do segredo configurado.
      * Contas existentes não são sobrescritas silenciosamente.
      */
     public function bootstrapFromEnvironment(): void
@@ -48,18 +47,9 @@ class AdminAuth
             return ['ok' => false, 'error' => 'Não foi possível validar o acesso agora.'];
         }
         $user = is_array($lookup['user'] ?? null) ? $lookup['user'] : null;
-        $legacySecretariaAllowed = $username === 'secretaria'
-            && $user === null
-            && $configuredSecret === ''
-            && hash_equals(self::LEGACY_SECRETARIA_PASSWORD, $password);
-        $legacyBridgeAuthenticated = false;
 
         if ($user === null && $configuredSecret !== '' && hash_equals($configuredSecret, $password)) {
             $user = $this->createUser($username, $expectedRole, $password);
-        } elseif ($user === null && $legacySecretariaAllowed) {
-            $this->logLegacySecretariaWarning();
-            $user = $this->claimLegacySecretariaBridge();
-            $legacyBridgeAuthenticated = $user !== null;
         }
 
         if ($user === null || !($user['active'] ?? false)) {
@@ -74,10 +64,8 @@ class AdminAuth
             return ['ok' => false, 'error' => 'Usuário ou senha inválidos.'];
         }
 
-        $passwordValid = $legacyBridgeAuthenticated || (
-            !($user['requires_password_setup'] ?? false)
-            && password_verify($password, (string) ($user['password_hash'] ?? ''))
-        );
+        $passwordValid = !($user['requires_password_setup'] ?? false)
+            && password_verify($password, (string) ($user['password_hash'] ?? ''));
         if (!$passwordValid && $configuredSecret !== '' && hash_equals($configuredSecret, $password)) {
             $user = $this->migratePassword($user, $password);
             $passwordValid = $user !== null;
@@ -109,11 +97,6 @@ class AdminAuth
         $_SESSION['admin_session_version'] = (int) ($user['session_version'] ?? 1);
         $_SESSION['admin_issued_at'] = $now;
         $_SESSION['admin_expires_at'] = $now + $ttl;
-        if ($legacyBridgeAuthenticated) {
-            $_SESSION['admin_legacy_bridge_claimed'] = true;
-        } else {
-            unset($_SESSION['admin_legacy_bridge_claimed']);
-        }
 
         // Compatibilidade temporária até todos os endpoints adotarem os helpers centrais.
         $_SESSION['admin_authenticated'] = true;
@@ -154,8 +137,7 @@ class AdminAuth
             && preg_match('/[a-z]/', $password) === 1
             && preg_match('/[A-Z]/', $password) === 1
             && preg_match('/[0-9]/', $password) === 1
-            && preg_match('/[^a-zA-Z0-9]/', $password) === 1
-            && !hash_equals(self::LEGACY_SECRETARIA_PASSWORD, $password);
+            && preg_match('/[^a-zA-Z0-9]/', $password) === 1;
         if (!$strongEnough) {
             return [
                 'ok' => false,
@@ -203,14 +185,12 @@ class AdminAuth
         }
 
         $user = $this->findById($adminId);
-        $pendingPasswordSetupAllowed = $role === self::ROLE_SECRETARIA
-            && !empty($_SESSION['admin_legacy_bridge_claimed']);
         if (
             $user === null
             || !($user['active'] ?? false)
             || (string) ($user['role'] ?? '') !== $role
             || (int) ($user['session_version'] ?? 0) !== $sessionVersion
-            || (($user['requires_password_setup'] ?? false) && !$pendingPasswordSetupAllowed)
+            || ($user['requires_password_setup'] ?? false)
         ) {
             $this->clearSession();
             return null;
@@ -363,7 +343,6 @@ class AdminAuth
             'admin_session_version',
             'admin_issued_at',
             'admin_expires_at',
-            'admin_legacy_bridge_claimed',
             'admin_authenticated',
             'admin_user',
         ] as $key) {
@@ -371,31 +350,4 @@ class AdminAuth
         }
     }
 
-    private function logLegacySecretariaWarning(): void
-    {
-        error_log(
-            'AVISO DE SEGURANÇA: conta secretaria ainda não configurada pelo painel; '
-            . 'autenticação legada temporária da secretaria foi utilizada.'
-        );
-    }
-
-    private function claimLegacySecretariaBridge(): ?array
-    {
-        $randomPassword = bin2hex(random_bytes(32));
-        $hash = password_hash($randomPassword, PASSWORD_DEFAULT);
-        unset($randomPassword);
-        if (!is_string($hash) || $hash === '') {
-            return null;
-        }
-
-        $result = $this->db->rpc('claim_legacy_secretaria_bridge', [
-            'p_password_hash' => $hash,
-        ]);
-        $data = is_array($result['data'] ?? null) ? $result['data'] : [];
-        return ($result['ok'] ?? false)
-            && ($data['ok'] ?? false)
-            && is_array($data['user'] ?? null)
-            ? $data['user']
-            : null;
-    }
 }

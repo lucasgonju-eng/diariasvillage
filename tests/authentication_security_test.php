@@ -72,32 +72,6 @@ final class InMemoryAdminSupabaseClient extends SupabaseClient
 
     public function rpc(string $functionName, array $payload = []): array
     {
-        if ($functionName === 'claim_legacy_secretaria_bridge') {
-            if (isset($this->users['secretaria'])) {
-                return [
-                    'ok' => true,
-                    'data' => ['ok' => false, 'code' => 'SECRETARIA_ALREADY_EXISTS'],
-                ];
-            }
-            $user = [
-                'id' => sprintf('00000000-0000-4000-8000-%012d', count($this->users) + 1),
-                'username' => 'secretaria',
-                'password_hash' => (string) ($payload['p_password_hash'] ?? ''),
-                'role' => AdminAuth::ROLE_SECRETARIA,
-                'active' => true,
-                'session_version' => 1,
-                'requires_password_setup' => true,
-            ];
-            $this->users['secretaria'] = $user;
-            $this->audit[] = [
-                'action' => 'legacy_secretaria_bridge_claimed',
-                'details' => ['requires_password_setup' => true],
-            ];
-            $publicUser = $user;
-            unset($publicUser['password_hash']);
-            return ['ok' => true, 'data' => ['ok' => true, 'user' => $publicUser]];
-        }
-
         if ($functionName === 'configure_secretaria_credentials') {
             $actor = null;
             foreach ($this->users as $candidate) {
@@ -198,6 +172,9 @@ $adminDashboardJs = $read($root . '/public/assets/js/admin-dashboard.js');
 $secretariaMigration = $read(
     $root . '/supabase/migrations/20260903143844_secure_secretaria_credential_setup.sql'
 );
+$secretariaLegacyRemoval = $read(
+    $root . '/supabase/migrations/20260903150341_remove_legacy_secretaria_bridge.sql'
+);
 
 $assertContains('primeiro acesso inicia claim', $register, "rpc('begin_first_access_claim'");
 $assertContains('primeiro acesso conclui claim', $register, "rpc('complete_first_access_claim'");
@@ -228,20 +205,20 @@ $assertNotContains(
     $adminAuthSource,
     "ensureConfiguredUser('secretaria'"
 );
-$assertContains(
-    'fallback só pode iniciar conta ausente',
+$assertNotContains(
+    'senha fixa da secretaria foi removida',
     $adminAuthSource,
-    '&& $user === null'
+    'LEGACY_SECRETARIA_PASSWORD'
 );
-$assertContains(
-    'fallback não usa segredo de ambiente',
+$assertNotContains(
+    'segredo de ambiente da secretaria foi removido',
     $adminAuthSource,
-    "&& \$configuredSecret === ''"
+    'SECRETARIA_SECRET'
 );
-$assertContains(
-    'fallback usa claim atômico de uso único',
+$assertNotContains(
+    'ponte legada foi removida do login',
     $adminAuthSource,
-    "rpc('claim_legacy_secretaria_bridge'"
+    'claimLegacySecretariaBridge'
 );
 $assertContains(
     'configuração usa RPC atômica',
@@ -249,9 +226,9 @@ $assertContains(
     "rpc('configure_secretaria_credentials'"
 );
 $assertContains(
-    'conta pendente não aceita senha persistida',
+    'conta pendente permanece bloqueada',
     $adminAuthSource,
-    "!(\$user['requires_password_setup'] ?? false)"
+    "|| (\$user['requires_password_setup'] ?? false)"
 );
 $assertContains(
     'migration marca ponte pendente',
@@ -284,14 +261,9 @@ $assertContains(
     "set_config('app.secretaria_secure_setup', 'confirmed', true)"
 );
 $assertContains(
-    'sessão da ponte é marcada explicitamente',
-    $adminAuthSource,
-    "\$_SESSION['admin_legacy_bridge_claimed'] = true"
-);
-$assertContains(
-    'sessão antiga sem marca é revogada',
-    $adminAuthSource,
-    "(\$user['requires_password_setup'] ?? false) && !\$pendingPasswordSetupAllowed"
+    'migration final remove RPC da ponte',
+    $secretariaLegacyRemoval,
+    'drop function if exists public.claim_legacy_secretaria_bridge(text)'
 );
 $assertContains('Helper central exige admin', $helpers, 'function requireAdmin(');
 $assertContains('Helper central exige role', $helpers, 'function requireAdminRole(');
@@ -387,7 +359,6 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 }
 $_SESSION = [];
 $_ENV['ADMIN_SECRET'] = 'teste-admin-seguro-2026';
-$_ENV['SECRETARIA_SECRET'] = 'teste-secretaria-seguro-2026';
 $_ENV['ADMIN_SESSION_TTL_SECONDS'] = '600';
 
 $fakeDb = new InMemoryAdminSupabaseClient();
@@ -446,9 +417,9 @@ if (!($secretariaLogin['ok'] ?? false)) {
     $failures[] = 'Nova credencial da secretaria deveria autenticar.';
 }
 $_SESSION = [];
-$legacyLoginAfterConfiguration = $adminAuth->login('secretaria', 'Ei32743176');
-if ($legacyLoginAfterConfiguration['ok'] ?? false) {
-    $failures[] = 'Senha legada deve falhar depois da configuração segura.';
+$invalidSecretariaLogin = $adminAuth->login('secretaria', 'CredencialInvalida#2026');
+if ($invalidSecretariaLogin['ok'] ?? false) {
+    $failures[] = 'Credencial incorreta da secretaria deve falhar.';
 }
 
 $versionBeforeRotation = (int) ($fakeDb->users['secretaria']['session_version'] ?? 0);
@@ -471,42 +442,6 @@ if (str_contains(json_encode($fakeDb->audit) ?: '', $secretariaPassword)) {
     $failures[] = 'Auditoria não pode conter a senha da secretaria.';
 }
 
-$bridgeDb = new InMemoryAdminSupabaseClient();
-$bridgeAuth = new AdminAuth($bridgeDb);
-$_SESSION = [];
-$firstLegacyLogin = $bridgeAuth->login('secretaria', 'Ei32743176');
-if (!($firstLegacyLogin['ok'] ?? false)) {
-    $failures[] = 'Ponte legada deveria permitir no máximo o primeiro login.';
-}
-$bridgeUser = $bridgeDb->users['secretaria'] ?? [];
-if (
-    !($bridgeUser['requires_password_setup'] ?? false)
-    || password_verify('Ei32743176', (string) ($bridgeUser['password_hash'] ?? ''))
-) {
-    $failures[] = 'Ponte legada deve persistir hash aleatório e exigir nova senha.';
-}
-if ($bridgeAuth->currentSession() === null) {
-    $failures[] = 'Sessão explicitamente criada pela ponte deveria permanecer válida.';
-}
-$_SESSION = [];
-$secondLegacyLogin = $bridgeAuth->login('secretaria', 'Ei32743176');
-if ($secondLegacyLogin['ok'] ?? false) {
-    $failures[] = 'Ponte legada não pode aceitar um segundo login.';
-}
-
-$bridgeUserId = (string) ($bridgeUser['id'] ?? '');
-$_SESSION = [
-    'admin_id' => $bridgeUserId,
-    'admin_role' => AdminAuth::ROLE_SECRETARIA,
-    'admin_session_version' => 1,
-    'admin_issued_at' => time(),
-    'admin_expires_at' => time() + 600,
-    'admin_authenticated' => true,
-];
-if ($bridgeAuth->currentSession() !== null || isset($_SESSION['admin_authenticated'])) {
-    $failures[] = 'Sessão criada pelo código antigo durante rollout deve ser revogada.';
-}
-
 $safeHash = password_hash('Secretaria#Segura2026', PASSWORD_DEFAULT);
 $readFailureDb = new InMemoryAdminSupabaseClient();
 $readFailureDb->users['secretaria'] = [
@@ -521,9 +456,9 @@ $readFailureDb->users['secretaria'] = [
 $readFailureDb->failNextSelect = true;
 $readFailureAuth = new AdminAuth($readFailureDb);
 $_SESSION = [];
-$legacyDuringReadFailure = $readFailureAuth->login('secretaria', 'Ei32743176');
+$loginDuringReadFailure = $readFailureAuth->login('secretaria', 'CredencialInvalida#2026');
 if (
-    ($legacyDuringReadFailure['ok'] ?? false)
+    ($loginDuringReadFailure['ok'] ?? false)
     || ($readFailureDb->users['secretaria']['password_hash'] ?? '') !== $safeHash
     || (int) ($readFailureDb->users['secretaria']['session_version'] ?? 0) !== 4
 ) {
@@ -539,7 +474,7 @@ if (!array_filter($fakeDb->audit, static fn(array $entry): bool => ($entry['acti
     $failures[] = 'Login administrativo deveria gerar auditoria.';
 }
 
-unset($_ENV['ADMIN_SECRET'], $_ENV['SECRETARIA_SECRET'], $_ENV['ADMIN_SESSION_TTL_SECONDS']);
+unset($_ENV['ADMIN_SECRET'], $_ENV['ADMIN_SESSION_TTL_SECONDS']);
 
 if ($failures !== []) {
     fwrite(STDERR, "Falhas na autenticação segura:\n");

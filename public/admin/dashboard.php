@@ -2026,8 +2026,8 @@ if (!empty($exclusionsLog)) {
         </p>
         <div class="info-note" style="margin-bottom:14px;">
           <?php if ($secretariaAccount === null || ($secretariaAccount['requires_password_setup'] ?? false)): ?>
-            <strong>Ação necessária:</strong> a nova senha segura ainda não foi configurada. Até a primeira configuração,
-            o acesso legado funciona no máximo uma vez e exige que o admin defina a nova senha.
+            <strong>Ação necessária:</strong> a nova senha segura ainda não foi configurada.
+            O acesso da secretaria permanece bloqueado até o admin principal salvar uma senha.
           <?php elseif (!($secretariaAccount['active'] ?? false)): ?>
             <strong>Conta desativada.</strong> Salvar uma nova senha reativará o acesso da secretaria.
           <?php else: ?>

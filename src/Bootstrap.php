@@ -43,7 +43,6 @@ if (!defined('APP_HEALTH_CHECK') && !empty($_SESSION['admin_authenticated'])) {
             'admin_session_version',
             'admin_issued_at',
             'admin_expires_at',
-            'admin_legacy_bridge_claimed',
             'admin_authenticated',
             'admin_user',
         ] as $adminSessionKey) {

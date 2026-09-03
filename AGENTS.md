@@ -244,10 +244,10 @@ A credencial da secretaria é criada e rotacionada exclusivamente pelo admin
 principal na aba **Acesso da Secretaria**. A senha entra somente no `POST`
 protegido por CSRF, é persistida como hash e nunca vai para ambiente, sessão ou
 auditoria. Cada troca incrementa `session_version` e encerra sessões anteriores.
-Enquanto ainda não existir uma linha `secretaria` em `admin_users`, o fallback
-legado permanece temporariamente disponível e auditado. Depois da primeira
-configuração pelo painel, a existência da conta desativa esse fallback; remova
-também a constante legada do código assim que a configuração for confirmada.
+Não existe senha fixa, fallback legado nem bootstrap da secretaria por variável
+de ambiente. Se a conta estiver ausente ou marcada com
+`requires_password_setup`, o login permanece bloqueado até o admin principal
+salvar uma nova senha pelo painel.
 
 Toda mutação administrativa autenticada exige CSRF no helper central. O
 financeiro do responsável mostra e opera somente cobranças que correspondam
